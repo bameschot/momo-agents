@@ -14,56 +14,77 @@ This file provides guidance for AI assistants (Claude Code and others) working i
 
 ```
 momo-agents/
-├── CLAUDE.md          # This file
-├── README.md          # Project overview
-├── LICENSE            # MIT License
-└── .gitignore         # Python/ML-oriented ignore patterns
+├── CLAUDE.md               # This file
+├── README.md               # Project overview
+├── LICENSE                 # MIT License
+├── pyproject.toml          # Project metadata and dependencies
+├── agents/                 # Python agent implementations
+│   ├── designer.py         # Interactive design session → design/<feature>.md
+│   ├── business_analyst.py # Breaks design into story files
+│   ├── project_initialiser.py  # Scaffolds workspace/ from design
+│   ├── coding_agent.py     # Claims and implements stories
+│   └── story_reviewer.py   # Triages failed stories with user
+├── roles/                  # System prompts (read by each agent)
+│   ├── designer.md
+│   ├── business-analyst.md
+│   ├── project-initialiser.md
+│   ├── coding-agent.md
+│   └── story-reviewer.md
+├── design/                 # Designer Agent outputs (<feature>.md)
+├── stories/                # Story files (state encoded in filename suffix)
+├── workspace/              # Generated source code
+│   ├── CLAUDE.md           # Build/test/lint instructions for Coding Agents
+│   ├── src/
+│   └── tests/
+├── orchestrate.sh          # Full pipeline orchestrator
+├── status.sh               # Live story state summary
+└── watchdog.sh             # Resets stale .working.md files after 10 min
 ```
-
-> The project has no source code yet. As the codebase grows, update this file to reflect the actual structure.
 
 ## Technology Stack
 
-Based on the project configuration (.gitignore patterns), this is a **Python** project. Likely tools include:
-
 | Category        | Tool(s)                                          |
 |----------------|--------------------------------------------------|
-| Language        | Python 3.x                                       |
-| Package manager | uv (preferred), poetry, pdm, or pixi             |
+| Language        | Python 3.11+                                     |
+| Package manager | uv (preferred)                                   |
 | Linter          | Ruff                                             |
 | Type checker    | mypy                                             |
 | Test runner     | pytest                                           |
-| Notebooks       | Jupyter / Marimo                                 |
-| AI backend      | Claude Code / Anthropic API                      |
-
-When the project is set up, update this section with the definitive choices.
+| AI backend      | Claude Agent SDK (`claude-agent-sdk`)            |
 
 ## Development Setup
-
-> These commands are placeholders. Update once the project is initialized.
 
 ```bash
 # Clone the repository
 git clone https://github.com/bameschot/momo-agents.git
 cd momo-agents
 
-# (Expected) Create and activate a virtual environment
+# Create and activate a virtual environment
 uv venv
 source .venv/bin/activate   # Linux/macOS
-# or .venv\Scripts\activate  # Windows
 
-# (Expected) Install dependencies
+# Install the project with dev dependencies
 uv pip install -e ".[dev]"
 
-# (Expected) Run tests
-pytest
-
-# (Expected) Run linter
+# Run linter
 ruff check .
 ruff format .
 
-# (Expected) Run type checker
-mypy .
+# Run type checker
+mypy agents/
+
+# Run the pipeline
+./orchestrate.sh <feature-name>
+
+# Run an agent directly
+python -m agents.designer
+python -m agents.business_analyst --design design/my-feature.md
+python -m agents.project_initialiser --design design/my-feature.md
+python -m agents.coding_agent
+python -m agents.story_reviewer
+
+# Check pipeline status
+./status.sh
 ```
 
 ## Git Workflow
