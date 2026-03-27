@@ -19,7 +19,6 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Data Models
 # ---------------------------------------------------------------------------
@@ -166,16 +165,25 @@ def _process_inline(text: str, source_path: Path | None = None) -> str:
 
     # 6. Bold-italic, bold, italic, strikethrough
     # Bold-italic: ***text*** or ___text___
-    text = re.sub(r"\*{3}(.+?)\*{3}", lambda m: store(f"<strong><em>{m.group(1)}</em></strong>"), text)
-    text = re.sub(r"_{3}(.+?)_{3}", lambda m: store(f"<strong><em>{m.group(1)}</em></strong>"), text)
+    def _bold_italic(m: re.Match) -> str:
+        return store(f"<strong><em>{m.group(1)}</em></strong>")
+
+    text = re.sub(r"\*{3}(.+?)\*{3}", _bold_italic, text)
+    text = re.sub(r"_{3}(.+?)_{3}", _bold_italic, text)
 
     # Bold: **text** or __text__
-    text = re.sub(r"\*{2}(.+?)\*{2}", lambda m: store(f"<strong>{m.group(1)}</strong>"), text)
-    text = re.sub(r"(?<!\w)__(?!\s)(.+?)(?<!\s)__(?!\w)", lambda m: store(f"<strong>{m.group(1)}</strong>"), text)
+    def _bold(m: re.Match) -> str:
+        return store(f"<strong>{m.group(1)}</strong>")
+
+    text = re.sub(r"\*{2}(.+?)\*{2}", _bold, text)
+    text = re.sub(r"(?<!\w)__(?!\s)(.+?)(?<!\s)__(?!\w)", _bold, text)
 
     # Italic: *text* or _text_
-    text = re.sub(r"\*(.+?)\*", lambda m: store(f"<em>{m.group(1)}</em>"), text)
-    text = re.sub(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", lambda m: store(f"<em>{m.group(1)}</em>"), text)
+    def _italic(m: re.Match) -> str:
+        return store(f"<em>{m.group(1)}</em>")
+
+    text = re.sub(r"\*(.+?)\*", _italic, text)
+    text = re.sub(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", _italic, text)
 
     # Strikethrough: ~~text~~
     text = re.sub(r"~~(.+?)~~", lambda m: store(f"<del>{m.group(1)}</del>"), text)
@@ -556,7 +564,6 @@ class MarkdownParser:
                 continue
 
             indent = len(m.group(1))
-            bullet = m.group(2)
             text = m.group(3)
 
             # Task list detection
@@ -564,7 +571,10 @@ class MarkdownParser:
             if task_m:
                 checked = task_m.group(1).lower() == "x"
                 task_text = task_m.group(2)
-                checkbox = '<input type="checkbox" disabled checked>' if checked else '<input type="checkbox" disabled>'
+                if checked:
+                    checkbox = '<input type="checkbox" disabled checked>'
+                else:
+                    checkbox = '<input type="checkbox" disabled>'
                 item_text = f"{checkbox} {self._inline(task_text)}"
             else:
                 item_text = self._inline(text)
@@ -582,7 +592,10 @@ class MarkdownParser:
                         j += 1
                     else:
                         break
-                elif next_line.startswith(" " * (indent + 2)) or (indent == 0 and next_line.startswith("  ")):
+                elif (
+                    next_line.startswith(" " * (indent + 2))
+                    or (indent == 0 and next_line.startswith("  "))
+                ):
                     nested.append(next_line)
                     j += 1
                 else:
@@ -609,7 +622,9 @@ class MarkdownParser:
     def _is_hr(self, line: str) -> bool:
         """Return True if *line* is a horizontal rule."""
         for char in ("-", "*", "_"):
-            if re.match(rf"^[{re.escape(char)}\s]{{3,}}$", line) and line.replace(" ", "").replace(char, "") == "":
+            pattern = rf"^[{re.escape(char)}\s]{{3,}}$"
+            stripped = line.replace(" ", "").replace(char, "")
+            if re.match(pattern, line) and stripped == "":
                 chars = [c for c in line if c == char]
                 if len(chars) >= 3:
                     return True
@@ -1023,13 +1038,7 @@ def parse_args() -> argparse.Namespace:
 
     # --- Expand glob ----------------------------------------------------------
     raw_matches = glob_module.glob(args.glob, recursive=True)
-    # Filter to .md files only and resolve to absolute paths
-    matched_files: list[Path] = sorted(
-        {Path(p).resolve() for p in raw_matches if Path(p).suffix.lower() == ".md"},
-        key=lambda p: str(p),
-    )
-    # Preserve original glob order (glob.glob returns in filesystem order)
-    # Re-expand to keep original ordering rather than sorted set
+    # Filter to .md files only and resolve to absolute paths, preserving order
     ordered_matches: list[Path] = []
     seen: set[Path] = set()
     for p in raw_matches:
