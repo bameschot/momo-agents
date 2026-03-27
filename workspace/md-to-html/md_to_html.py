@@ -744,6 +744,208 @@ def _render_toc_items(
 
 
 # ---------------------------------------------------------------------------
+# CSS
+# ---------------------------------------------------------------------------
+
+_CSS = """\
+:root {
+    --bg-page:         #f5f5f5;
+    --bg-section-even: #ffffff;
+    --bg-section-odd:  #fafafa;
+    --text:            #1a1a1a;
+    --bg-code:         #f0f0f0;
+    --link:            #0066cc;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-page:         #1a1a1a;
+        --bg-section-even: #242424;
+        --bg-section-odd:  #2a2a2a;
+        --text:            #e8e8e8;
+        --bg-code:         #2f2f2f;
+        --link:            #4da6ff;
+    }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    background: var(--bg-page);
+    color: var(--text);
+    font-family: system-ui, sans-serif;
+    line-height: 1.6;
+}
+
+/* Sidebar */
+#toc {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 260px;
+    overflow-y: auto;
+    background: var(--bg-section-even);
+    border-right: 1px solid rgba(128,128,128,0.2);
+    padding: 1rem;
+}
+
+#toc-inner .toc-title {
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+}
+
+#toc ul {
+    list-style: none;
+    padding-left: 1rem;
+    margin: 0;
+}
+
+#toc li { margin: 0.25rem 0; }
+
+#toc a {
+    color: var(--link);
+    text-decoration: none;
+}
+#toc a:hover { text-decoration: underline; }
+
+/* Main content */
+main {
+    margin-left: 280px;
+    padding: 2rem;
+    max-width: 860px;
+}
+
+/* Sections */
+section {
+    padding: 2rem;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+}
+.section-even { background: var(--bg-section-even); }
+.section-odd  { background: var(--bg-section-odd); }
+
+.section-header h1 {
+    margin-top: 0;
+    border-bottom: 2px solid rgba(128,128,128,0.3);
+    padding-bottom: 0.5rem;
+}
+
+hr.section-divider {
+    border: none;
+    border-top: 1px solid rgba(128,128,128,0.2);
+    margin: 1rem 0;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 { color: var(--text); }
+a { color: var(--link); }
+
+pre {
+    background: var(--bg-code);
+    padding: 1rem;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+code {
+    font-family: ui-monospace, monospace;
+    background: var(--bg-code);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+}
+pre code {
+    background: none;
+    padding: 0;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+}
+th, td {
+    border: 1px solid rgba(128,128,128,0.3);
+    padding: 0.5rem 0.75rem;
+}
+thead { background: var(--bg-code); }
+
+blockquote {
+    border-left: 4px solid var(--link);
+    margin: 1rem 0;
+    padding: 0.5rem 1rem;
+    background: var(--bg-code);
+}
+
+.footnotes {
+    margin-top: 2rem;
+    border-top: 1px solid rgba(128,128,128,0.3);
+    font-size: 0.9em;
+}
+"""
+
+
+# ---------------------------------------------------------------------------
+# Section Renderer & HTML Assembler
+# ---------------------------------------------------------------------------
+
+def render_section(entry: FileEntry, index: int) -> str:
+    """
+    Render *entry* as a `<section>` element.
+
+    If *index* > 0, prepends `<hr class="section-divider">`.
+    Sections alternate between `section-even` and `section-odd` CSS classes.
+    """
+    divider = '<hr class="section-divider">\n' if index > 0 else ""
+    css_class = "section-even" if index % 2 == 0 else "section-odd"
+    return (
+        f"{divider}"
+        f'<section id="{entry.slug}" class="{css_class}">\n'
+        f'<div class="section-header"><h1>{entry.title}</h1></div>\n'
+        f"{entry.html_body}\n"
+        f"</section>"
+    )
+
+
+def assemble_html(ctx: RenderContext) -> str:
+    """
+    Assemble a complete `<!DOCTYPE html>…</html>` string from *ctx*.
+
+    Does not write any files; returns the HTML string.
+    """
+    sections_html = "\n".join(
+        render_section(entry, i) for i, entry in enumerate(ctx.entries)
+    )
+
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{ctx.title}</title>
+<style>
+{_CSS}
+</style>
+</head>
+<body>
+<nav id="toc">
+<div id="toc-inner">
+<p class="toc-title">Contents</p>
+{ctx.toc}
+</div>
+</nav>
+<main>
+{sections_html}
+</main>
+<script>
+/* TODO */
+</script>
+</body>
+</html>"""
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 

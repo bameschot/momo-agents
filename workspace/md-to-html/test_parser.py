@@ -632,6 +632,117 @@ def test_toc_heading_anchor_updated_inplace():
 
 
 # ---------------------------------------------------------------------------
+# Section Renderer & HTML Assembler (STORY-006)
+# ---------------------------------------------------------------------------
+
+def test_render_section_no_divider_at_index_0():
+    from md_to_html import render_section, FileEntry
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="intro", title="Introduction",
+        raw_markdown="", html_body="<p>body</p>", headings=[]
+    )
+    html = render_section(entry, 0)
+    assert '<hr class="section-divider">' not in html
+    assert '<section id="intro"' in html
+
+def test_render_section_divider_at_index_1():
+    from md_to_html import render_section, FileEntry
+    entry = FileEntry(
+        path=Path("/test/b.md"), slug="second", title="Second",
+        raw_markdown="", html_body="<p>body</p>", headings=[]
+    )
+    html = render_section(entry, 1)
+    assert '<hr class="section-divider">' in html
+
+def test_render_section_even_odd_classes():
+    from md_to_html import render_section, FileEntry
+    entry = FileEntry(
+        path=Path("/test/x.md"), slug="x", title="X",
+        raw_markdown="", html_body="", headings=[]
+    )
+    html0 = render_section(entry, 0)
+    html1 = render_section(entry, 1)
+    html2 = render_section(entry, 2)
+    assert 'class="section-even"' in html0
+    assert 'class="section-odd"' in html1
+    assert 'class="section-even"' in html2
+
+def test_render_section_header():
+    from md_to_html import render_section, FileEntry
+    entry = FileEntry(
+        path=Path("/test/x.md"), slug="my-doc", title="My Document",
+        raw_markdown="", html_body="<p>content</p>", headings=[]
+    )
+    html = render_section(entry, 0)
+    assert '<div class="section-header"><h1>My Document</h1></div>' in html
+    assert "<p>content</p>" in html
+
+def test_assemble_html_structure():
+    from md_to_html import assemble_html, FileEntry, RenderContext
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="intro", title="Introduction",
+        raw_markdown="", html_body="<p>Hello</p>", headings=[]
+    )
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="My Docs",
+        entries=[entry],
+        toc="<ul><li>TOC</li></ul>",
+    )
+    html = assemble_html(ctx)
+    assert html.startswith("<!DOCTYPE html>")
+    assert "<title>My Docs</title>" in html
+    assert "<style>" in html
+    assert '<nav id="toc">' in html
+    assert "<main>" in html
+    assert "<script>" in html
+    assert html.strip().endswith("</html>")
+
+def test_assemble_html_toc_sidebar():
+    from md_to_html import assemble_html, FileEntry, RenderContext
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="a", title="A",
+        raw_markdown="", html_body="", headings=[]
+    )
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="Test",
+        entries=[entry],
+        toc="<ul><li>item</li></ul>",
+    )
+    html = assemble_html(ctx)
+    assert '<div id="toc-inner">' in html
+    assert '<p class="toc-title">Contents</p>' in html
+    assert "<ul><li>item</li></ul>" in html
+
+def test_assemble_html_css_variables():
+    from md_to_html import assemble_html, FileEntry, RenderContext
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="Test",
+        entries=[],
+        toc="",
+    )
+    html = assemble_html(ctx)
+    # Check key CSS variables are present
+    assert "#f5f5f5" in html  # --bg-page light
+    assert "#1a1a1a" in html  # --bg-page dark
+    assert "#0066cc" in html  # --link light
+    assert "#4da6ff" in html  # --link dark
+
+def test_assemble_html_no_external_stylesheets():
+    from md_to_html import assemble_html, FileEntry, RenderContext
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="Test",
+        entries=[],
+        toc="",
+    )
+    html = assemble_html(ctx)
+    assert "<link" not in html
+
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 
