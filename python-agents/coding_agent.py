@@ -10,7 +10,7 @@ STORIES_DIR = PROJECT_ROOT / "stories"
 WORKSPACE_DIR = PROJECT_ROOT / "workspace"
 ROLES_DIR = PROJECT_ROOT / "roles"
 
-POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
+POLL_INTERVAL = 60  # seconds between polls when no eligible story is available
 PIPELINE_COMPLETE = PROJECT_ROOT / ".sentinels" / "pipeline_complete"
 
 
