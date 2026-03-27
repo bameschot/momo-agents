@@ -647,6 +647,103 @@ class MarkdownParser:
 
 
 # ---------------------------------------------------------------------------
+# TOC Builder
+# ---------------------------------------------------------------------------
+
+def unique_anchor(base: str, seen: set[str]) -> str:
+    """
+    Generate a unique anchor from *base* that does not collide with *seen*.
+    Appends -2, -3, … until an unused value is found. Adds result to *seen*.
+    """
+    candidate = base
+    n = 2
+    while candidate in seen:
+        candidate = f"{base}-{n}"
+        n += 1
+    seen.add(candidate)
+    return candidate
+
+
+def _strip_html_tags(text: str) -> str:
+    """Remove HTML tags from *text* for plain-text TOC labels."""
+    return re.sub(r"<[^>]+>", "", text)
+
+
+def build_toc(entries: list[FileEntry]) -> str:
+    """
+    Build a nested `<ul>` TOC from all headings across *entries*.
+
+    - Deduplicates anchor IDs globally (heading anchors + file slugs).
+    - Updates `Heading.anchor` and `FileEntry.slug` in-place.
+    - Returns an HTML string (a `<ul>` element).
+    """
+    seen: set[str] = set()
+
+    # First pass: deduplicate file slugs (section anchors must not collide)
+    for entry in entries:
+        entry.slug = unique_anchor(entry.slug, seen)
+
+    # Second pass: deduplicate heading anchors across all files in order
+    for entry in entries:
+        for heading in entry.headings:
+            heading.anchor = unique_anchor(heading.anchor, seen)
+
+    # Build a flat list of (level, href, label) for all headings in document order
+    items: list[tuple[int, str, str]] = []
+    for entry in entries:
+        for heading in entry.headings:
+            items.append((heading.level, heading.anchor, _strip_html_tags(heading.text)))
+
+    if not items:
+        return "<ul></ul>"
+
+    return _render_toc_items(items, 0, len(items), 0)[0]
+
+
+def _render_toc_items(
+    items: list[tuple[int, str, str]],
+    start: int,
+    end: int,
+    parent_level: int,
+) -> tuple[str, int]:
+    """
+    Recursively render TOC items from *items[start:end]* as a `<ul>`.
+
+    *parent_level* is the level of the enclosing context (0 for the root).
+    Returns (html_string, next_index).
+    """
+    parts: list[str] = ["<ul>"]
+    i = start
+
+    while i < end:
+        level, href, label = items[i]
+
+        if parent_level == 0 or level == items[start][0]:
+            # Emit this item
+            i += 1
+            # Peek ahead: if next item is deeper, recurse to build nested ul
+            if i < end and items[i][0] > level:
+                nested_html, i = _render_toc_items(items, i, end, level)
+                parts.append(f'<li><a href="#{href}">{label}</a>{nested_html}</li>')
+            else:
+                parts.append(f'<li><a href="#{href}">{label}</a></li>')
+        elif level < items[start][0]:
+            # This item is shallower than our starting level — go back up
+            break
+        else:
+            # This item is at a different depth within the same parent
+            i += 1
+            if i < end and items[i][0] > level:
+                nested_html, i = _render_toc_items(items, i, end, level)
+                parts.append(f'<li><a href="#{href}">{label}</a>{nested_html}</li>')
+            else:
+                parts.append(f'<li><a href="#{href}">{label}</a></li>')
+
+    parts.append("</ul>")
+    return "\n".join(parts), i
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 

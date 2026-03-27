@@ -550,6 +550,88 @@ def test_footnote_inline_markdown_in_definition():
 
 
 # ---------------------------------------------------------------------------
+# TOC Builder (STORY-005)
+# ---------------------------------------------------------------------------
+
+def _make_entry(slug: str, md: str) -> "FileEntry":
+    from md_to_html import FileEntry
+    p = MarkdownParser()
+    html = p.parse(md)
+    return FileEntry(
+        path=Path(f"/test/{slug}.md"),
+        slug=slug,
+        title=slug,
+        raw_markdown=md,
+        html_body=html,
+        headings=list(p.headings),
+    )
+
+
+def test_toc_anchor_dedup():
+    from md_to_html import build_toc
+    e1 = _make_entry("intro", "# Introduction\n\n## Section")
+    e2 = _make_entry("intro", "# Introduction\n\n## Details")
+    toc = build_toc([e1, e2])
+    # Second Introduction heading gets -2 suffix
+    assert 'href="#introduction-2"' in toc
+    assert e2.headings[0].anchor == "introduction-2"
+    # File slugs deduped
+    assert e2.slug == "intro-2"
+
+def test_toc_heading_nesting():
+    from md_to_html import build_toc
+    e = _make_entry("doc", "# H1\n\n## H2\n\n### H3\n\n# Second H1")
+    toc = build_toc([e])
+    # h3 should be nested inside h2 which is inside h1
+    h1_pos = toc.index('href="#h1"')
+    h2_pos = toc.index('href="#h2"')
+    h3_pos = toc.index('href="#h3"')
+    second_h1_pos = toc.index('href="#second-h1"')
+    assert h1_pos < h2_pos < h3_pos < second_h1_pos
+    # Multiple <ul> for nesting
+    assert toc.count("<ul>") >= 3
+
+def test_toc_h3_before_h1_at_root():
+    from md_to_html import build_toc
+    e = _make_entry("doc", "### Deep First\n\n# Then Root")
+    toc = build_toc([e])
+    # Both should appear in the TOC
+    assert 'href="#deep-first"' in toc
+    assert 'href="#then-root"' in toc
+
+def test_toc_file_slug_collision():
+    from md_to_html import build_toc
+    e1 = _make_entry("readme", "# Title")
+    e2 = _make_entry("readme", "# Other")
+    build_toc([e1, e2])
+    assert e1.slug != e2.slug
+    assert e2.slug == "readme-2"
+
+def test_toc_document_order():
+    from md_to_html import build_toc
+    e1 = _make_entry("a", "# Alpha")
+    e2 = _make_entry("b", "# Beta")
+    e3 = _make_entry("c", "# Gamma")
+    toc = build_toc([e1, e2, e3])
+    alpha_pos = toc.index("Alpha")
+    beta_pos = toc.index("Beta")
+    gamma_pos = toc.index("Gamma")
+    assert alpha_pos < beta_pos < gamma_pos
+
+def test_toc_heading_anchor_updated_inplace():
+    from md_to_html import build_toc
+    e1 = _make_entry("doc1", "# Intro")
+    e2 = _make_entry("doc2", "# Intro")
+    # Before build_toc both anchors are 'intro'
+    assert e1.headings[0].anchor == "intro"
+    assert e2.headings[0].anchor == "intro"
+    build_toc([e1, e2])
+    # After build_toc second is deduplicated
+    assert e1.headings[0].anchor == "intro"
+    assert e2.headings[0].anchor == "intro-2"
+
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 
