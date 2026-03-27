@@ -84,7 +84,11 @@ def collect_images(html: str, source_dir: Path) -> dict[str, bytes]:
 
 
 def md_file_to_chapter(md_path: Path) -> Chapter:
-    ...
+    md_text = md_path.read_text(encoding='utf-8')
+    title = extract_chapter_title(md_text, str(md_path))
+    html = markdown.markdown(md_text, extensions=['extra', 'tables'])
+    images = collect_images(html, md_path.parent)
+    return Chapter(title=title, html_body=html, images=images)
 
 
 def build_epub(chapters: list[Chapter], args: argparse.Namespace) -> epub.EpubBook:
