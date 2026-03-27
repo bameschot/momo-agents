@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import glob as glob_module
 import mimetypes
 import re
 import sys
@@ -43,7 +44,7 @@ class FileEntry:
 class RenderContext:
     output_path: Path
     title: str               # Derived from output filename stem
-    entry: "FileEntry | None" = None
+    entries: list[FileEntry] = field(default_factory=list)
     toc: str = ""            # Pre-rendered TOC HTML
 
 
@@ -977,7 +978,9 @@ def assemble_html(ctx: RenderContext) -> str:
 
     Does not write any files; returns the HTML string.
     """
-    sections_html = render_section(ctx.entry, 0) if ctx.entry is not None else ""
+    sections_html = "\n".join(
+        render_section(entry, i) for i, entry in enumerate(ctx.entries)
+    )
 
     return f"""\
 <!DOCTYPE html>
@@ -1007,56 +1010,74 @@ def parse_args() -> argparse.Namespace:
     Parse command-line arguments and perform all validation.
 
     Returns a Namespace with:
-      - input_path: Path   — resolved absolute path to the .md input file
-      - output_path: Path  — resolved absolute output path
+      - files: list[Path]    — resolved, ordered list of matched .md files
+      - output_path: Path    — resolved absolute output path
     """
     parser = argparse.ArgumentParser(
         prog="md_to_html.py",
-        description="Convert a single Markdown file into a styled HTML file.",
+        description="Bundle one or more Markdown files into a single styled HTML file.",
     )
 
     parser.add_argument(
-        "-i", "--input",
-        metavar="FILE",
-        required=True,
-        help="Path to the input .md file",
+        "glob",
+        metavar="glob",
+        help='Glob pattern matching .md files (e.g. "docs/*.md")',
     )
 
     parser.add_argument(
         "-o", "--output",
         metavar="PATH",
-        default=None,
-        help=(
-            "Output HTML file path "
-            "(default: <input-stem>.html in the current working directory)"
-        ),
+        default="output.html",
+        help="Output HTML file path (default: ./output.html)",
+    )
+
+    parser.add_argument(
+        "--order",
+        metavar="FILE",
+        nargs="+",
+        help="Explicit ordered list of file paths, overriding the glob expansion order",
     )
 
     args = parser.parse_args()
 
-    # --- Validate input path --------------------------------------------------
-    input_path = Path(args.input).resolve()
+    # --- Expand glob ----------------------------------------------------------
+    raw_matches = glob_module.glob(args.glob, recursive=True)
+    # Filter to .md files only and resolve to absolute paths, preserving order
+    ordered_matches: list[Path] = []
+    seen_paths: set[Path] = set()
+    for p in raw_matches:
+        resolved = Path(p).resolve()
+        if resolved.suffix.lower() == ".md" and resolved not in seen_paths:
+            ordered_matches.append(resolved)
+            seen_paths.add(resolved)
 
-    if not input_path.exists():
+    if not ordered_matches:
         print(
-            f"Error: input file {str(args.input)!r} does not exist.",
+            f"Error: glob pattern {args.glob!r} matched zero .md files.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    if input_path.suffix.lower() != ".md":
-        print(
-            f"Error: input file {str(args.input)!r} does not have a .md extension.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # --- Handle --order override ----------------------------------------------
+    if args.order is not None:
+        reordered: list[Path] = []
+        matched_set = set(ordered_matches)
+        for raw_path in args.order:
+            resolved = Path(raw_path).resolve()
+            if resolved not in matched_set:
+                print(
+                    f"Error: --order path {raw_path!r} is not in the set of files "
+                    f"matched by the glob pattern.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            reordered.append(resolved)
+        final_files = reordered
+    else:
+        final_files = ordered_matches
 
     # --- Resolve output path --------------------------------------------------
-    if args.output is None:
-        output_path = Path.cwd() / (Path(args.input).stem + ".html")
-    else:
-        output_path = Path(args.output)
-
+    output_path = Path(args.output)
     if not output_path.is_absolute():
         output_path = Path.cwd() / output_path
     output_path = output_path.resolve()
@@ -1070,7 +1091,7 @@ def parse_args() -> argparse.Namespace:
         sys.exit(1)
 
     # --- Build result ---------------------------------------------------------
-    args.input_path = input_path
+    args.files = final_files
     args.output_path = output_path
 
     return args
@@ -1083,40 +1104,51 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    path = args.input_path
-    raw_markdown = path.read_text(encoding="utf-8")
-    md_parser = MarkdownParser(source_path=path)
-    html_body = md_parser.parse(raw_markdown)
+    entries: list[FileEntry] = []
+    # Reuse a single MarkdownParser instance; parse() resets per-call state
+    md_parser = MarkdownParser()
+    # Track slug base counts for collision detection
+    slug_counts: dict[str, int] = {}
 
-    # Warn if no top-level (#) heading found
-    has_h1 = bool(re.search(r"^# ", raw_markdown, re.MULTILINE))
-    if not has_h1:
-        print(
-            f"Warning: {path.name} has no top-level heading; using filename as title.",
-            file=sys.stderr,
+    for path in args.files:
+        # Derive base slug and apply collision suffix if needed
+        base_slug = slugify(path.stem)
+        if base_slug in slug_counts:
+            slug_counts[base_slug] += 1
+            slug = f"{base_slug}-{slug_counts[base_slug]}"
+        else:
+            slug_counts[base_slug] = 1
+            slug = base_slug
+
+        raw_markdown = path.read_text(encoding="utf-8")
+        html_body = md_parser.parse(raw_markdown, path)
+        headings = list(md_parser.headings)
+
+        # Extract title from first h1 heading; warn and fall back to slug if absent
+        title = next((h.text for h in headings if h.level == 1), None)
+        if title is None:
+            title = slug
+            print(
+                f"Warning: no h1 heading found in '{path.name}'; using filename as title",
+                file=sys.stderr,
+            )
+
+        entry = FileEntry(
+            path=path,
+            slug=slug,
+            title=title,
+            raw_markdown=raw_markdown,
+            html_body=html_body,
+            headings=headings,
         )
+        entries.append(entry)
 
-    slug = slugify(path.stem)
-    if md_parser.headings:
-        title = md_parser.headings[0].text
-    else:
-        title = slug
-
-    entry = FileEntry(
-        path=path,
-        slug=slug,
-        title=title,
-        raw_markdown=raw_markdown,
-        html_body=html_body,
-        headings=md_parser.headings,
-    )
-
-    toc = build_toc([entry])
+    toc = build_toc(entries)
 
     ctx = RenderContext(
         output_path=args.output_path,
-        title=title,
-        entry=entry,
+        title=args.output_path.stem,
+        entries=entries,
         toc=toc,
     )
 

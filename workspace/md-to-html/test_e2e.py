@@ -1,5 +1,5 @@
 """
-test_e2e.py — End-to-end smoke tests for md_to_html.py (STORY-017)
+test_e2e.py — End-to-end smoke tests for md_to_html.py (STORY-014)
 
 Runnable standalone: `python test_e2e.py`
 Exits 0 on success, non-zero with a printed failure message on failure.
@@ -8,6 +8,7 @@ No third-party test framework required.
 
 from __future__ import annotations
 
+import os
 import shutil
 import struct
 import subprocess
@@ -53,11 +54,11 @@ def run(description: str, func) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Test: --help shows -i/--input and -o/--output
+# Test: --help shows glob and -o/--output
 # ---------------------------------------------------------------------------
 
 def test_help_output():
-    """--help exits 0 and documents -i/--input and -o/--output."""
+    """--help exits 0 and documents glob and -o/--output."""
     result = subprocess.run(
         [PYTHON, str(SCRIPT), "--help"],
         capture_output=True,
@@ -67,8 +68,8 @@ def test_help_output():
         f"Expected exit code 0, got {result.returncode}.\n"
         f"stdout: {result.stdout}\nstderr: {result.stderr}"
     )
-    assert "-i" in result.stdout or "--input" in result.stdout, (
-        f"Expected '-i'/'--input' in help output, got: {result.stdout!r}"
+    assert "glob" in result.stdout or "GLOB" in result.stdout or ".md" in result.stdout, (
+        f"Expected glob argument in help output, got: {result.stdout!r}"
     )
     assert "-o" in result.stdout or "--output" in result.stdout, (
         f"Expected '-o'/'--output' in help output, got: {result.stdout!r}"
@@ -81,7 +82,7 @@ def test_help_output():
 
 def test_basic_e2e():
     """
-    Creates one .md file, runs the script with -i/-o, and validates the output HTML.
+    Creates one .md file, runs the script with glob pattern + -o, and validates the output HTML.
     """
     tmpdir = Path(tempfile.mkdtemp())
     try:
@@ -100,7 +101,7 @@ def test_basic_e2e():
 
         output_html = tmpdir / "output.html"
         result = subprocess.run(
-            [PYTHON, str(SCRIPT), "-i", str(md1), "-o", str(output_html)],
+            [PYTHON, str(SCRIPT), "*.md", "-o", str(output_html)],
             capture_output=True,
             text=True,
             cwd=str(tmpdir),
@@ -144,58 +145,15 @@ def test_basic_e2e():
 
 
 # ---------------------------------------------------------------------------
-# Test: default output path (no -o flag)
+# Test: zero-file glob exits 1
 # ---------------------------------------------------------------------------
 
-def test_default_output_path():
-    """-i notes.md without -o produces notes.html in CWD."""
-    tmpdir = Path(tempfile.mkdtemp())
-    try:
-        md = tmpdir / "notes.md"
-        md.write_text("# Notes\n\nContent.\n", encoding="utf-8")
-
-        result = subprocess.run(
-            [PYTHON, str(SCRIPT), "-i", str(md)],
-            capture_output=True,
-            text=True,
-            cwd=str(tmpdir),
-        )
-        assert result.returncode == 0, (
-            f"Expected exit 0, got {result.returncode}.\nstderr: {result.stderr}"
-        )
-        # Default output should be notes.html in CWD (tmpdir)
-        default_output = tmpdir / "notes.html"
-        assert default_output.exists(), (
-            f"Expected default output {default_output} to exist"
-        )
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
-
-
-# ---------------------------------------------------------------------------
-# Test: no --input exits non-zero
-# ---------------------------------------------------------------------------
-
-def test_missing_input_arg():
-    """Script must exit non-zero when --input is omitted."""
-    result = subprocess.run(
-        [PYTHON, str(SCRIPT)],
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode != 0, "Expected non-zero exit when --input is omitted"
-
-
-# ---------------------------------------------------------------------------
-# Test: non-existent input file exits 1
-# ---------------------------------------------------------------------------
-
-def test_nonexistent_input_file():
-    """Script must exit 1 when the --input file does not exist."""
+def test_zero_file_glob():
+    """A glob matching zero .md files must exit 1 with stderr message."""
     tmpdir = Path(tempfile.mkdtemp())
     try:
         result = subprocess.run(
-            [PYTHON, str(SCRIPT), "-i", str(tmpdir / "missing.md")],
+            [PYTHON, str(SCRIPT), "*.md", "-o", str(tmpdir / "out.html")],
             capture_output=True,
             text=True,
             cwd=str(tmpdir),
@@ -204,33 +162,25 @@ def test_nonexistent_input_file():
             f"Expected exit code 1, got {result.returncode}"
         )
         assert result.stderr, "Expected error message on stderr"
+        assert not (tmpdir / "out.html").exists(), (
+            "Output file should not be created when no input files matched"
+        )
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
-# Test: non-.md extension exits 1
+# Test: no-args exits non-zero
 # ---------------------------------------------------------------------------
 
-def test_non_md_extension():
-    """Script must exit 1 when --input does not have .md extension."""
-    tmpdir = Path(tempfile.mkdtemp())
-    try:
-        txt_file = tmpdir / "notes.txt"
-        txt_file.write_text("# Hello\n\nContent.\n", encoding="utf-8")
-
-        result = subprocess.run(
-            [PYTHON, str(SCRIPT), "-i", str(txt_file)],
-            capture_output=True,
-            text=True,
-            cwd=str(tmpdir),
-        )
-        assert result.returncode == 1, (
-            f"Expected exit code 1 for non-.md input, got {result.returncode}"
-        )
-        assert result.stderr, "Expected error message on stderr about .md extension"
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+def test_missing_glob_arg():
+    """Script must exit non-zero when glob argument is omitted."""
+    result = subprocess.run(
+        [PYTHON, str(SCRIPT)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0, "Expected non-zero exit when glob is omitted"
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +195,7 @@ def test_nonexistent_output_dir():
         md.write_text("# Hello\n\nContent.\n", encoding="utf-8")
 
         result = subprocess.run(
-            [PYTHON, str(SCRIPT), "-i", str(md),
+            [PYTHON, str(SCRIPT), "*.md",
              "-o", str(tmpdir / "no_such_dir" / "out.html")],
             capture_output=True,
             text=True,
@@ -260,25 +210,105 @@ def test_nonexistent_output_dir():
 
 
 # ---------------------------------------------------------------------------
-# Test: --order is unrecognised
+# Test: no-h1 warning on stderr
 # ---------------------------------------------------------------------------
 
-def test_order_flag_unrecognised():
-    """--order is no longer a valid argument and must produce a non-zero exit."""
+def test_no_h1_warning():
+    """Script warns on stderr when a file has no h1 heading."""
     tmpdir = Path(tempfile.mkdtemp())
     try:
-        md = tmpdir / "notes.md"
-        md.write_text("# Notes\n\nContent.\n", encoding="utf-8")
+        intro = tmpdir / "intro.md"
+        intro.write_text("# Introduction\n\nHello.\n", encoding="utf-8")
+        appendix = tmpdir / "appendix.md"
+        appendix.write_text("## No H1 here\n", encoding="utf-8")
 
+        output_html = tmpdir / "out.html"
         result = subprocess.run(
-            [PYTHON, str(SCRIPT), "--order", str(md)],
+            [PYTHON, str(SCRIPT), "*.md", "-o", str(output_html)],
             capture_output=True,
             text=True,
             cwd=str(tmpdir),
         )
-        assert result.returncode != 0, (
-            "Expected non-zero exit for unrecognised --order argument"
+
+        assert result.returncode == 0, (
+            f"Expected exit code 0, got {result.returncode}.\nstderr: {result.stderr}"
         )
+        assert output_html.exists() and output_html.stat().st_size > 0, (
+            "Output HTML should exist and be non-empty"
+        )
+        html = output_html.read_text(encoding="utf-8")
+        assert "<!DOCTYPE html>" in html, "<!DOCTYPE html> not found"
+        assert "appendix.md" in result.stderr, (
+            f"Expected 'appendix.md' in stderr warning, got: {result.stderr!r}"
+        )
+        assert "no h1 heading found" in result.stderr.lower() or "Warning" in result.stderr, (
+            f"Expected h1 warning in stderr, got: {result.stderr!r}"
+        )
+        assert "Written:" in result.stdout, (
+            f"Expected 'Written:' in stdout, got: {result.stdout!r}"
+        )
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Test: slug collision resolution
+# ---------------------------------------------------------------------------
+
+def test_slug_collision():
+    """Two files with same stem produce id='intro' and id='intro-2' in output HTML."""
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        dir_a = tmpdir / "dir_a"
+        dir_b = tmpdir / "dir_b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+
+        (dir_a / "intro.md").write_text("# Introduction A\n\nContent A.\n", encoding="utf-8")
+        (dir_b / "intro.md").write_text("# Introduction B\n\nContent B.\n", encoding="utf-8")
+
+        output_html = tmpdir / "out.html"
+        result = subprocess.run(
+            [PYTHON, str(SCRIPT), "**/*.md", "-o", str(output_html)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
+        )
+
+        assert result.returncode == 0, (
+            f"Expected exit code 0, got {result.returncode}.\nstderr: {result.stderr}"
+        )
+        html = output_html.read_text(encoding="utf-8")
+        assert 'id="intro"' in html, 'id="intro" not found in output HTML'
+        assert 'id="intro-2"' in html, (
+            'id="intro-2" not found in output HTML (slug collision not resolved)'
+        )
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Test: output file is valid UTF-8
+# ---------------------------------------------------------------------------
+
+def test_utf8_output():
+    """Output file can be opened as UTF-8 without error."""
+    tmpdir = Path(tempfile.mkdtemp())
+    try:
+        md = tmpdir / "doc.md"
+        md.write_text("# Hello World\n\nCafé and naïve résumé.\n", encoding="utf-8")
+
+        output_html = tmpdir / "output.html"
+        result = subprocess.run(
+            [PYTHON, str(SCRIPT), "*.md", "-o", str(output_html)],
+            capture_output=True,
+            text=True,
+            cwd=str(tmpdir),
+        )
+        assert result.returncode == 0, f"Expected exit 0, got {result.returncode}"
+        # Open as UTF-8 — raises UnicodeDecodeError if invalid
+        content = output_html.read_text(encoding="utf-8")
+        assert len(content) > 0, "Output file is empty"
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -296,7 +326,7 @@ def test_scrollspy_js():
 
         output_html = tmpdir / "output.html"
         result = subprocess.run(
-            [PYTHON, str(SCRIPT), "-i", str(md), "-o", str(output_html)],
+            [PYTHON, str(SCRIPT), "*.md", "-o", str(output_html)],
             capture_output=True,
             text=True,
             cwd=str(tmpdir),
@@ -318,14 +348,14 @@ def test_scrollspy_js():
 
 def main():
     tests = [
-        ("--help shows -i/--input and -o/--output", test_help_output),
+        ("--help shows glob and -o/--output", test_help_output),
         ("Basic single-file end-to-end pipeline", test_basic_e2e),
-        ("Default output path derived from input stem", test_default_output_path),
-        ("Missing --input exits non-zero", test_missing_input_arg),
-        ("Non-existent input file exits 1", test_nonexistent_input_file),
-        ("Non-.md extension exits 1", test_non_md_extension),
+        ("Zero-file glob exits 1 with no output created", test_zero_file_glob),
+        ("Missing glob argument exits non-zero", test_missing_glob_arg),
         ("Non-existent output directory exits 1", test_nonexistent_output_dir),
-        ("--order flag is unrecognised (removed)", test_order_flag_unrecognised),
+        ("No-h1 warning printed to stderr", test_no_h1_warning),
+        ("Slug collision produces id='intro' and id='intro-2'", test_slug_collision),
+        ("Output file is valid UTF-8", test_utf8_output),
         ("Scroll-spy JS is present and safe", test_scrollspy_js),
     ]
 

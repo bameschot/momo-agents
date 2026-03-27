@@ -688,7 +688,7 @@ def test_assemble_html_structure():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="My Docs",
-        entry=entry,
+        entries=[entry],
         toc="<ul><li>TOC</li></ul>",
     )
     html = assemble_html(ctx)
@@ -709,7 +709,7 @@ def test_assemble_html_toc_sidebar():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Test",
-        entry=entry,
+        entries=[entry],
         toc="<ul><li>item</li></ul>",
     )
     html = assemble_html(ctx)
@@ -726,7 +726,7 @@ def test_assemble_html_css_variables():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Test",
-        entry=entry,
+        entries=[entry],
         toc="",
     )
     html = assemble_html(ctx)
@@ -745,7 +745,7 @@ def test_assemble_html_no_external_stylesheets():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Test",
-        entry=entry,
+        entries=[entry],
         toc="",
     )
     html = assemble_html(ctx)
@@ -785,7 +785,7 @@ def test_story013_assemble_html_full():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Test Doc",
-        entry=entry,
+        entries=[entry],
         toc="<ul><li>item</li></ul>",
     )
     html = assemble_html(ctx)
@@ -826,7 +826,7 @@ def test_story013_assemble_html_purity():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Purity Test",
-        entry=entry,
+        entries=[entry],
         toc="<ul><li>alpha</li></ul>",
     )
     result1 = assemble_html(ctx)
@@ -844,7 +844,7 @@ def test_story013_assemble_html_meta_tags():
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Meta Test",
-        entry=entry,
+        entries=[entry],
         toc="",
     )
     html = assemble_html(ctx)
