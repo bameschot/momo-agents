@@ -8,7 +8,6 @@ No third-party test framework required.
 
 from __future__ import annotations
 
-import os
 import shutil
 import struct
 import subprocess

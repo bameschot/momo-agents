@@ -43,7 +43,7 @@ class FileEntry:
 class RenderContext:
     output_path: Path
     title: str               # Derived from output filename stem
-    entries: "list[FileEntry]" = field(default_factory=list)
+    entry: "FileEntry | None" = None
     toc: str = ""            # Pre-rendered TOC HTML
 
 
@@ -977,9 +977,7 @@ def assemble_html(ctx: RenderContext) -> str:
 
     Does not write any files; returns the HTML string.
     """
-    sections_html = "\n".join(
-        render_section(entry, i) for i, entry in enumerate(ctx.entries)
-    )
+    sections_html = render_section(ctx.entry, 0) if ctx.entry is not None else ""
 
     return f"""\
 <!DOCTYPE html>
@@ -1118,7 +1116,7 @@ def main() -> None:
     ctx = RenderContext(
         output_path=args.output_path,
         title=title,
-        entries=[entry],
+        entry=entry,
         toc=toc,
     )
 
