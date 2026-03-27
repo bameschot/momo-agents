@@ -1,42 +1,35 @@
-# STORY-001: Scaffold, Data Models & CLI
+# STORY-001: Project Scaffold, Dataclasses & CLI
 
 **Index**: 1
 **Attempts**: 1
-**Design ref**: design/md-to-html.md
+**Design ref**: design/md-to-html-cli.md
 **Depends on**: none
 
 ## Context
-This is the foundation story. It creates the single script file `md-to-html/md_to_html.py`, defines all shared dataclasses (`FileEntry`, `Heading`, `RenderContext`), and implements the `parse_args` function with full CLI validation. All subsequent stories extend this file. Nothing renders HTML yet — this story exists purely to establish the structure every other component will build on.
+This is the foundation story. It creates `md2html.py` as a single executable Python file, defines the shared data model (`Heading`, `ParseResult`), and wires up the `argparse`-based CLI (`parse_args()`). All other stories extend this file. Nothing functional is produced yet — the script should be runnable and print help, but conversion is a no-op stub.
 
 ## Acceptance Criteria
-- [ ] Directory `md-to-html/` exists and contains only `md_to_html.py`.
-- [ ] `md_to_html.py` is a single file with no imports outside Python stdlib.
-- [ ] `python md_to_html.py --help` prints usage including the `glob` positional argument, `-o/--output`, and `--order` options, then exits 0.
-- [ ] Running with a glob that matches zero `.md` files prints a human-readable error to stderr and exits non-zero.
-- [ ] Running with `--order` referencing a file not matched by the glob (or not existing on disk) prints an error to stderr and exits non-zero.
-- [ ] Running with `-o` pointing to a non-existent parent directory prints an error to stderr and exits non-zero.
-- [ ] `parse_args()` returns a namespace/object containing: resolved `list[Path]` of matched files (in glob order, or `--order` override order), output `Path`, and page title (derived from output filename stem).
-- [ ] `**` glob patterns work (recursive=True passed to glob.glob).
-- [ ] `FileEntry`, `Heading`, and `RenderContext` dataclasses are defined with the exact fields specified in the design.
-- [ ] All file I/O uses UTF-8 encoding.
-- [ ] A `main()` entry-point function exists and is called under `if __name__ == "__main__":`; it currently just calls `parse_args()` and prints the resolved file list, so manual smoke-testing is possible.
+- [ ] `md2html.py` exists at the project root and is a single self-contained Python file.
+- [ ] The file declares `python3.11+` compatibility (no third-party imports).
+- [ ] `Heading` dataclass is defined with fields: `level: int`, `text: str`, `slug: str`.
+- [ ] `ParseResult` dataclass is defined with fields: `body_html: str`, `headings: list[Heading]`, `title: str | None`.
+- [ ] `parse_args()` is implemented and accepts: positional `input` (path to `.md` file), `-o / --output` (optional output path), `-t / --title` (optional title string), `-h / --help`.
+- [ ] Default output path logic: `<input-basename>.html` in the same directory as the input file (computed in `parse_args()` or `main()`).
+- [ ] `main()` stub exists: reads args, opens the input file, and prints a placeholder message — no HTML written yet.
+- [ ] Running `python md2html.py --help` exits 0 and prints usage.
+- [ ] Running `python md2html.py nonexistent.md` exits non-zero with a clear error message.
 
 ## Implementation Hints
-- Use `argparse.ArgumentParser` with `nargs='+'` for `--order`.
-- Expand the glob with `pathlib.Path.cwd()` as the base; use `glob.glob(pattern, recursive=True)` and convert results to resolved `Path` objects, then filter to only `.md` files.
-- If `--order` is supplied, validate every listed path is in the glob-expanded set (compare resolved absolute paths). Reject extras with a clear message.
-- `RenderContext.title` = `output_path.stem` (no extension, no further slugification needed).
-- Default output path: `Path("output.html")` relative to cwd.
-- Use `@dataclass` from `dataclasses` (stdlib since 3.7).
-- Emit all error messages via `print(..., file=sys.stderr)` then `sys.exit(1)`.
+- Use `from __future__ import annotations` and `from dataclasses import dataclass` — both are stdlib.
+- `argparse.FileType('r')` is convenient for the input argument, but using `pathlib.Path` for the positional and validating manually gives better error messages and lets you extract `parent` for default output resolution.
+- Keep `main()` guarded by `if __name__ == "__main__": main()`.
+- All module-level constants (CSS, JS strings added by later stories) should be defined at the top of the file so the structure is ready for later stories to fill in.
 
 ## Test Requirements
-- Manual CLI smoke tests are sufficient for this story (no automated test framework is introduced yet).
-- Test: glob matching zero files → error.
-- Test: `--order` with a non-existent path → error.
-- Test: `-o /nonexistent_dir/out.html` → error.
-- Test: valid glob → prints resolved file list.
-- Test: `--help` exits 0 with usage text.
+- Unit-test `parse_args()` with: a valid `.md` path, an explicit `-o` path, an explicit `-t` title, and the `--help` flag.
+- Assert that the default output path is `<same_dir>/<stem>.html` when `-o` is omitted.
+- Assert `parse_args()` raises `SystemExit` (or equivalent) for missing positional argument.
+- No filesystem writes should occur from these tests.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->
