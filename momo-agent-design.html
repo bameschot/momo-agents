@@ -1,206 +1,272 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>momo-agent-design</title>
-<style>
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Momo Agents — System Design</title><style>
+/* ── Reset & Custom Properties ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
-    --bg-page:         #f5f5f5;
-    --bg-section-even: #ffffff;
-    --bg-section-odd:  #fafafa;
-    --text:            #1a1a1a;
-    --bg-code:         #f0f0f0;
-    --link:            #0066cc;
+  --bg:           #ffffff;
+  --text:         #1a1a1a;
+  --muted:        #555555;
+  --link:         #0066cc;
+  --border:       #d0d0d0;
+  --code-bg:      #f5f5f5;
+  --code-text:    #333333;
+  --pre-bg:       #f8f8f8;
+  --table-head:   #f0f0f0;
+  --table-alt:    #fafafa;
+  --bq-border:    #0066cc;
+  --bq-bg:        #f0f4ff;
+  --hr-color:     #cccccc;
+  --toggle-bg:    #e8e8e8;
+}
+
+[data-theme="dark"] {
+  --bg:           #1e1e1e;
+  --text:         #d4d4d4;
+  --muted:        #999999;
+  --link:         #66b3ff;
+  --border:       #444444;
+  --code-bg:      #2d2d2d;
+  --code-text:    #c9d1d9;
+  --pre-bg:       #252525;
+  --table-head:   #2a2a2a;
+  --table-alt:    #232323;
+  --bq-border:    #66b3ff;
+  --bq-bg:        #1e2a3a;
+  --hr-color:     #444444;
+  --toggle-bg:    #333333;
 }
 
 @media (prefers-color-scheme: dark) {
-    :root {
-        --bg-page:         #1a1a1a;
-        --bg-section-even: #242424;
-        --bg-section-odd:  #2a2a2a;
-        --text:            #e8e8e8;
-        --bg-code:         #2f2f2f;
-        --link:            #4da6ff;
-    }
+  :root:not([data-theme="light"]) {
+    --bg:           #1e1e1e;
+    --text:         #d4d4d4;
+    --muted:        #999999;
+    --link:         #66b3ff;
+    --border:       #444444;
+    --code-bg:      #2d2d2d;
+    --code-text:    #c9d1d9;
+    --pre-bg:       #252525;
+    --table-head:   #2a2a2a;
+    --table-alt:    #232323;
+    --bq-border:    #66b3ff;
+    --bq-bg:        #1e2a3a;
+    --hr-color:     #444444;
+    --toggle-bg:    #333333;
+  }
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+html { font-size: 16px; }
 
 body {
-    margin: 0;
-    background: var(--bg-page);
-    color: var(--text);
-    font-family: system-ui, sans-serif;
-    line-height: 1.6;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  padding: 1rem;
 }
 
-/* Sidebar */
-#toc {
-    position: fixed;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    width: 260px;
-    overflow-y: auto;
-    background: var(--bg-section-even);
-    border-right: 1px solid rgba(128,128,128,0.2);
-    padding: 1rem;
+.page-wrapper {
+  display: flex;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-#toc-inner .toc-title {
-    font-weight: bold;
-    margin-bottom: 0.5rem;
+article {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 860px;
 }
 
-#toc ul {
-    list-style: none;
-    padding-left: 1rem;
-    margin: 0;
+/* ── Table of Contents Sidebar ──────────────────────────────────────────── */
+#toc-sidebar {
+  flex: 0 0 220px;
+  width: 220px;
 }
 
-#toc li { margin: 0.25rem 0; }
-
-#toc a {
-    color: var(--link);
-    text-decoration: none;
-}
-#toc a:hover { text-decoration: underline; }
-
-/* Main content */
-main {
-    margin-left: 280px;
-    padding: 2rem;
-    max-width: 860px;
+#toc-sidebar nav {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  font-size: 0.875rem;
+  color: var(--muted);
 }
 
-/* Sections */
-section {
-    padding: 2rem;
-    border-radius: 4px;
-    margin-bottom: 1rem;
-}
-.section-even { background: var(--bg-section-even); }
-.section-odd  { background: var(--bg-section-odd); }
-
-.section-header h1 {
-    margin-top: 0;
-    border-bottom: 2px solid rgba(128,128,128,0.3);
-    padding-bottom: 0.5rem;
+#toc-sidebar nav a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.15rem 0;
 }
 
-hr.section-divider {
-    border: none;
-    border-top: 1px solid rgba(128,128,128,0.2);
-    margin: 1rem 0;
+#toc-sidebar nav a:hover { color: var(--link); }
+
+#toc-sidebar nav ul { list-style: none; padding-left: 0; }
+#toc-sidebar nav ul ul { padding-left: 1rem; }
+
+/* Mobile ToC (details/summary) */
+#toc-mobile { display: none; margin-bottom: 1.5rem; }
+#toc-mobile summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  color: var(--text);
+}
+#toc-mobile nav a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.2rem 0.5rem;
+}
+#toc-mobile nav a:hover { color: var(--link); }
+#toc-mobile nav ul { list-style: none; padding-left: 0; }
+#toc-mobile nav ul ul { padding-left: 1rem; }
+
+@media (max-width: 768px) {
+  .page-wrapper { display: block; }
+  #toc-sidebar { display: none; }
+  #toc-mobile { display: block; }
+  article { max-width: 100%; }
 }
 
-/* Typography */
-h1, h2, h3, h4, h5, h6 { color: var(--text); }
+/* ── Theme Toggle ───────────────────────────────────────────────────────── */
+#theme-toggle {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: var(--toggle-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  z-index: 100;
+}
+
+#theme-toggle:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.5rem 0 0.5rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+h1 { font-size: 2rem;   }
+h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem;   }
+h6 { font-size: 0.9rem; color: var(--muted); }
+
+p { margin: 0.75rem 0; }
+
 a { color: var(--link); }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 
-pre {
-    background: var(--bg-code);
-    padding: 1rem;
-    border-radius: 4px;
-    overflow-x: auto;
-}
+/* ── Inline Code ────────────────────────────────────────────────────────── */
 code {
-    font-family: ui-monospace, monospace;
-    background: var(--bg-code);
-    padding: 0.1em 0.3em;
-    border-radius: 3px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
 }
+
+/* ── Code Blocks ────────────────────────────────────────────────────────── */
+pre {
+  position: relative;
+  background: var(--pre-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
 pre code {
-    background: none;
-    padding: 0;
+  background: none;
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--code-text);
+  border-radius: 0;
 }
 
+/* Copy button (injected by JS) */
+.copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  background: var(--toggle-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--muted);
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.copy-btn:hover { opacity: 1; }
+
+.copy-btn:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
 table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1rem 0;
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95rem;
 }
+
 th, td {
-    border: 1px solid rgba(128,128,128,0.3);
-    padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
 }
-thead { background: var(--bg-code); }
 
+th { background: var(--table-head); font-weight: 600; }
+
+tr:nth-child(even) td { background: var(--table-alt); }
+
+/* ── Blockquotes ────────────────────────────────────────────────────────── */
 blockquote {
-    border-left: 4px solid var(--link);
-    margin: 1rem 0;
-    padding: 0.5rem 1rem;
-    background: var(--bg-code);
+  border-left: 4px solid var(--bq-border);
+  background: var(--bq-bg);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  color: var(--muted);
+  border-radius: 0 4px 4px 0;
 }
 
-.footnotes {
-    margin-top: 2rem;
-    border-top: 1px solid rgba(128,128,128,0.3);
-    font-size: 0.9em;
+blockquote p { margin: 0; }
+
+/* ── Horizontal Rule ────────────────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 2px solid var(--hr-color);
+  margin: 2rem 0;
 }
 
-/* Scroll-spy active TOC link */
-.toc-active {
-    font-weight: bold;
-    color: var(--link);
-}
+/* ── Lists ──────────────────────────────────────────────────────────────── */
+ul, ol { padding-left: 1.75rem; margin: 0.5rem 0; }
+li { margin: 0.25rem 0; }
 
-</style>
-</head>
-<body>
-<nav id="toc">
-<div id="toc-inner">
-<p class="toc-title">Contents</p>
-<ul>
-<li><a href="#momo-agents-system-design">Momo Agents — System Design</a><ul>
-<li><a href="#what-it-is">What It Is</a></li>
-<li><a href="#repository-layout">Repository Layout</a></li>
-<li><a href="#agents-and-their-roles">Agents and Their Roles</a></li>
-<li><a href="#designer-agent">Designer Agent</a><ul>
-<li><a href="#conversation-flow">Conversation flow</a></li>
-<li><a href="#implementation-notes">Implementation notes</a></li>
-</ul></li>
-<li><a href="#business-analyst-agent">Business Analyst Agent</a><ul>
-<li><a href="#watch-loop">Watch loop</a></li>
-</ul></li>
-<li><a href="#project-initialiser-agent">Project Initialiser Agent</a></li>
-<li><a href="#coding-agent">Coding Agent</a><ul>
-<li><a href="#polling-behaviour">Polling behaviour</a></li>
-<li><a href="#story-claiming">Story claiming</a></li>
-<li><a href="#workspace-commit-policy">Workspace commit policy</a></li>
-<li><a href="#halt-handling">HALT handling</a></li>
-</ul></li>
-<li><a href="#story-reviewer-agent">Story Reviewer Agent</a></li>
-<li><a href="#story-file-format">Story File Format</a></li>
-<li><a href="#story-lifecycle">Story Lifecycle</a></li>
-<li><a href="#story-states">Story States</a></li>
-<li><a href="#retry-policy">Retry Policy</a></li>
-<li><a href="#parallel-coordination">Parallel Coordination</a></li>
-<li><a href="#start-teamsh-usage-guide">`start-team.sh` — Usage Guide</a><ul>
-<li><a href="#syntax">Syntax</a></li>
-<li><a href="#examples">Examples</a></li>
-<li><a href="#what-happens-on-launch">What happens on launch</a></li>
-<li><a href="#agent-windows-opened">Agent windows opened</a></li>
-<li><a href="#shutting-down">Shutting down</a></li>
-<li><a href="#terminal-fallback-tmux">Terminal fallback (tmux)</a></li>
-</ul></li>
-<li><a href="#reset-teamsh-usage-guide">`reset-team.sh` — Usage Guide</a><ul>
-<li><a href="#syntax-2">Syntax</a></li>
-<li><a href="#what-is-removed">What is removed</a></li>
-<li><a href="#what-is-preserved">What is preserved</a></li>
-<li><a href="#after-reset">After reset</a></li>
-</ul></li>
-<li><a href="#watchdog-watchdogsh">Watchdog (`watchdog.sh`)</a></li>
-<li><a href="#observability-statussh">Observability (`status.sh`)</a></li>
-</ul></li>
-</ul>
-</div>
-</nav>
-<main>
-<section id="momo-agent-design" class="section-even">
-<div class="section-header"><h1>Momo Agents — System Design</h1></div>
-<h1 id="momo-agents-system-design">Momo Agents — System Design</h1>
+/* ── Images ─────────────────────────────────────────────────────────────── */
+img { max-width: 100%; height: auto; border-radius: 4px; }
+</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents--system-design">Momo Agents — System Design</a><ul><li><a href="#what-it-is">What It Is</a></li><li><a href="#repository-layout">Repository Layout</a></li><li><a href="#agents-and-their-roles">Agents and Their Roles</a></li><li><a href="#designer-agent">Designer Agent</a><ul><li><a href="#conversation-flow">Conversation flow</a></li><li><a href="#implementation-notes">Implementation notes</a></li></ul></li><li><a href="#business-analyst-agent">Business Analyst Agent</a><ul><li><a href="#watch-loop">Watch loop</a></li></ul></li><li><a href="#project-initialiser-agent">Project Initialiser Agent</a></li><li><a href="#coding-agent">Coding Agent</a><ul><li><a href="#polling-behaviour">Polling behaviour</a></li><li><a href="#story-claiming">Story claiming</a></li><li><a href="#workspace-commit-policy">Workspace commit policy</a></li><li><a href="#halt-handling">HALT handling</a></li></ul></li><li><a href="#story-reviewer-agent">Story Reviewer Agent</a></li><li><a href="#story-file-format">Story File Format</a></li><li><a href="#story-lifecycle">Story Lifecycle</a></li><li><a href="#story-states">Story States</a></li><li><a href="#retry-policy">Retry Policy</a></li><li><a href="#parallel-coordination">Parallel Coordination</a></li><li><a href="#start-teamsh--usage-guide">`start-team.sh` — Usage Guide</a><ul><li><a href="#syntax">Syntax</a></li><li><a href="#examples">Examples</a></li><li><a href="#what-happens-on-launch">What happens on launch</a></li><li><a href="#agent-windows-opened">Agent windows opened</a></li><li><a href="#shutting-down">Shutting down</a></li><li><a href="#terminal-fallback-tmux">Terminal fallback (tmux)</a></li></ul></li><li><a href="#reset-teamsh--usage-guide">`reset-team.sh` — Usage Guide</a><ul><li><a href="#syntax-2">Syntax</a></li><li><a href="#what-is-removed">What is removed</a></li><li><a href="#what-is-preserved">What is preserved</a></li><li><a href="#after-reset">After reset</a></li></ul></li><li><a href="#watchdog-watchdogsh">Watchdog (`watchdog.sh`)</a></li><li><a href="#observability-statussh">Observability (`status.sh`)</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents--system-design">Momo Agents — System Design</h1>
 <h2 id="what-it-is">What It Is</h2>
 <p>A multi-agent coding team built on the Claude Agent SDK. The user describes what they want to build; a pipeline of specialised agents turns that description into a design, breaks it into stories, implements the stories in parallel, and escalates to the user only when something is genuinely stuck.</p>
 <hr>
@@ -237,54 +303,7 @@ blockquote {
 └── watchdog.sh                ← resets stale .working.md files after 10 min</code></pre>
 <hr>
 <h2 id="agents-and-their-roles">Agents and Their Roles</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Agent</th>
-<th style="text-align:left">Role</th>
-<th style="text-align:left">Reads from</th>
-<th style="text-align:left">Writes to</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><strong>Designer</strong></td>
-<td style="text-align:left">Multi-turn interactive Q&amp;A with user; writes design on <code>write</code> command</td>
-<td style="text-align:left">User input (terminal)</td>
-<td style="text-align:left"><code>design/</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Business Analyst</strong></td>
-<td style="text-align:left">Watches <code>design/</code> continuously; decomposes any new or updated design into stories</td>
-<td style="text-align:left"><code>design/*.md</code></td>
-<td style="text-align:left"><code>stories/</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Project Initialiser</strong></td>
-<td style="text-align:left">Scaffolds <code>workspace/</code> once before any Coding Agent runs</td>
-<td style="text-align:left"><code>design/</code></td>
-<td style="text-align:left"><code>workspace/</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Coding Agent</strong> (×N)</td>
-<td style="text-align:left">Claims and implements one story at a time; polls indefinitely for new work</td>
-<td style="text-align:left"><code>stories/</code>, <code>workspace/CLAUDE.md</code></td>
-<td style="text-align:left"><code>workspace/</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Story Reviewer</strong></td>
-<td style="text-align:left">Triages permanently-failed stories with user guidance</td>
-<td style="text-align:left"><code>stories/*.failed.md</code></td>
-<td style="text-align:left"><code>stories/</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><strong>Watchdog</strong></td>
-<td style="text-align:left">Resets stale <code>.working.md</code> files whose agent has died or stalled</td>
-<td style="text-align:left"><code>stories/</code></td>
-<td style="text-align:left"><code>stories/</code></td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Agent</th><th>Role</th><th>Reads from</th><th>Writes to</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Multi-turn interactive Q&amp;A with user; writes design on <code>write</code> command</td><td>User input (terminal)</td><td><code>design/</code></td></tr><tr><td><strong>Business Analyst</strong></td><td>Watches <code>design/</code> continuously; decomposes any new or updated design into stories</td><td><code>design/*.md</code></td><td><code>stories/</code></td></tr><tr><td><strong>Project Initialiser</strong></td><td>Scaffolds <code>workspace/</code> once before any Coding Agent runs</td><td><code>design/</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Coding Agent</strong> (×N)</td><td>Claims and implements one story at a time; polls indefinitely for new work</td><td><code>stories/</code>, <code>workspace/CLAUDE.md</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Story Reviewer</strong></td><td>Triages permanently-failed stories with user guidance</td><td><code>stories/*.failed.md</code></td><td><code>stories/</code></td></tr><tr><td><strong>Watchdog</strong></td><td>Resets stale <code>.working.md</code> files whose agent has died or stalled</td><td><code>stories/</code></td><td><code>stories/</code></td></tr></tbody></table>
 <p>Each agent reads its system prompt from the corresponding file in <code>roles/</code> at startup.</p>
 <hr>
 <h2 id="designer-agent">Designer Agent</h2>
@@ -308,7 +327,8 @@ blockquote {
 <h2 id="coding-agent">Coding Agent</h2>
 <h3 id="polling-behaviour">Polling behaviour</h3>
 <p>Coding Agents <strong>never stop on their own</strong> — they poll indefinitely for eligible work. The agent loop:</p>
-<ol><li>Wait for <code>pi.done</code> sentinel (Project Initialiser has finished).</li><li>Wait for at least one <code>STORY-*.md</code> file to appear in <code>stories/</code>.</li><li>Enter the main work loop:<ul><li>If <code>pipeline_complete</code> exists → exit cleanly.</li><li>If <code>HALT</code> exists → wait for it to be removed (Story Reviewer is working), then resume.</li><li>Attempt to claim and implement the next eligible story.</li><li>If no eligible story is currently available (all are working, done, or blocked by unresolved dependencies) → sleep briefly and poll again.</li><li>On unexpected exit code → retry after 10 seconds.</li></ul></li></ol>
+<ol><li>Wait for <code>pi.done</code> sentinel (Project Initialiser has finished).</li><li>Wait for at least one <code>STORY-*.md</code> file to appear in <code>stories/</code>.</li><li>Enter the main work loop:</li></ol>
+<ul><li>If <code>pipeline_complete</code> exists → exit cleanly.</li><li>If <code>HALT</code> exists → wait for it to be removed (Story Reviewer is working), then resume.</li><li>Attempt to claim and implement the next eligible story.</li><li>If no eligible story is currently available (all are working, done, or blocked by unresolved dependencies) → sleep briefly and poll again.</li><li>On unexpected exit code → retry after 10 seconds.</li></ul>
 <p>The agent continues polling even when all current stories are done, because the BA may write new stories at any time (e.g. after the designer updates the design document). The only way to stop a Coding Agent is via the <code>pipeline_complete</code> sentinel, which is written when the operator presses <code>Ctrl+C</code> in the <code>start-team.sh</code> terminal.</p>
 <h3 id="story-claiming">Story claiming</h3>
 <p>Claiming is an atomic filesystem rename: <code>STORY-NNN.md</code> → <code>STORY-NNN.working.md</code>. POSIX <code>rename(2)</code> is atomic; if two agents race, exactly one succeeds and the other moves to the next candidate.</p>
@@ -316,7 +336,8 @@ blockquote {
 <h3 id="workspace-commit-policy">Workspace commit policy</h3>
 <p>Coding Agents do <strong>not</strong> commit workspace changes until a story is successfully completed and renamed <code>.done.md</code>. All in-progress work stays uncommitted, making a git-based revert clean and safe on HALT.</p>
 <h3 id="halt-handling">HALT handling</h3>
-<p>On detecting <code>stories/HALT</code>: 1. Discard all uncommitted workspace changes (<code>git checkout -- workspace/</code>). 2. Rename <code>.working.md</code> back to <code>.md</code>. 3. Wait until HALT is removed, then resume polling.</p>
+<p>On detecting <code>stories/HALT</code>:</p>
+<ol><li>Discard all uncommitted workspace changes (<code>git checkout -- workspace/</code>).</li><li>Rename <code>.working.md</code> back to <code>.md</code>.</li><li>Wait until HALT is removed, then resume polling.</li></ol>
 <hr>
 <h2 id="story-reviewer-agent">Story Reviewer Agent</h2>
 <ol><li>Watches for <code>stories/HALT</code> in a continuous loop.</li><li>On detection, atomically claims <code>STORY-NNN.failed.md</code> → <code>STORY-NNN.reviewing.md</code>.</li><li>Reads the full story file including all accumulated failure notes.</li><li>Presents the user with the original goal, acceptance criteria, and a plain-language summary of each failed attempt.</li><li>Asks the user how to proceed (new approach, relaxed constraints, split the story, etc.).</li><li>Rewrites the entire file with a clean, updated story; resets <code>**Attempts**: 0</code>; preserves <code>**Index**</code> and <code>**Depends on**</code>.</li><li>If no more <code>.failed.md</code> files exist: deletes <code>stories/HALT</code>.</li><li>Renames <code>.reviewing.md</code> → <code>.md</code> — story re-enters the pending queue.</li><li>Returns to watching for the next HALT.</li></ol>
@@ -364,131 +385,21 @@ STORY-NNN.done.md   ├─ yes → rename back to STORY-NNN.md  (pending again)
                      Coding Agents resume polling automatically</code></pre>
 <hr>
 <h2 id="story-states">Story States</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Filename suffix</th>
-<th style="text-align:left">State</th>
-<th style="text-align:left">Who can claim it</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code>.md</code></td>
-<td style="text-align:left">Pending</td>
-<td style="text-align:left">Any Coding Agent (dependency permitting)</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>.working.md</code></td>
-<td style="text-align:left">In progress</td>
-<td style="text-align:left">— (owned by one Coding Agent)</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>.done.md</code></td>
-<td style="text-align:left">Complete</td>
-<td style="text-align:left">Nobody</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>.failed.md</code></td>
-<td style="text-align:left">Exhausted retries</td>
-<td style="text-align:left">Story Reviewer Agent</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>.reviewing.md</code></td>
-<td style="text-align:left">Under review</td>
-<td style="text-align:left">— (owned by Story Reviewer)</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>HALT</code> (sentinel)</td>
-<td style="text-align:left">System paused</td>
-<td style="text-align:left">Triggers stop + revert in all Coding Agents</td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Filename suffix</th><th>State</th><th>Who can claim it</th></tr></thead><tbody><tr><td><code>.md</code></td><td>Pending</td><td>Any Coding Agent (dependency permitting)</td></tr><tr><td><code>.working.md</code></td><td>In progress</td><td>— (owned by one Coding Agent)</td></tr><tr><td><code>.done.md</code></td><td>Complete</td><td>Nobody</td></tr><tr><td><code>.failed.md</code></td><td>Exhausted retries</td><td>Story Reviewer Agent</td></tr><tr><td><code>.reviewing.md</code></td><td>Under review</td><td>— (owned by Story Reviewer)</td></tr><tr><td><code>HALT</code> (sentinel)</td><td>System paused</td><td>Triggers stop + revert in all Coding Agents</td></tr></tbody></table>
 <hr>
 <h2 id="retry-policy">Retry Policy</h2>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Attempts so far</th>
-<th style="text-align:left">On next failure</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">1 – 4</td>
-<td style="text-align:left">Append failure note; release story back to pending</td>
-</tr>
-<tr>
-<td style="text-align:left">5</td>
-<td style="text-align:left">Append failure note; create <code>HALT</code>; mark <code>.failed.md</code></td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Attempts so far</th><th>On next failure</th></tr></thead><tbody><tr><td>1 – 4</td><td>Append failure note; release story back to pending</td></tr><tr><td>5</td><td>Append failure note; create <code>HALT</code>; mark <code>.failed.md</code></td></tr></tbody></table>
 <p>Each failure note records the attempt number, a UTC timestamp, and a summary of what went wrong.</p>
 <hr>
 <h2 id="parallel-coordination">Parallel Coordination</h2>
 <p>All agent coordination is via atomic filesystem operations — no database, no message queue, no shared memory.</p>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Operation</th>
-<th style="text-align:left">Mechanism</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left">Claim a story</td>
-<td style="text-align:left"><code>rename(STORY-NNN.md, STORY-NNN.working.md)</code> — POSIX atomic</td>
-</tr>
-<tr>
-<td style="text-align:left">Dependency check</td>
-<td style="text-align:left">Read <code>**Depends on**</code>; skip if dependency not <code>.done.md</code></td>
-</tr>
-<tr>
-<td style="text-align:left">Halt detection</td>
-<td style="text-align:left">Check for <code>stories/HALT</code> before claiming; wait in loop until removed</td>
-</tr>
-<tr>
-<td style="text-align:left">Workspace revert</td>
-<td style="text-align:left"><code>git checkout -- workspace/</code> on HALT detection</td>
-</tr>
-<tr>
-<td style="text-align:left">Pipeline shutdown</td>
-<td style="text-align:left"><code>pipeline_complete</code> sentinel written by <code>start-team.sh</code> on Ctrl+C</td>
-</tr>
-<tr>
-<td style="text-align:left">Stale agent recovery</td>
-<td style="text-align:left">Watchdog resets <code>.working.md</code> files idle &gt; 10 minutes</td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Operation</th><th>Mechanism</th></tr></thead><tbody><tr><td>Claim a story</td><td><code>rename(STORY-NNN.md, STORY-NNN.working.md)</code> — POSIX atomic</td></tr><tr><td>Dependency check</td><td>Read <code>**Depends on**</code>; skip if dependency not <code>.done.md</code></td></tr><tr><td>Halt detection</td><td>Check for <code>stories/HALT</code> before claiming; wait in loop until removed</td></tr><tr><td>Workspace revert</td><td><code>git checkout -- workspace/</code> on HALT detection</td></tr><tr><td>Pipeline shutdown</td><td><code>pipeline_complete</code> sentinel written by <code>start-team.sh</code> on Ctrl+C</td></tr><tr><td>Stale agent recovery</td><td>Watchdog resets <code>.working.md</code> files idle &gt; 10 minutes</td></tr></tbody></table>
 <hr>
-<h2 id="start-teamsh-usage-guide"><code>start-team.sh</code> — Usage Guide</h2>
+<h2 id="start-teamsh--usage-guide"><code>start-team.sh</code> — Usage Guide</h2>
 <p><code>start-team.sh</code> launches all agents <strong>simultaneously</strong>, each in its own named terminal window. Agents self-coordinate via the filesystem; no window waits for another to finish before starting.</p>
 <h3 id="syntax">Syntax</h3>
 <pre><code class="language-bash">./start-team.sh &lt;feature-name&gt; [--dev-agents N]</code></pre>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Argument</th>
-<th style="text-align:left">Description</th>
-<th style="text-align:left">Default</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code>feature-name</code></td>
-<td style="text-align:left">Kebab-case name of the feature being built. Used to derive the expected design file path (<code>design/&lt;feature-name&gt;.md</code>).</td>
-<td style="text-align:left">required</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>--dev-agents N</code></td>
-<td style="text-align:left">Number of parallel Coding Agents to spawn. All other agents always run as a single instance.</td>
-<td style="text-align:left"><code>2</code></td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Argument</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>feature-name</code></td><td>Kebab-case name of the feature being built. Used to derive the expected design file path (<code>design/&lt;feature-name&gt;.md</code>).</td><td>required</td></tr><tr><td><code>--dev-agents N</code></td><td>Number of parallel Coding Agents to spawn. All other agents always run as a single instance.</td><td><code>2</code></td></tr></tbody></table>
 <h3 id="examples">Examples</h3>
 <pre><code class="language-bash"># Start with default 2 coding agents
 ./start-team.sh my-feature
@@ -501,126 +412,24 @@ STORY-NNN.done.md   ├─ yes → rename back to STORY-NNN.md  (pending again)
 <h3 id="what-happens-on-launch">What happens on launch</h3>
 <ol><li>The script detects the available terminal emulator (macOS Terminal.app, gnome-terminal, konsole, xfce4-terminal, mate-terminal, xterm, or tmux as fallback).</li><li>All agent windows open <strong>simultaneously</strong> — no sequential waiting.</li><li>Each window is named after its agent (via ANSI title escape codes and, on macOS, AppleScript <code>custom title</code>).</li><li>If <code>workspace/</code> is empty the Project Initialiser scaffolds it from the design; if it already has content the initialiser skips automatically.</li><li>The <code>start-team.sh</code> terminal itself becomes the <strong>pipeline monitor</strong> — it prints a status line whenever story counts change.</li></ol>
 <h3 id="agent-windows-opened">Agent windows opened</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Window title</th>
-<th style="text-align:left">Agent</th>
-<th style="text-align:left">Notes</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code>Designer Agent</code></td>
-<td style="text-align:left">Interactive design session</td>
-<td style="text-align:left">Type your requirements; type <code>write</code> to save the design</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>Business Analyst</code></td>
-<td style="text-align:left">Design watcher</td>
-<td style="text-align:left">Polls <code>design/</code> every 5 s; re-runs when any <code>.md</code> changes</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>Project Initialiser</code></td>
-<td style="text-align:left">Workspace scaffolder</td>
-<td style="text-align:left">Runs once; skips if workspace already populated</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>Watchdog</code></td>
-<td style="text-align:left">Stale story reset</td>
-<td style="text-align:left">Runs continuously until pipeline_complete</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>Story Reviewer</code></td>
-<td style="text-align:left">Failed-story triage</td>
-<td style="text-align:left">Wakes on HALT; interactive with user</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>Coding Agent 1</code> … <code>Coding Agent N</code></td>
-<td style="text-align:left">Implementation</td>
-<td style="text-align:left">Polls indefinitely for eligible stories</td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Window title</th><th>Agent</th><th>Notes</th></tr></thead><tbody><tr><td><code>Designer Agent</code></td><td>Interactive design session</td><td>Type your requirements; type <code>write</code> to save the design</td></tr><tr><td><code>Business Analyst</code></td><td>Design watcher</td><td>Polls <code>design/</code> every 5 s; re-runs when any <code>.md</code> changes</td></tr><tr><td><code>Project Initialiser</code></td><td>Workspace scaffolder</td><td>Runs once; skips if workspace already populated</td></tr><tr><td><code>Watchdog</code></td><td>Stale story reset</td><td>Runs continuously until pipeline_complete</td></tr><tr><td><code>Story Reviewer</code></td><td>Failed-story triage</td><td>Wakes on HALT; interactive with user</td></tr><tr><td><code>Coding Agent 1</code> … <code>Coding Agent N</code></td><td>Implementation</td><td>Polls indefinitely for eligible stories</td></tr></tbody></table>
 <h3 id="shutting-down">Shutting down</h3>
-<p>Press <strong><code>Ctrl+C</code></strong> in the <code>start-team.sh</code> terminal. This: 1. Writes <code>.sentinels/pipeline_complete</code> — signals all agent windows to exit cleanly. 2. Kills the watchdog process. 3. Removes the <code>.sentinels/</code> directory. 4. Prints a final <code>status.sh</code> summary.</p>
+<p>Press <strong><code>Ctrl+C</code></strong> in the <code>start-team.sh</code> terminal. This:</p>
+<ol><li>Writes <code>.sentinels/pipeline_complete</code> — signals all agent windows to exit cleanly.</li><li>Kills the watchdog process.</li><li>Removes the <code>.sentinels/</code> directory.</li><li>Prints a final <code>status.sh</code> summary.</li></ol>
 <p>The individual agent terminal windows remain open (showing their last output) until you close them manually.</p>
 <h3 id="terminal-fallback-tmux">Terminal fallback (tmux)</h3>
 <p>If no graphical terminal is found, all agents open as panes in a tmux session named <code>momo-agents</code>. Attach with:</p>
 <pre><code class="language-bash">tmux attach -t momo-agents</code></pre>
 <hr>
-<h2 id="reset-teamsh-usage-guide"><code>reset-team.sh</code> — Usage Guide</h2>
+<h2 id="reset-teamsh--usage-guide"><code>reset-team.sh</code> — Usage Guide</h2>
 <p><code>reset-team.sh</code> wipes all generated artefacts and returns the repository to a clean state, ready for a completely fresh run.</p>
-<h3 id="syntax">Syntax</h3>
+<h3 id="syntax-2">Syntax</h3>
 <pre><code class="language-bash">./reset-team.sh [--yes]</code></pre>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Argument</th>
-<th style="text-align:left">Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><em>(none)</em></td>
-<td style="text-align:left">Interactive mode — prints a summary and asks for confirmation before deleting anything.</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>--yes</code></td>
-<td style="text-align:left">Non-interactive mode — skips the confirmation prompt. Useful in scripts.</td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Argument</th><th>Description</th></tr></thead><tbody><tr><td><em>(none)</em></td><td>Interactive mode — prints a summary and asks for confirmation before deleting anything.</td></tr><tr><td><code>--yes</code></td><td>Non-interactive mode — skips the confirmation prompt. Useful in scripts.</td></tr></tbody></table>
 <h3 id="what-is-removed">What is removed</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Path</th>
-<th style="text-align:left">What gets deleted</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code>stories/</code></td>
-<td style="text-align:left">All <code>STORY-*</code> files in every state (<code>.md</code>, <code>.working.md</code>, <code>.done.md</code>, <code>.failed.md</code>, <code>.reviewing.md</code>) and the <code>HALT</code> sentinel</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>design/</code></td>
-<td style="text-align:left">All <code>*.md</code> design documents</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>.sentinels/</code></td>
-<td style="text-align:left">Entire directory (config, wrapper scripts, mtime store, done flags)</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>workspace/</code></td>
-<td style="text-align:left">All generated source code, tests, and build artefacts</td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Path</th><th>What gets deleted</th></tr></thead><tbody><tr><td><code>stories/</code></td><td>All <code>STORY-*</code> files in every state (<code>.md</code>, <code>.working.md</code>, <code>.done.md</code>, <code>.failed.md</code>, <code>.reviewing.md</code>) and the <code>HALT</code> sentinel</td></tr><tr><td><code>design/</code></td><td>All <code>*.md</code> design documents</td></tr><tr><td><code>.sentinels/</code></td><td>Entire directory (config, wrapper scripts, mtime store, done flags)</td></tr><tr><td><code>workspace/</code></td><td>All generated source code, tests, and build artefacts</td></tr></tbody></table>
 <h3 id="what-is-preserved">What is preserved</h3>
-<table>
-<thead>
-<tr>
-<th style="text-align:left">Path</th>
-<th style="text-align:left">Why</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td style="text-align:left"><code>workspace/CLAUDE.md</code></td>
-<td style="text-align:left">Build/test/lint instructions written by hand; not regenerated</td>
-</tr>
-<tr>
-<td style="text-align:left"><code>workspace/src/</code></td>
-<td style="text-align:left">Skeleton directory with <code>.gitkeep</code></td>
-</tr>
-<tr>
-<td style="text-align:left"><code>workspace/tests/</code></td>
-<td style="text-align:left">Skeleton directory with <code>.gitkeep</code></td>
-</tr>
-</tbody>
-</table>
+<table><thead><tr><th>Path</th><th>Why</th></tr></thead><tbody><tr><td><code>workspace/CLAUDE.md</code></td><td>Build/test/lint instructions written by hand; not regenerated</td></tr><tr><td><code>workspace/src/</code></td><td>Skeleton directory with <code>.gitkeep</code></td></tr><tr><td><code>workspace/tests/</code></td><td>Skeleton directory with <code>.gitkeep</code></td></tr></tbody></table>
 <h3 id="after-reset">After reset</h3>
 <pre><code class="language-bash">./start-team.sh &lt;new-feature-name&gt;</code></pre>
 <hr>
@@ -639,33 +448,67 @@ STORY-NNN.done.md   ├─ yes → rename back to STORY-NNN.md  (pending again)
   failed     0
   reviewing  0
   HALT       no</code></pre>
-<p>Run at any time from any terminal to check pipeline progress.</p>
-</section>
-</main>
-<script>
+<p>Run at any time from any terminal to check pipeline progress.</p></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents--system-design">Momo Agents — System Design</a><ul><li><a href="#what-it-is">What It Is</a></li><li><a href="#repository-layout">Repository Layout</a></li><li><a href="#agents-and-their-roles">Agents and Their Roles</a></li><li><a href="#designer-agent">Designer Agent</a><ul><li><a href="#conversation-flow">Conversation flow</a></li><li><a href="#implementation-notes">Implementation notes</a></li></ul></li><li><a href="#business-analyst-agent">Business Analyst Agent</a><ul><li><a href="#watch-loop">Watch loop</a></li></ul></li><li><a href="#project-initialiser-agent">Project Initialiser Agent</a></li><li><a href="#coding-agent">Coding Agent</a><ul><li><a href="#polling-behaviour">Polling behaviour</a></li><li><a href="#story-claiming">Story claiming</a></li><li><a href="#workspace-commit-policy">Workspace commit policy</a></li><li><a href="#halt-handling">HALT handling</a></li></ul></li><li><a href="#story-reviewer-agent">Story Reviewer Agent</a></li><li><a href="#story-file-format">Story File Format</a></li><li><a href="#story-lifecycle">Story Lifecycle</a></li><li><a href="#story-states">Story States</a></li><li><a href="#retry-policy">Retry Policy</a></li><li><a href="#parallel-coordination">Parallel Coordination</a></li><li><a href="#start-teamsh--usage-guide">`start-team.sh` — Usage Guide</a><ul><li><a href="#syntax">Syntax</a></li><li><a href="#examples">Examples</a></li><li><a href="#what-happens-on-launch">What happens on launch</a></li><li><a href="#agent-windows-opened">Agent windows opened</a></li><li><a href="#shutting-down">Shutting down</a></li><li><a href="#terminal-fallback-tmux">Terminal fallback (tmux)</a></li></ul></li><li><a href="#reset-teamsh--usage-guide">`reset-team.sh` — Usage Guide</a><ul><li><a href="#syntax-2">Syntax</a></li><li><a href="#what-is-removed">What is removed</a></li><li><a href="#what-is-preserved">What is preserved</a></li><li><a href="#after-reset">After reset</a></li></ul></li><li><a href="#watchdog-watchdogsh">Watchdog (`watchdog.sh`)</a></li><li><a href="#observability-statussh">Observability (`status.sh`)</a></li></ul></li></ul></nav></aside></div></main><script>
 (function () {
   'use strict';
-  if (typeof IntersectionObserver === 'undefined') return;
-  var sections = document.querySelectorAll('section[id]');
-  var tocLinks = document.querySelectorAll('#toc a');
-  function setActive(id) {
-    tocLinks.forEach(function (a) {
-      if (a.getAttribute('href') === '#' + id) {
-        a.classList.add('toc-active');
-      } else {
-        a.classList.remove('toc-active');
-      }
-    });
+
+  var STORAGE_KEY = 'md2html-theme';
+
+  function getEffectiveTheme() {
+    var stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
-  var observer = new IntersectionObserver(function (entries) {
-    entries.forEach(function (entry) {
-      if (entry.isIntersecting) {
-        setActive(entry.target.id);
-      }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    var btn = document.getElementById('theme-toggle');
+    if (btn) {
+      btn.textContent = theme === 'dark' ? '\u2600' : '\uD83C\uDF19';
+      btn.setAttribute('aria-label',
+        theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    applyTheme(getEffectiveTheme());
+
+    var toggleBtn = document.getElementById('theme-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme') ||
+                      getEffectiveTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem(STORAGE_KEY, next);
+        applyTheme(next);
+      });
+    }
+
+    document.querySelectorAll('pre').forEach(function (pre) {
+      var btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+
+      btn.addEventListener('click', function () {
+        var codeEl = pre.querySelector('code');
+        var text = codeEl ? codeEl.textContent : pre.textContent;
+        try {
+          navigator.clipboard.writeText(text).then(function () {
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+          }, function () {
+            btn.textContent = 'Failed';
+            setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+          });
+        } catch (err) {
+          btn.textContent = 'Failed';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+        }
+      });
+
+      pre.appendChild(btn);
     });
-  }, { rootMargin: '-40% 0px -55% 0px' });
-  sections.forEach(function (s) { observer.observe(s); });
-})();
-</script>
-</body>
-</html>
+  });
+}());
+</script></body></html>

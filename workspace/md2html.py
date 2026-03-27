@@ -1103,16 +1103,37 @@ def embed_image(src: str, base_dir: Path) -> str:
 
 
 def main() -> None:
-    """Main entry point — reads args and the input file; conversion is a stub."""
+    """Main entry point — full Markdown-to-HTML conversion pipeline."""
     args = parse_args()
 
-    markdown_text = args.input.read_text(encoding="utf-8")
+    # Step 2: Read the input .md file as UTF-8 text.
+    try:
+        markdown_text = args.input.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: cannot read input file {args.input}: {exc}", file=sys.stderr)
+        sys.exit(1)
 
-    # Placeholder — real conversion + HTML writing added in a later story.
-    print(f"[md2html] Read {len(markdown_text)} bytes from {args.input}")
-    print(f"[md2html] Output would be written to: {args.output}")
-    if args.title:
-        print(f"[md2html] Title override: {args.title}")
+    # Step 3: Convert Markdown to HTML.
+    result = convert(markdown_text, base_dir=args.input.parent)
+
+    # Step 4: Resolve the final title (args.title → result.title → filename stem).
+    title = args.title or result.title or args.input.stem
+
+    # Step 5: Build the Table of Contents.
+    toc_html = build_toc(result.headings)
+
+    # Step 6: Render the full HTML page.
+    html_output = render_page(result, title, toc_html)
+
+    # Step 7: Write the HTML to the output path (UTF-8, overwrite silently).
+    try:
+        args.output.write_text(html_output, encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: cannot write output file {args.output}: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # Step 8: Print success message.
+    print(f"Written: {args.output}")
 
 
 if __name__ == "__main__":
