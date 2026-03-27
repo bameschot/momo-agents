@@ -882,6 +882,43 @@ blockquote {
     border-top: 1px solid rgba(128,128,128,0.3);
     font-size: 0.9em;
 }
+
+/* Scroll-spy active TOC link */
+.toc-active {
+    font-weight: bold;
+    color: var(--link);
+}
+"""
+
+
+# ---------------------------------------------------------------------------
+# Scroll-Spy Script
+# ---------------------------------------------------------------------------
+
+_SCRIPT = """\
+(function () {
+  'use strict';
+  if (typeof IntersectionObserver === 'undefined') return;
+  var sections = document.querySelectorAll('section[id]');
+  var tocLinks = document.querySelectorAll('#toc a');
+  function setActive(id) {
+    tocLinks.forEach(function (a) {
+      if (a.getAttribute('href') === '#' + id) {
+        a.classList.add('toc-active');
+      } else {
+        a.classList.remove('toc-active');
+      }
+    });
+  }
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        setActive(entry.target.id);
+      }
+    });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  sections.forEach(function (s) { observer.observe(s); });
+})();
 """
 
 
@@ -939,8 +976,7 @@ def assemble_html(ctx: RenderContext) -> str:
 {sections_html}
 </main>
 <script>
-/* TODO */
-</script>
+{_SCRIPT}</script>
 </body>
 </html>"""
 
@@ -1055,11 +1091,49 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    print("Resolved files:")
-    for f in args.files:
-        print(f"  {f}")
-    print(f"Output: {args.output}")
-    print(f"Title:  {args.title}")
+
+    entries: list[FileEntry] = []
+    for path in args.files:
+        raw_markdown = path.read_text(encoding="utf-8")
+        parser = MarkdownParser(source_path=path)
+        html_body = parser.parse(raw_markdown)
+
+        # Warn if no top-level (#) heading found
+        has_h1 = bool(re.search(r"^# ", raw_markdown, re.MULTILINE))
+        if not has_h1:
+            print(
+                f"Warning: {path.name} has no top-level heading; using filename as title.",
+                file=sys.stderr,
+            )
+
+        slug = slugify(path.stem)
+        if parser.headings:
+            title = parser.headings[0].text
+        else:
+            title = slug
+
+        entry = FileEntry(
+            path=path,
+            slug=slug,
+            title=title,
+            raw_markdown=raw_markdown,
+            html_body=html_body,
+            headings=parser.headings,
+        )
+        entries.append(entry)
+
+    toc = build_toc(entries)
+
+    ctx = RenderContext(
+        output_path=args.output,
+        title=args.title,
+        entries=entries,
+        toc=toc,
+    )
+
+    html = assemble_html(ctx)
+    args.output.write_text(html, encoding="utf-8")
+    print(f"Written: {args.output}")
 
 
 if __name__ == "__main__":
