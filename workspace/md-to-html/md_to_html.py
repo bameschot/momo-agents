@@ -10,9 +10,12 @@ Requirements: Python 3.11+, stdlib only.
 from __future__ import annotations
 
 import argparse
+import base64
 import glob as glob_module
+import mimetypes
 import re
 import sys
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -72,6 +75,129 @@ def html_escape(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Image Embedder
+# ---------------------------------------------------------------------------
+
+def embed_image(path: str, source_md_path: Path) -> str:
+    """
+    Resolve *path* relative to *source_md_path.parent* and return a data URI.
+
+    Returns the original *path* string unchanged if:
+    - path starts with http:// or https://
+    - the resolved local file does not exist or cannot be read
+    """
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+
+    resolved = (source_md_path.parent / path).resolve()
+    try:
+        data = resolved.read_bytes()
+    except (OSError, IOError):
+        return path
+
+    mime, _ = mimetypes.guess_type(str(resolved))
+    if mime is None:
+        mime = "application/octet-stream"
+
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
+
+
+# ---------------------------------------------------------------------------
+# Inline Processor
+# ---------------------------------------------------------------------------
+
+def _process_inline(text: str, source_path: Path | None = None) -> str:
+    """
+    Process inline Markdown elements in *text* and return HTML.
+
+    Processing order (using placeholder tokens):
+    1. Extract code spans (to avoid processing their contents)
+    2. Extract inline HTML (to avoid double-escaping)
+    3. HTML-escape remaining text
+    4. Process images (before links, to avoid '![' being consumed as '[')
+    5. Process links
+    6. Bold-italic, bold, italic, strikethrough
+    7. Hard line breaks
+    8. Restore placeholders
+    """
+    placeholders: dict[str, str] = {}
+
+    def store(html: str) -> str:
+        key = f"\x00PH{uuid.uuid4().hex}\x00"
+        placeholders[key] = html
+        return key
+
+    # 1. Extract code spans
+    def replace_code(m: re.Match) -> str:
+        content = html_escape(m.group(1))
+        return store(f"<code>{content}</code>")
+
+    text = re.sub(r"`(.+?)`", replace_code, text)
+
+    # 2. Extract inline HTML tags (e.g. <br>, <span class="x">)
+    def replace_inline_html(m: re.Match) -> str:
+        return store(m.group(0))
+
+    text = re.sub(r"<[a-zA-Z/][^>]*>", replace_inline_html, text)
+
+    # 3. HTML-escape remaining text
+    text = html_escape(text)
+
+    # 4. Process images
+    def replace_image(m: re.Match) -> str:
+        alt = m.group(1)
+        path = m.group(2)
+        if source_path is not None:
+            src = embed_image(path, source_path)
+        else:
+            src = path
+        return store(f'<img src="{src}" alt="{alt}">')
+
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]*)\)", replace_image, text)
+
+    # 5. Process links
+    def replace_link(m: re.Match) -> str:
+        link_text = m.group(1)
+        url = m.group(2)
+        return store(f'<a href="{url}">{link_text}</a>')
+
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", replace_link, text)
+
+    # 6. Bold-italic, bold, italic, strikethrough
+    # Bold-italic: ***text*** or ___text___
+    text = re.sub(r"\*{3}(.+?)\*{3}", lambda m: store(f"<strong><em>{m.group(1)}</em></strong>"), text)
+    text = re.sub(r"_{3}(.+?)_{3}", lambda m: store(f"<strong><em>{m.group(1)}</em></strong>"), text)
+
+    # Bold: **text** or __text__
+    text = re.sub(r"\*{2}(.+?)\*{2}", lambda m: store(f"<strong>{m.group(1)}</strong>"), text)
+    text = re.sub(r"(?<!\w)__(?!\s)(.+?)(?<!\s)__(?!\w)", lambda m: store(f"<strong>{m.group(1)}</strong>"), text)
+
+    # Italic: *text* or _text_
+    text = re.sub(r"\*(.+?)\*", lambda m: store(f"<em>{m.group(1)}</em>"), text)
+    text = re.sub(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", lambda m: store(f"<em>{m.group(1)}</em>"), text)
+
+    # Strikethrough: ~~text~~
+    text = re.sub(r"~~(.+?)~~", lambda m: store(f"<del>{m.group(1)}</del>"), text)
+
+    # 7. Hard line breaks (backslash at end of line — two-space breaks handled in block layer)
+    text = re.sub(r"\\\n", "<br>\n", text)
+    text = re.sub(r"  \n", "<br>\n", text)
+
+    # 8. Restore placeholders
+    # Keep restoring until no placeholders remain (handles nesting)
+    for _ in range(20):
+        new_text = text
+        for key, value in placeholders.items():
+            new_text = new_text.replace(key, value)
+        if new_text == text:
+            break
+        text = new_text
+
+    return text
+
+
+# ---------------------------------------------------------------------------
 # Markdown Parser — Block Elements
 # ---------------------------------------------------------------------------
 
@@ -79,22 +205,29 @@ class MarkdownParser:
     """
     Parse Markdown text into an HTML fragment string.
 
-    Block elements are fully implemented. Inline elements are passed through
-    as plain text (stub — will be replaced in STORY-003).
+    Block elements are fully implemented. Inline elements are processed
+    via _process_inline() (implemented in STORY-003).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, source_path: Path | None = None) -> None:
         self.headings: list[Heading] = []
+        self._source_path = source_path
 
-    def parse(self, markdown: str) -> str:
+    def parse(self, markdown: str, source_path: Path | None = None) -> str:
         """Parse *markdown* and return an HTML fragment string."""
         self.headings = []
+        effective_source = source_path if source_path is not None else self._source_path
+        self._effective_source = effective_source
         lines = markdown.splitlines()
         blocks = self._split_blocks(lines)
         html_parts: list[str] = []
         for block in blocks:
             html_parts.append(self._render_block(block))
         return "\n".join(p for p in html_parts if p)
+
+    def _inline(self, text: str) -> str:
+        """Process inline Markdown in *text*."""
+        return _process_inline(text, self._effective_source)
 
     # ------------------------------------------------------------------
     # Block splitting
@@ -203,9 +336,10 @@ class MarkdownParser:
     def _render_heading(self, m: re.Match) -> str:
         level = len(m.group(1))
         text = m.group(2).strip()
-        anchor = slugify(text)
+        anchor = slugify(text)  # Use plain text for anchor generation
         self.headings.append(Heading(level=level, text=text, anchor=anchor))
-        return f'<h{level} id="{anchor}">{text}</h{level}>'
+        inline_text = self._inline(text)
+        return f'<h{level} id="{anchor}">{inline_text}</h{level}>'
 
     def _render_fenced_code(self, block: list[str], m: re.Match) -> str:
         lang = m.group(2).strip()
@@ -222,22 +356,21 @@ class MarkdownParser:
         return f"<p>{text}</p>"
 
     def _process_paragraph_lines(self, lines: list[str]) -> str:
-        """Join paragraph lines, handling hard line breaks."""
+        """Join paragraph lines, handling hard line breaks, then apply inline processing."""
         parts: list[str] = []
         for i, line in enumerate(lines):
             if line.endswith("  ") or line.endswith("\\ "):
                 parts.append(line.rstrip())
                 if i < len(lines) - 1:
-                    parts.append("<br>")
+                    parts.append("  \n")
             elif line.endswith("\\"):
-                parts.append(line[:-1])
-                if i < len(lines) - 1:
-                    parts.append("<br>")
+                parts.append(line[:-1] + "\\\n")
             else:
                 parts.append(line)
                 if i < len(lines) - 1:
                     parts.append(" ")
-        return "".join(parts).strip()
+        joined = "".join(parts).strip()
+        return self._inline(joined)
 
     def _render_blockquote(self, block: list[str]) -> str:
         # Strip leading '>' from each line.
@@ -261,8 +394,8 @@ class MarkdownParser:
                 inner_lines.append(line)
                 prev_was_deeper = False
 
-        # Recursively parse inner content
-        inner_parser = MarkdownParser()
+        # Recursively parse inner content (pass source_path for image embedding)
+        inner_parser = MarkdownParser(source_path=getattr(self, "_effective_source", None))
         inner_html = inner_parser.parse("\n".join(inner_lines))
         # Merge headings from inner parser
         self.headings.extend(inner_parser.headings)
@@ -283,7 +416,7 @@ class MarkdownParser:
         html = ["<table>", "<thead>", "<tr>"]
         for i, cell in enumerate(headers):
             align = alignments[i] if i < len(alignments) else "left"
-            html.append(f'<th style="text-align:{align}">{cell.strip()}</th>')
+            html.append(f'<th style="text-align:{align}">{self._inline(cell.strip())}</th>')
         html.append("</tr>")
         html.append("</thead>")
 
@@ -294,7 +427,7 @@ class MarkdownParser:
                 html.append("<tr>")
                 for i, cell in enumerate(cells):
                     align = alignments[i] if i < len(alignments) else "left"
-                    html.append(f'<td style="text-align:{align}">{cell.strip()}</td>')
+                    html.append(f'<td style="text-align:{align}">{self._inline(cell.strip())}</td>')
                 html.append("</tr>")
             html.append("</tbody>")
 
@@ -356,11 +489,11 @@ class MarkdownParser:
             task_m = re.match(r"^\[([ xX])\]\s+(.*)", text)
             if task_m:
                 checked = task_m.group(1).lower() == "x"
-                text = task_m.group(2)
+                task_text = task_m.group(2)
                 checkbox = '<input type="checkbox" disabled checked>' if checked else '<input type="checkbox" disabled>'
-                item_text = f"{checkbox} {text}"
+                item_text = f"{checkbox} {self._inline(task_text)}"
             else:
-                item_text = text
+                item_text = self._inline(text)
 
             # Collect nested lines (next lines with greater indentation)
             nested: list[str] = []

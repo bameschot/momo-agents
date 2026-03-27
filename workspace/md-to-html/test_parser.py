@@ -1,5 +1,6 @@
 """
-test_parser.py — Unit tests for MarkdownParser block elements (STORY-002).
+test_parser.py — Unit tests for MarkdownParser block elements (STORY-002)
+and inline elements (STORY-003).
 """
 
 from __future__ import annotations
@@ -10,7 +11,13 @@ import os
 # Allow running from any directory
 sys.path.insert(0, os.path.dirname(__file__))
 
-from md_to_html import MarkdownParser, slugify, Heading
+import base64
+import struct
+import zlib
+import tempfile
+from pathlib import Path
+
+from md_to_html import MarkdownParser, slugify, Heading, embed_image, _process_inline
 
 
 def assert_equal(actual: str, expected: str, msg: str = "") -> None:
@@ -317,6 +324,148 @@ def test_raw_html_closing():
     md = "</div>"
     html = p.parse(md)
     assert "</div>" in html
+
+
+# ---------------------------------------------------------------------------
+# Inline Elements (STORY-003)
+# ---------------------------------------------------------------------------
+
+def test_inline_bold_stars():
+    result = _process_inline("hello **world** end")
+    assert "<strong>world</strong>" in result
+
+def test_inline_bold_underscores():
+    result = _process_inline("hello __world__ end")
+    assert "<strong>world</strong>" in result
+
+def test_inline_italic_star():
+    result = _process_inline("hello *world* end")
+    assert "<em>world</em>" in result
+
+def test_inline_italic_underscore():
+    result = _process_inline("a _word_ b")
+    assert "<em>word</em>" in result
+
+def test_inline_bold_italic():
+    result = _process_inline("***bold italic***")
+    assert "<strong><em>bold italic</em></strong>" in result
+
+def test_inline_code_span():
+    result = _process_inline("use `code` here")
+    assert "<code>code</code>" in result
+
+def test_inline_code_not_processed():
+    # Content inside backticks should NOT be processed for Markdown
+    result = _process_inline("`**not bold**`")
+    assert "<strong>" not in result
+    assert "**not bold**" in result or "&ast;&ast;" in result or "**not bold**" in result
+
+def test_inline_strikethrough():
+    result = _process_inline("~~deleted~~")
+    assert "<del>deleted</del>" in result
+
+def test_inline_link():
+    result = _process_inline("[click here](https://example.com)")
+    assert '<a href="https://example.com">click here</a>' in result
+
+def test_inline_image_url():
+    result = _process_inline("![alt text](https://example.com/img.png)")
+    assert 'src="https://example.com/img.png"' in result
+    assert 'alt="alt text"' in result
+
+def test_inline_image_local_exists():
+    test_dir = Path(__file__).parent
+    image_path = test_dir / "test_image.png"
+    source_md = test_dir / "test.md"
+    result = _process_inline(f"![alt](test_image.png)", source_path=source_md)
+    assert result.startswith('<img src="data:image/png;base64,')
+    assert 'alt="alt"' in result
+
+def test_inline_image_local_missing():
+    test_dir = Path(__file__).parent
+    source_md = test_dir / "test.md"
+    result = _process_inline("![alt](./missing.png)", source_path=source_md)
+    assert 'src="./missing.png"' in result
+
+def test_inline_image_url_unchanged():
+    result = _process_inline("![alt](https://example.com/img.png)")
+    assert 'src="https://example.com/img.png"' in result
+
+def test_inline_html_passthrough():
+    result = _process_inline("text <br> more")
+    assert "<br>" in result
+
+def test_inline_html_not_double_escaped():
+    result = _process_inline('<span class="x">text</span>')
+    assert '<span class="x">' in result
+    assert "&lt;span" not in result
+
+def test_inline_html_escape_text():
+    # Regular text with &, <, > should be escaped
+    result = _process_inline("a & b < c > d")
+    assert "&amp;" in result
+    assert "&lt;" in result
+    assert "&gt;" in result
+
+def test_inline_in_paragraph():
+    p = MarkdownParser()
+    html = p.parse("Hello **world** and *italic*")
+    assert "<strong>world</strong>" in html
+    assert "<em>italic</em>" in html
+
+def test_inline_paragraph_html_escape():
+    p = MarkdownParser()
+    html = p.parse("a & b < c > d")
+    assert "&amp;" in html
+    assert "&lt;" in html
+    assert "&gt;" in html
+
+def test_inline_bold_italic_in_paragraph():
+    p = MarkdownParser()
+    html = p.parse("***bold italic***")
+    assert "<strong><em>bold italic</em></strong>" in html
+
+
+# ---------------------------------------------------------------------------
+# embed_image function tests (STORY-003)
+# ---------------------------------------------------------------------------
+
+def test_embed_image_http_passthrough():
+    source = Path("/some/dir/doc.md")
+    result = embed_image("http://example.com/img.png", source)
+    assert result == "http://example.com/img.png"
+
+def test_embed_image_https_passthrough():
+    source = Path("/some/dir/doc.md")
+    result = embed_image("https://example.com/img.png", source)
+    assert result == "https://example.com/img.png"
+
+def test_embed_image_local_exists():
+    test_dir = Path(__file__).parent
+    source = test_dir / "test.md"
+    result = embed_image("test_image.png", source)
+    assert result.startswith("data:image/png;base64,")
+
+def test_embed_image_local_missing():
+    test_dir = Path(__file__).parent
+    source = test_dir / "test.md"
+    result = embed_image("./missing.png", source)
+    assert result == "./missing.png"
+
+def test_embed_image_unknown_mime():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir) / "file.unknownext12345"
+        tmp_path.write_bytes(b"data")
+        source = Path(tmpdir) / "doc.md"
+        result = embed_image("file.unknownext12345", source)
+        assert result.startswith("data:application/octet-stream;base64,")
+
+def test_parser_with_source_path():
+    test_dir = Path(__file__).parent
+    source_path = test_dir / "test.md"
+    p = MarkdownParser(source_path=source_path)
+    html = p.parse("![img](test_image.png)")
+    assert 'src="data:image/png;base64,' in html
 
 
 # ---------------------------------------------------------------------------
