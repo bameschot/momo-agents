@@ -190,6 +190,40 @@ def build_epub(chapters: list[Chapter], args: argparse.Namespace) -> epub.EpubBo
 def main() -> None:
     args = parse_args()
 
+    # Validate input files
+    invalid = [f for f in args.files if not Path(f).is_file()]
+    if invalid:
+        for f in invalid:
+            print(f"Error: input file not found or not readable: {f}", file=sys.stderr)
+        sys.exit(1)
+
+    # Derive title if not provided
+    if args.title is None:
+        args.title = Path(args.files[0]).stem
+
+    # Convert each file to a Chapter
+    chapters = [md_file_to_chapter(Path(f)) for f in args.files]
+
+    # Build the EPUB
+    book = build_epub(chapters, args)
+
+    # Determine output path
+    if args.output is not None:
+        output_path = Path(args.output)
+        if not output_path.parent.exists():
+            print(
+                f"Error: output directory does not exist: {output_path.parent}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        output_filename = args.title.lower().replace(' ', '-') + '.epub'
+        output_path = Path.cwd() / output_filename
+
+    # Write the EPUB
+    epub.write_epub(str(output_path), book)
+    print(f"EPUB written to {output_path.resolve()}")
+
 
 if __name__ == "__main__":
     main()
