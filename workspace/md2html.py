@@ -17,14 +17,347 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Module-level constants (placeholders for later stories)
+# Theme Assets — inlined CSS and JavaScript
 # ---------------------------------------------------------------------------
 
-# CSS string inlined into the output HTML (populated by a later story)
-CSS: str = ""
+STYLES: str = """
+/* ── Reset & Custom Properties ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-# JavaScript string inlined into the output HTML (populated by a later story)
-JS: str = ""
+:root {
+  --bg:           #ffffff;
+  --text:         #1a1a1a;
+  --muted:        #555555;
+  --link:         #0066cc;
+  --border:       #d0d0d0;
+  --code-bg:      #f5f5f5;
+  --code-text:    #333333;
+  --pre-bg:       #f8f8f8;
+  --table-head:   #f0f0f0;
+  --table-alt:    #fafafa;
+  --bq-border:    #0066cc;
+  --bq-bg:        #f0f4ff;
+  --hr-color:     #cccccc;
+  --toggle-bg:    #e8e8e8;
+}
+
+[data-theme="dark"] {
+  --bg:           #1e1e1e;
+  --text:         #d4d4d4;
+  --muted:        #999999;
+  --link:         #66b3ff;
+  --border:       #444444;
+  --code-bg:      #2d2d2d;
+  --code-text:    #c9d1d9;
+  --pre-bg:       #252525;
+  --table-head:   #2a2a2a;
+  --table-alt:    #232323;
+  --bq-border:    #66b3ff;
+  --bq-bg:        #1e2a3a;
+  --hr-color:     #444444;
+  --toggle-bg:    #333333;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:           #1e1e1e;
+    --text:         #d4d4d4;
+    --muted:        #999999;
+    --link:         #66b3ff;
+    --border:       #444444;
+    --code-bg:      #2d2d2d;
+    --code-text:    #c9d1d9;
+    --pre-bg:       #252525;
+    --table-head:   #2a2a2a;
+    --table-alt:    #232323;
+    --bq-border:    #66b3ff;
+    --bq-bg:        #1e2a3a;
+    --hr-color:     #444444;
+    --toggle-bg:    #333333;
+  }
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+html { font-size: 16px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  padding: 1rem;
+}
+
+.page-wrapper {
+  display: flex;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+article {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 860px;
+}
+
+/* ── Table of Contents Sidebar ──────────────────────────────────────────── */
+#toc-sidebar {
+  flex: 0 0 220px;
+  width: 220px;
+}
+
+#toc-sidebar nav {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+#toc-sidebar nav a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.15rem 0;
+}
+
+#toc-sidebar nav a:hover { color: var(--link); }
+
+#toc-sidebar nav ul { list-style: none; padding-left: 0; }
+#toc-sidebar nav ul ul { padding-left: 1rem; }
+
+/* Mobile ToC (details/summary) */
+#toc-mobile { display: none; margin-bottom: 1.5rem; }
+#toc-mobile summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  color: var(--text);
+}
+#toc-mobile nav a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.2rem 0.5rem;
+}
+#toc-mobile nav a:hover { color: var(--link); }
+#toc-mobile nav ul { list-style: none; padding-left: 0; }
+#toc-mobile nav ul ul { padding-left: 1rem; }
+
+@media (max-width: 768px) {
+  .page-wrapper { display: block; }
+  #toc-sidebar { display: none; }
+  #toc-mobile { display: block; }
+  article { max-width: 100%; }
+}
+
+/* ── Theme Toggle ───────────────────────────────────────────────────────── */
+#theme-toggle {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: var(--toggle-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  z-index: 100;
+}
+
+#theme-toggle:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.5rem 0 0.5rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+h1 { font-size: 2rem;   }
+h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem;   }
+h6 { font-size: 0.9rem; color: var(--muted); }
+
+p { margin: 0.75rem 0; }
+
+a { color: var(--link); }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+
+/* ── Inline Code ────────────────────────────────────────────────────────── */
+code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+/* ── Code Blocks ────────────────────────────────────────────────────────── */
+pre {
+  position: relative;
+  background: var(--pre-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--code-text);
+  border-radius: 0;
+}
+
+/* Copy button (injected by JS) */
+.copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  background: var(--toggle-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--muted);
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.copy-btn:hover { opacity: 1; }
+
+.copy-btn:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+th { background: var(--table-head); font-weight: 600; }
+
+tr:nth-child(even) td { background: var(--table-alt); }
+
+/* ── Blockquotes ────────────────────────────────────────────────────────── */
+blockquote {
+  border-left: 4px solid var(--bq-border);
+  background: var(--bq-bg);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  color: var(--muted);
+  border-radius: 0 4px 4px 0;
+}
+
+blockquote p { margin: 0; }
+
+/* ── Horizontal Rule ────────────────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 2px solid var(--hr-color);
+  margin: 2rem 0;
+}
+
+/* ── Lists ──────────────────────────────────────────────────────────────── */
+ul, ol { padding-left: 1.75rem; margin: 0.5rem 0; }
+li { margin: 0.25rem 0; }
+
+/* ── Images ─────────────────────────────────────────────────────────────── */
+img { max-width: 100%; height: auto; border-radius: 4px; }
+"""
+
+SCRIPTS: str = """
+(function () {
+  'use strict';
+
+  var STORAGE_KEY = 'md2html-theme';
+
+  function getEffectiveTheme() {
+    var stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    var btn = document.getElementById('theme-toggle');
+    if (btn) {
+      btn.textContent = theme === 'dark' ? '\\u2600' : '\\uD83C\\uDF19';
+      btn.setAttribute('aria-label',
+        theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    applyTheme(getEffectiveTheme());
+
+    var toggleBtn = document.getElementById('theme-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme') ||
+                      getEffectiveTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem(STORAGE_KEY, next);
+        applyTheme(next);
+      });
+    }
+
+    document.querySelectorAll('pre').forEach(function (pre) {
+      var btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+
+      btn.addEventListener('click', function () {
+        var codeEl = pre.querySelector('code');
+        var text = codeEl ? codeEl.textContent : pre.textContent;
+        try {
+          navigator.clipboard.writeText(text).then(function () {
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+          }, function () {
+            btn.textContent = 'Failed';
+            setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+          });
+        } catch (err) {
+          btn.textContent = 'Failed';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+        }
+      });
+
+      pre.appendChild(btn);
+    });
+  });
+}());
+"""
+
+# Aliases kept for backward compatibility with STORY-001 stubs
+CSS: str = STYLES
+JS: str = SCRIPTS
 
 # ---------------------------------------------------------------------------
 # Data Models
