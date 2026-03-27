@@ -1,4 +1,5 @@
 """Coding Agent — claims and implements one story at a time from stories/."""
+import re
 import anyio
 from pathlib import Path
 
@@ -9,15 +10,71 @@ STORIES_DIR = PROJECT_ROOT / "stories"
 WORKSPACE_DIR = PROJECT_ROOT / "workspace"
 ROLES_DIR = PROJECT_ROOT / "roles"
 
+POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
+PIPELINE_COMPLETE = PROJECT_ROOT / ".sentinels" / "pipeline_complete"
+
 
 def _system_prompt() -> str:
     return (ROLES_DIR / "coding-agent.md").read_text()
 
 
+def _unclaimed_stories() -> list[Path]:
+    """Return bare STORY-NNN.md files (not .working / .done / .failed / .reviewing)."""
+    return [
+        p for p in STORIES_DIR.glob("STORY-*.md")
+        if re.match(r"^STORY-\d+\.md$", p.name)
+    ]
+
+
+def _in_progress_stories() -> list[Path]:
+    """Return stories currently being worked on by any agent."""
+    return list(STORIES_DIR.glob("STORY-*.working.md"))
+
+
+async def _wait_for_eligible_story(halt_file: Path) -> bool:
+    """
+    Poll until at least one unclaimed story exists, then return True.
+    Keeps polling indefinitely — even when all current stories are done —
+    so new stories written by the BA agent are picked up automatically.
+    Returns False only when a HALT is detected or the pipeline_complete
+    sentinel is written by the orchestrator.
+    """
+    last_status = ""
+    while True:
+        if halt_file.exists():
+            print("[Coding Agent] HALT detected while waiting — exiting.")
+            return False
+
+        if PIPELINE_COMPLETE.exists():
+            print("[Coding Agent] Pipeline complete sentinel detected — exiting.")
+            return False
+
+        unclaimed = _unclaimed_stories()
+        if unclaimed:
+            return True  # At least one story ready to claim
+
+        in_progress = _in_progress_stories()
+        status = f"in-progress={len(in_progress)}" if in_progress else "all done"
+        if status != last_status:
+            print(
+                f"[Coding Agent] No unclaimed story available ({status}). "
+                f"Polling every {POLL_INTERVAL}s for new stories..."
+            )
+            last_status = status
+
+        await anyio.sleep(POLL_INTERVAL)
+
+
 async def run() -> None:
     halt_file = STORIES_DIR / "HALT"
+
     if halt_file.exists():
         print("[Coding Agent] HALT file detected on startup — exiting immediately.")
+        return
+
+    # Wait until an eligible story is available before engaging the LLM
+    if not await _wait_for_eligible_story(halt_file):
+        print("[Coding Agent] No stories to process — exiting.")
         return
 
     task = (

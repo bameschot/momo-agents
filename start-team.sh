@@ -94,8 +94,9 @@ open_window() {
         macos)
             osascript <<APPLESCRIPT
 tell application "Terminal"
-    set w to do script "bash '$script'"
-    set custom title of w to "$title"
+    set t to do script "bash '$script'"
+    delay 0.2
+    set custom title of t to "$title"
     activate
 end tell
 APPLESCRIPT
@@ -201,6 +202,7 @@ echo ""
 cat > "$SENTINEL_DIR/run_designer.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '\033]0;Designer Agent\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
@@ -223,6 +225,7 @@ WRAPPER
 cat > "$SENTINEL_DIR/run_ba.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '\033]0;Business Analyst\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
@@ -287,6 +290,7 @@ WRAPPER
 cat > "$SENTINEL_DIR/run_pi.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '\033]0;Project Initialiser\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
@@ -327,6 +331,7 @@ export ANTHROPIC_API_KEY
 source "${SCRIPT_DIR}/.venv/bin/activate"
 # AGENT_ID is exported by the per-agent stub that execs this file.
 
+printf "\033]0;Coding Agent ${AGENT_ID}\007"
 echo "╔══════════════════════════════════╗"
 echo "║       Coding Agent ${AGENT_ID}              ║"
 echo "╚══════════════════════════════════╝"
@@ -345,19 +350,32 @@ echo ""
 
 while true; do
     "${PYTHON}" "${SCRIPT_DIR}/python-agents/coding_agent.py"
+    EXIT_CODE=$?
 
-    if [ ! -f "${STORIES_DIR}/HALT" ]; then
+    # Orchestrator wrote pipeline_complete — clean exit
+    if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
         echo ""
-        echo "[Coding Agent ${AGENT_ID}] No more stories to claim — done."
+        echo "[Coding Agent ${AGENT_ID}] Pipeline complete — exiting."
         break
     fi
 
-    echo ""
-    echo "[Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
-    while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
-    sleep 2   # let renamed story files settle
-    echo "[Coding Agent ${AGENT_ID}] HALT cleared — resuming."
-    echo ""
+    # HALT — wait for reviewer to clear it, then resume
+    if [ -f "${STORIES_DIR}/HALT" ]; then
+        echo ""
+        echo "[Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
+        while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
+        sleep 2   # let renamed story files settle
+        echo "[Coding Agent ${AGENT_ID}] HALT cleared — resuming."
+        echo ""
+        continue
+    fi
+
+    # Unexpected non-zero exit — short pause before retrying
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo ""
+        echo "[Coding Agent ${AGENT_ID}] Agent exited with code $EXIT_CODE — retrying in 10s..."
+        sleep 10
+    fi
 done
 
 touch "${SENTINEL_DIR}/coding_${AGENT_ID}.done"
@@ -378,6 +396,7 @@ done
 # ── Watchdog ──────────────────────────────────────────────────────────────────
 cat > "$SENTINEL_DIR/run_watchdog.sh" << 'WRAPPER'
 #!/usr/bin/env bash
+printf '\033]0;Watchdog\007'
 source "$(dirname "$0")/config.sh"
 
 echo "╔══════════════════════════════════╗"
@@ -392,6 +411,7 @@ WRAPPER
 cat > "$SENTINEL_DIR/run_story_reviewer.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
+printf '\033]0;Story Reviewer\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
@@ -461,13 +481,16 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Monitor — print status on change; exit when all coding agents are done
+# Monitor — print status on change; runs until Ctrl+C
+# Coding agents poll indefinitely so the pipeline is open-ended: the BA may
+# write new stories at any time (e.g. after a design update) and agents will
+# pick them up automatically. Press Ctrl+C in this terminal to shut everything
+# down gracefully.
 # ─────────────────────────────────────────────────────────────────────────────
-echo "Monitoring pipeline (this terminal tracks progress)..."
+echo "Monitoring pipeline (press Ctrl+C to shut down the team)..."
 echo ""
 
 _count_pending_stories() {
-    # Count only bare STORY-NNN.md files, not *.working.md / *.done.md / etc.
     local count=0 f base
     for f in "$STORIES_DIR"/STORY-*.md; do
         [[ -f "$f" ]] || continue
@@ -476,6 +499,24 @@ _count_pending_stories() {
     done
     echo "$count"
 }
+
+_teardown() {
+    echo ""
+    echo "Shutting down team..."
+    touch "$SENTINEL_DIR/pipeline_complete"   # signals all agents to exit
+    pkill -f "watchdog.sh" 2>/dev/null || true
+    sleep 2
+    rm -rf "$SENTINEL_DIR"
+    echo ""
+    echo "╔══════════════════════════════════════════════════╗"
+    echo "║               Team shut down  👋                ║"
+    echo "╚══════════════════════════════════════════════════╝"
+    echo ""
+    bash "$SCRIPT_DIR/status.sh"
+    exit 0
+}
+
+trap '_teardown' INT TERM
 
 LAST_STATUS=""
 while true; do
@@ -491,27 +532,5 @@ while true; do
         LAST_STATUS="$STATUS"
     fi
 
-    # All coding agents post a sentinel file when they exit cleanly
-    all_done=true
-    for i in $(seq 1 "$N_DEV_AGENTS"); do
-        [ ! -f "$SENTINEL_DIR/coding_${i}.done" ] && { all_done=false; break; }
-    done
-    $all_done && [ ! -f "$STORIES_DIR/HALT" ] && break
-
     sleep 10
 done
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Teardown
-# ─────────────────────────────────────────────────────────────────────────────
-touch "$SENTINEL_DIR/pipeline_complete"   # Story Reviewer + Watchdog graceful exit
-pkill -f "watchdog.sh" 2>/dev/null || true
-sleep 1
-rm -rf "$SENTINEL_DIR"
-
-echo ""
-echo "╔══════════════════════════════════════════════════╗"
-echo "║              Pipeline complete  🎉               ║"
-echo "╚══════════════════════════════════════════════════╝"
-echo ""
-bash "$SCRIPT_DIR/status.sh"

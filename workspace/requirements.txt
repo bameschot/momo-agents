@@ -1,3 +1,0 @@
-markdown>=3.6
-ebooklib>=0.18
-Pillow>=10.0
