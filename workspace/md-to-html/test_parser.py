@@ -469,6 +469,87 @@ def test_parser_with_source_path():
 
 
 # ---------------------------------------------------------------------------
+# Footnotes (STORY-004)
+# ---------------------------------------------------------------------------
+
+def test_footnote_basic():
+    p = MarkdownParser()
+    md = "Hello[^1] world\n\n[^1]: This is a footnote."
+    html = p.parse(md)
+    # Reference rendered as superscript
+    assert '<sup><a href="#fn-1" id="fnref-1">[1]</a></sup>' in html
+    # Footnotes section rendered
+    assert '<section class="footnotes">' in html
+    assert '<li id="fn-1">' in html
+    assert "This is a footnote." in html
+    # Back-link present
+    assert 'href="#fnref-1"' in html
+
+def test_footnote_def_removed_from_body():
+    p = MarkdownParser()
+    md = "Text[^note]\n\n[^note]: Definition here."
+    html = p.parse(md)
+    # The definition line should not appear as a paragraph
+    assert "[^note]: Definition here." not in html
+
+def test_footnote_numbering_resets():
+    p = MarkdownParser()
+    md1 = "First[^a]\n\n[^a]: def a"
+    md2 = "Second[^b]\n\n[^b]: def b"
+    html1 = p.parse(md1)
+    html2 = p.parse(md2)
+    assert '[1]' in html1
+    assert '[1]' in html2  # numbering reset
+
+def test_footnote_multiple_ordered_by_reference():
+    p = MarkdownParser()
+    md = "Ref B[^b] then A[^a]\n\n[^a]: def a\n[^b]: def b"
+    html = p.parse(md)
+    # B appears first in text, so should be [1]
+    assert 'id="fn-b"' in html
+    assert 'id="fn-a"' in html
+    # B should appear before A in the ol
+    b_pos = html.index('id="fn-b"')
+    a_pos = html.index('id="fn-a"')
+    assert b_pos < a_pos
+
+def test_footnote_undefined_renders_question_mark():
+    import io
+    p = MarkdownParser()
+    md = "Text[^missing]"
+    import sys
+    old_stderr = sys.stderr
+    sys.stderr = io.StringIO()
+    try:
+        html = p.parse(md)
+        stderr_output = sys.stderr.getvalue()
+    finally:
+        sys.stderr = old_stderr
+    assert "[?]" in html
+    assert "Warning" in stderr_output or "warning" in stderr_output.lower()
+
+def test_footnote_defined_but_unreferenced():
+    p = MarkdownParser()
+    md = "No refs here\n\n[^unused]: This should not appear."
+    html = p.parse(md)
+    assert '<section class="footnotes">' not in html
+    assert "This should not appear." not in html
+
+def test_footnote_multiline_definition():
+    p = MarkdownParser()
+    md = "Text[^1]\n\n[^1]: First line\n    continuation line"
+    html = p.parse(md)
+    assert "First line" in html
+    assert "continuation line" in html
+
+def test_footnote_inline_markdown_in_definition():
+    p = MarkdownParser()
+    md = "Text[^1]\n\n[^1]: See **bold** here"
+    html = p.parse(md)
+    assert "<strong>bold</strong>" in html
+
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 

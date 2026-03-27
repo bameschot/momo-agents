@@ -205,28 +205,102 @@ class MarkdownParser:
     """
     Parse Markdown text into an HTML fragment string.
 
-    Block elements are fully implemented. Inline elements are processed
-    via _process_inline() (implemented in STORY-003).
+    Block elements are fully implemented. Inline elements (including footnotes)
+    are processed via _process_inline().
     """
 
     def __init__(self, source_path: Path | None = None) -> None:
         self.headings: list[Heading] = []
         self._source_path = source_path
+        # Footnote state — reset at each parse() call
+        self._fn_defs: dict[str, str] = {}      # label → definition text
+        self._fn_refs: list[str] = []           # ordered by first reference
 
     def parse(self, markdown: str, source_path: Path | None = None) -> str:
         """Parse *markdown* and return an HTML fragment string."""
         self.headings = []
         effective_source = source_path if source_path is not None else self._source_path
         self._effective_source = effective_source
-        lines = markdown.splitlines()
+        # Reset footnote state for this parse call
+        self._fn_defs = {}
+        self._fn_refs = []
+
+        # Pre-process: extract footnote definitions from line stream
+        lines = self._extract_footnote_defs(markdown.splitlines())
         blocks = self._split_blocks(lines)
         html_parts: list[str] = []
         for block in blocks:
             html_parts.append(self._render_block(block))
-        return "\n".join(p for p in html_parts if p)
+        main_html = "\n".join(p for p in html_parts if p)
+
+        # Replace [^label] references in main HTML
+        main_html = self._replace_footnote_refs(main_html)
+
+        # Append footnotes section if any were referenced
+        if self._fn_refs:
+            main_html += "\n" + self._render_footnotes_section()
+
+        return main_html
+
+    def _extract_footnote_defs(self, lines: list[str]) -> list[str]:
+        """
+        Extract `[^label]: definition` lines (with optional indented continuation)
+        from *lines*, storing them in self._fn_defs.  Returns the remaining lines.
+        """
+        result: list[str] = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            m = re.match(r"^\[(\^[^\]]+)\]:\s*(.*)", line)
+            if m:
+                label = m.group(1)  # includes the ^ prefix
+                def_text = m.group(2)
+                i += 1
+                # Collect continuation lines (indented 4 spaces or a tab)
+                while i < len(lines):
+                    cont = lines[i]
+                    if cont.startswith("    ") or cont.startswith("\t"):
+                        def_text += " " + cont.strip()
+                        i += 1
+                    else:
+                        break
+                self._fn_defs[label] = def_text.strip()
+            else:
+                result.append(line)
+                i += 1
+        return result
+
+    def _replace_footnote_refs(self, html: str) -> str:
+        """Replace [^label] inline references in *html* with superscript links."""
+        def replace_ref(m: re.Match) -> str:
+            label = m.group(1)  # includes ^ prefix
+            if label not in self._fn_refs:
+                self._fn_refs.append(label)
+            n = self._fn_refs.index(label) + 1
+            if label not in self._fn_defs:
+                import sys as _sys
+                print(f"Warning: footnote {label!r} referenced but not defined", file=_sys.stderr)
+                return f'<sup><a href="#fn-{label[1:]}" id="fnref-{label[1:]}">[?]</a></sup>'
+            return f'<sup><a href="#fn-{label[1:]}" id="fnref-{label[1:]}">[{n}]</a></sup>'
+
+        return re.sub(r"\[(\^[^\]]+)\](?!\:)", replace_ref, html)
+
+    def _render_footnotes_section(self) -> str:
+        """Render the `<section class="footnotes">` block."""
+        items: list[str] = []
+        for label in self._fn_refs:
+            label_slug = label[1:]  # strip '^'
+            def_text = self._fn_defs.get(label, "")
+            rendered_def = _process_inline(def_text, self._effective_source)
+            backlink = f'<a href="#fnref-{label_slug}">&#x21A9;</a>'
+            items.append(
+                f'<li id="fn-{label_slug}">{rendered_def} {backlink}</li>'
+            )
+        ol = "<ol>\n" + "\n".join(items) + "\n</ol>"
+        return f'<section class="footnotes">\n{ol}\n</section>'
 
     def _inline(self, text: str) -> str:
-        """Process inline Markdown in *text*."""
+        """Process inline Markdown in *text* (footnote refs handled separately in parse())."""
         return _process_inline(text, self._effective_source)
 
     # ------------------------------------------------------------------
