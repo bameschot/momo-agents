@@ -1,45 +1,35 @@
-# STORY-003: Markdown Parser — Inline Elements & Image Embedder
+# STORY-003: Image Embedder
 
 **Index**: 3
 **Attempts**: 1
-**Design ref**: design/md-to-html.md
-**Depends on**: STORY-002
+**Design ref**: design/md-to-html-cli.md
+**Depends on**: STORY-001
 
 ## Context
-Completes the `MarkdownParser` by replacing the inline-text stub from STORY-002 with a full inline-element processor. Also implements the standalone `embed_image(path: str, source_md_path: Path) -> str` function. After this story, given a `.md` file, the parser produces a complete HTML fragment with all Markdown features rendered correctly.
+Implements `embed_image()`, which converts a local image `src` path into a Base64 data URI so the generated HTML is fully self-contained. This component is independent of both the block and inline parsers and can be developed and tested in isolation. The inline parser (STORY-004) will call it when processing image tags.
 
 ## Acceptance Criteria
-- [ ] Bold (`**text**`, `__text__`) renders as `<strong>text</strong>`.
-- [ ] Italic (`*text*`, `_text_`) renders as `<em>text</em>`.
-- [ ] Bold-italic (`***text***`) renders as `<strong><em>text</em></strong>`.
-- [ ] Inline code (`` `code` ``) renders as `<code>code</code>`; content inside backticks is HTML-escaped and not further processed for Markdown.
-- [ ] Strikethrough (`~~text~~`) renders as `<del>text</del>`.
-- [ ] Links `[text](url)` render as `<a href="url">text</a>`.
-- [ ] Images `![alt](path)` — local path resolution via `embed_image`; renders as `<img src="{data_uri_or_url}" alt="alt">`.
-- [ ] Inline HTML tags (e.g. `<br>`, `<span class="x">`) are passed through unmodified (not double-escaped).
-- [ ] Hard line break: two trailing spaces before a newline → `<br>`; backslash `\` immediately before a newline → `<br>`.
-- [ ] `embed_image(path, source_md_path)` resolves `path` relative to `source_md_path.parent`; reads the file in binary mode; detects MIME type via `mimetypes.guess_type`; returns `data:{mime};base64,{data}` URI.
-- [ ] `embed_image` returns the original `path` string unchanged when: the path starts with `http://` or `https://`, or the resolved local file does not exist/cannot be read.
-- [ ] When the parser is invoked with a `source_path: Path` argument (added to `__init__` or `parse()`), inline image references use that path for `embed_image` resolution. When no `source_path` is given, images fall back to the original path.
-- [ ] Inline rules are applied in the correct precedence order: code spans first (to prevent Markdown processing inside backticks), then images (before links to avoid `![` being consumed as `[`), then links, then bold/italic/strikethrough.
-- [ ] `mimetypes.guess_type` fallback: if MIME cannot be determined, default to `application/octet-stream`.
+- [ ] `embed_image(src: str, base_dir: Path) -> str` is implemented.
+- [ ] **Local files**: path is resolved relative to `base_dir`. File bytes are read, MIME type is determined from extension, and a `data:<mime>;base64,<data>` string is returned.
+- [ ] Supported MIME types: `.png` → `image/png`, `.jpg` / `.jpeg` → `image/jpeg`, `.gif` → `image/gif`, `.webp` → `image/webp`, `.svg` → `image/svg+xml`.
+- [ ] **HTTP/HTTPS URLs**: returned unchanged (no network request made).
+- [ ] **Missing local file**: a warning is printed to `stderr` (format: `Warning: image not found: <path>`), and the original `src` string is returned unchanged.
+- [ ] **Unknown extension**: treated as a missing/unembeddable file — print a warning to `stderr` and return the original `src`.
+- [ ] The function must not raise exceptions under any supported input condition.
 
 ## Implementation Hints
-- Process inline content with a single regex-based substitution pass on the text within each block element's content. Apply substitutions in a pipeline: code spans → escape their contents and reinsert after other passes to avoid double-processing (use a placeholder token technique, e.g. replace `` `...` `` with a UUID token, process other inline elements, then restore).
-- Precedence with placeholder tokens: (1) extract code spans to placeholders, (2) extract inline HTML to placeholders, (3) process images `![...]` before links `[...]`, (4) bold-italic before bold before italic before strikethrough, (5) restore placeholders.
-- For `mimetypes.guess_type`, call `mimetypes.guess_type(filename)[0]`; if `None`, use `"application/octet-stream"`.
-- Bold/italic regex is tricky: use non-greedy matching and ensure `__` doesn't fire mid-word (Python's `re` can handle `(?<!\w)__(?!\s)(.+?)(?<!\s)__(?!\w)`).
-- `embed_image` signature: `def embed_image(path: str, source_md_path: Path) -> str`.
+- Use `base64.b64encode(bytes).decode('ascii')` from the stdlib `base64` module.
+- Detect HTTP/HTTPS by checking if `src.startswith(('http://', 'https://'))`.
+- Resolve the path with `(base_dir / src).resolve()` and check `.exists()` before reading.
+- Use a dict for the extension→MIME mapping so adding new types later is trivial.
+- Keep the function pure/side-effect-free aside from the `stderr` warning print.
 
 ## Test Requirements
-- Unit-test inline rendering for each element type.
-- Test that content inside `` `backticks` `` is not processed for bold/italic/etc.
-- Test `![alt](./image.png)` with a real small PNG file present → verify `data:image/png;base64,...` in output.
-- Test `![alt](./missing.png)` → original path returned unchanged.
-- Test `![alt](https://example.com/img.png)` → URL returned unchanged.
-- Test bold-inside-italic: `*_text_*` or `***text***`.
-- Test that `&`, `<`, `>` in regular paragraph text are HTML-escaped in the final output.
-- Tests may be added to the existing test file from STORY-002.
+- Test with a real `.png` or `.jpg` fixture file: verify return value starts with `data:image/png;base64,` (or appropriate MIME).
+- Test with an HTTP URL: verify the URL is returned unchanged.
+- Test with a nonexistent local path: verify warning is printed to `stderr` and original `src` is returned.
+- Test with an unsupported extension (e.g. `.bmp`): verify warning is printed and original `src` is returned.
+- All tests must pass without network access.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

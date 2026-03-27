@@ -9,6 +9,10 @@ Requirements: Python 3.11+, stdlib only.
 from __future__ import annotations
 
 import argparse
+import base64
+import html
+import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -158,15 +162,55 @@ def render_page(result: ParseResult, title: str, toc_html: str) -> str:
 def embed_image(src: str, base_dir: Path) -> str:
     """Return a data URI for a local image, or the original src for remote ones.
 
+    - HTTP/HTTPS URLs are returned unchanged (no network request is made).
+    - Local paths are resolved relative to *base_dir*, read as bytes, and
+      encoded as a ``data:<mime>;base64,<data>`` string.
+    - Unknown extensions or missing files emit a warning to stderr and return
+      the original *src* unchanged.
+    - This function never raises an exception.
+
     Args:
         src:      The image source (file path or URL).
-        base_dir: Base directory for resolving relative paths.
+        base_dir: Base directory for resolving relative local paths.
 
     Returns:
-        A data URI string, or the original src if remote or not found.
+        A data URI string, or the original *src* if remote/missing/unknown.
     """
-    # Stub — real implementation added in a later story.
-    return src
+    # Extension → MIME type mapping (all supported image formats).
+    _MIME_TYPES: dict[str, str] = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+    }
+
+    # HTTP/HTTPS URLs — return as-is, no network request.
+    if src.startswith(("http://", "https://")):
+        return src
+
+    # Resolve the path relative to base_dir.
+    resolved = (base_dir / src).resolve()
+
+    # Check for a supported extension.
+    mime = _MIME_TYPES.get(resolved.suffix.lower())
+    if mime is None:
+        print(f"Warning: image not found: {src}", file=sys.stderr)
+        return src
+
+    # Check the file exists.
+    if not resolved.exists():
+        print(f"Warning: image not found: {src}", file=sys.stderr)
+        return src
+
+    # Encode as a Base64 data URI.
+    try:
+        data = base64.b64encode(resolved.read_bytes()).decode("ascii")
+        return f"data:{mime};base64,{data}"
+    except OSError:
+        print(f"Warning: image not found: {src}", file=sys.stderr)
+        return src
 
 
 # ---------------------------------------------------------------------------
