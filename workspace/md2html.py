@@ -933,29 +933,31 @@ def build_toc(headings: list[Heading]) -> str:
         level = heading.level
 
         if not stack:
-            # Open first <ul> at this level.
+            # First item: open a <ul> at this level.
             parts.append("<ul>")
             stack.append(level)
         elif level > stack[-1]:
-            # Deeper level: open as many <ul> elements as needed.
-            while stack[-1] < level:
-                parts.append("<ul>")
-                stack.append(stack[-1] + 1)
+            # Deeper level: open exactly ONE new <ul>, regardless of jump size.
+            # (H1 → H3 still produces one nested <ul>, keeping HTML valid.)
+            parts.append("<ul>")
+            stack.append(level)
         elif level < stack[-1]:
-            # Shallower level: close <ul>/<li> elements until correct depth.
+            # Shallower level: close <li>/<ul> pairs until at or below target.
             while stack and stack[-1] > level:
                 parts.append("</li></ul>")
                 stack.pop()
             if not stack:
+                # Went past root — open a fresh <ul>.
                 parts.append("<ul>")
                 stack.append(level)
             else:
+                # Close the previous sibling <li> (same level now).
                 parts.append("</li>")
         else:
-            # Same level: close the previous sibling <li>.
+            # Same level: just close the previous sibling <li>.
             parts.append("</li>")
 
-        # Emit the list item (left open for potential child <ul>).
+        # Open the new list item (left open for potential child <ul>).
         parts.append(f'<li><a href="#{heading.slug}">{heading.text}</a>')
 
     # Close all open <li> and <ul> elements.
