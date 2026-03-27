@@ -208,3 +208,9 @@ __marimo__/
 
 
 .claude
+
+.sentinels
+/stories/**
+/design/**
+/workspace/**
+
