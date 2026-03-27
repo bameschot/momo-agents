@@ -396,6 +396,16 @@ _RE_HR = re.compile(r'^(\*{3,}|-{3,}|_{3,})\s*$')
 _RE_SLUG_STRIP = re.compile(r'[^a-z0-9\-]')
 _RE_SLUG_SPACES = re.compile(r'\s+')
 
+# Inline parsing regexes
+_RE_INLINE_CODE = re.compile(r'`([^`]+)`')
+_RE_IMAGE = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)')
+_RE_LINK = re.compile(r'\[([^\]]+)\]\(([^)]+)\)')
+_RE_BOLD_STAR = re.compile(r'\*\*(.+?)\*\*', re.DOTALL)
+_RE_BOLD_UNDER = re.compile(r'__(.+?)__', re.DOTALL)
+_RE_ITALIC_STAR = re.compile(r'\*(.+?)\*', re.DOTALL)
+_RE_ITALIC_UNDER = re.compile(r'_(.+?)_', re.DOTALL)
+_RE_STRIKETHROUGH = re.compile(r'~~(.+?)~~', re.DOTALL)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -414,7 +424,81 @@ def slugify(text: str) -> str:
 
 
 def _inline_stub(text: str, base_dir: Path) -> str:  # noqa: ARG001
-    """Identity stub for inline processing (replaced by STORY-004)."""
+    """Identity stub for inline processing (superseded by inline_parse)."""
+    return text
+
+
+def inline_parse(text: str, base_dir: Path) -> str:
+    """Parse and render inline Markdown constructs to HTML.
+
+    Processing order (prevents double-substitution):
+      1. Inline code spans extracted to placeholders (content frozen).
+      2. Images extracted to placeholders (embed_image called on src).
+      3. Links extracted to placeholders (label recursively parsed).
+      4. Remaining & < > HTML-escaped.
+      5. Bold (**text** / __text__) → <strong>.
+      6. Italic (*text* / _text_) → <em>.
+      7. Strikethrough (~~text~~) → <del>.
+      8. Placeholders restored.
+
+    Args:
+        text:     Raw inline Markdown text.
+        base_dir: Base directory for resolving local image paths.
+
+    Returns:
+        HTML string with inline constructs rendered.
+    """
+    placeholders: dict[str, str] = {}
+    _ph = [0]
+
+    def _store(html_fragment: str) -> str:
+        key = f'\x00{_ph[0]}\x00'
+        _ph[0] += 1
+        placeholders[key] = html_fragment
+        return key
+
+    # 1. Extract inline code spans (content is HTML-escaped, not further parsed).
+    def _repl_code(m: re.Match) -> str:
+        return _store(f'<code>{html.escape(m.group(1))}</code>')
+
+    text = _RE_INLINE_CODE.sub(_repl_code, text)
+
+    # 2. Extract images (before HTML-escaping so src is still raw).
+    def _repl_image(m: re.Match) -> str:
+        alt = m.group(1)
+        src = m.group(2)
+        final_src = embed_image(src, base_dir)
+        return _store(f'<img src="{html.escape(final_src)}" alt="{html.escape(alt)}">')
+
+    text = _RE_IMAGE.sub(_repl_image, text)
+
+    # 3. Extract links (before HTML-escaping so url is still raw).
+    def _repl_link(m: re.Match) -> str:
+        label = m.group(1)
+        url = m.group(2)
+        parsed_label = inline_parse(label, base_dir)
+        return _store(f'<a href="{html.escape(url)}">{parsed_label}</a>')
+
+    text = _RE_LINK.sub(_repl_link, text)
+
+    # 4. HTML-escape remaining & < > (placeholder chars \x00 are unaffected).
+    text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    # 5. Bold (**text** before *text* to avoid partial match).
+    text = _RE_BOLD_STAR.sub(r'<strong>\1</strong>', text)
+    text = _RE_BOLD_UNDER.sub(r'<strong>\1</strong>', text)
+
+    # 6. Italic (single * or _, remaining after bold consumed **).
+    text = _RE_ITALIC_STAR.sub(r'<em>\1</em>', text)
+    text = _RE_ITALIC_UNDER.sub(r'<em>\1</em>', text)
+
+    # 7. Strikethrough.
+    text = _RE_STRIKETHROUGH.sub(r'<del>\1</del>', text)
+
+    # 8. Restore all placeholders (code, images, links).
+    for key, value in placeholders.items():
+        text = text.replace(key, value)
+
     return text
 
 
@@ -514,7 +598,7 @@ class _BlockParser:
         level = len(hashes)
         raw_text = m.group(2).strip()
         slug = self._make_slug(raw_text)
-        inline_text = _inline_stub(raw_text, self._base_dir)
+        inline_text = inline_parse(raw_text, self._base_dir)
         self._html_parts.append(f'<h{level} id="{slug}">{inline_text}</h{level}>')
 
         if level <= 3:
@@ -558,7 +642,7 @@ class _BlockParser:
             else:
                 break
 
-        inner = _inline_stub(' '.join(bq_lines), self._base_dir)
+        inner = inline_parse(' '.join(bq_lines), self._base_dir)
         self._html_parts.append(f'<blockquote><p>{inner}</p></blockquote>')
 
     def _parse_list(self, *, ordered: bool) -> None:
@@ -581,7 +665,7 @@ class _BlockParser:
 
             indent = len(m.group(1))
             item_text = m.group(3)
-            item_text = _inline_stub(item_text, self._base_dir)
+            item_text = inline_parse(item_text, self._base_dir)
 
             if not indent_stack:
                 # Open the first list
@@ -687,7 +771,7 @@ class _BlockParser:
         for i, cell in enumerate(header_cells):
             align = alignments[i] if i < len(alignments) else ''
             style = f' style="text-align: {align}"' if align else ''
-            out.append(f'<th{style}>{_inline_stub(cell, self._base_dir)}</th>')
+            out.append(f'<th{style}>{inline_parse(cell, self._base_dir)}</th>')
         out.append('</tr></thead>')
 
         # Body
@@ -698,7 +782,7 @@ class _BlockParser:
             for i, cell in enumerate(cells):
                 align = alignments[i] if i < len(alignments) else ''
                 style = f' style="text-align: {align}"' if align else ''
-                out.append(f'<td{style}>{_inline_stub(cell, self._base_dir)}</td>')
+                out.append(f'<td{style}>{inline_parse(cell, self._base_dir)}</td>')
             out.append('</tr>')
         out.append('</tbody>')
 
@@ -728,7 +812,7 @@ class _BlockParser:
             self._pos += 1
 
         text = ' '.join(para_lines)
-        inner = _inline_stub(text, self._base_dir)
+        inner = inline_parse(text, self._base_dir)
         self._html_parts.append(f'<p>{inner}</p>')
 
 
@@ -801,10 +885,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def convert(markdown_text: str, base_dir: Path) -> ParseResult:
-    """Convert Markdown text to HTML (block-level pass).
+    """Convert Markdown text to HTML.
 
-    Inline processing is delegated to _inline_stub (identity) for now;
-    STORY-004 will replace it with real inline parsing.
+    Block elements are parsed by _BlockParser; inline elements within those
+    blocks are processed by inline_parse().
 
     Args:
         markdown_text: Raw Markdown source.
@@ -821,14 +905,66 @@ def convert(markdown_text: str, base_dir: Path) -> ParseResult:
 def build_toc(headings: list[Heading]) -> str:
     """Build a Table of Contents HTML <nav> element from headings.
 
+    Only H1–H3 headings are included. H1 → top-level list items; H2 → one
+    level of nesting; H3 → two levels of nesting. Level jumps (e.g. H1
+    directly followed by H3) are handled gracefully — the output is always
+    well-nested HTML. Returns an empty string when *headings* contains no
+    H1–H3 entries.
+
     Args:
-        headings: Ordered list of Heading objects.
+        headings: Ordered list of Heading objects (all levels, from convert()).
 
     Returns:
-        An HTML string for the ToC navigation element.
+        An HTML string for the ToC ``<nav>`` element, or ``""`` if there are
+        no H1–H3 headings to display.
     """
-    # Stub — real implementation added in a later story.
-    return ""
+    # Filter to H1–H3 only (ToC scope).
+    toc_headings = [h for h in headings if 1 <= h.level <= 3]
+    if not toc_headings:
+        return ""
+
+    parts: list[str] = []
+    parts.append('<nav aria-label="Table of contents">')
+
+    # Stack tracks the heading levels of currently-open <ul> elements.
+    stack: list[int] = []
+
+    for heading in toc_headings:
+        level = heading.level
+
+        if not stack:
+            # Open first <ul> at this level.
+            parts.append("<ul>")
+            stack.append(level)
+        elif level > stack[-1]:
+            # Deeper level: open as many <ul> elements as needed.
+            while stack[-1] < level:
+                parts.append("<ul>")
+                stack.append(stack[-1] + 1)
+        elif level < stack[-1]:
+            # Shallower level: close <ul>/<li> elements until correct depth.
+            while stack and stack[-1] > level:
+                parts.append("</li></ul>")
+                stack.pop()
+            if not stack:
+                parts.append("<ul>")
+                stack.append(level)
+            else:
+                parts.append("</li>")
+        else:
+            # Same level: close the previous sibling <li>.
+            parts.append("</li>")
+
+        # Emit the list item (left open for potential child <ul>).
+        parts.append(f'<li><a href="#{heading.slug}">{heading.text}</a>')
+
+    # Close all open <li> and <ul> elements.
+    while stack:
+        parts.append("</li></ul>")
+        stack.pop()
+
+    parts.append("</nav>")
+    return "".join(parts)
 
 
 def render_page(result: ParseResult, title: str, toc_html: str) -> str:
