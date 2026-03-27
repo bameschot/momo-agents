@@ -320,9 +320,8 @@ echo "[Project Initialiser Agent complete]"
 WRAPPER
 
 # ── Coding Agent (shared body, parameterised by $AGENT_ID) ───────────────────
-# Python handles all orchestration: PI-done wait, story polling, dependency
-# checks, claiming, HALT detection, and retry counting. The shell wrapper
-# just activates the environment and runs the Python process once.
+# Waits for PI to complete (or be skipped) and for at least one story to appear.
+# Loops through HALT/review cycles automatically — no new window needed.
 cat > "$SENTINEL_DIR/coding_agent_body.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -336,9 +335,48 @@ printf "\033]0;Coding Agent ${AGENT_ID}\007"
 echo "╔══════════════════════════════════╗"
 echo "║       Coding Agent ${AGENT_ID}              ║"
 echo "╚══════════════════════════════════╝"
+echo "Waiting for Project Initialiser..."
+
+while [ ! -f "${SENTINEL_DIR}/pi.done" ]; do sleep 3; done
+
+echo "Waiting for stories..."
+while [ "$(find "${STORIES_DIR}" -maxdepth 1 -name 'STORY-*.md' \
+           2>/dev/null | wc -l | tr -d ' ')" -eq 0 ]; do
+    sleep 3
+done
+
+echo "Prerequisites ready — starting agent loop."
 echo ""
 
-"${PYTHON}" "${SCRIPT_DIR}/python-agents/coding_agent.py"
+while true; do
+    "${PYTHON}" "${SCRIPT_DIR}/python-agents/coding_agent.py"
+    EXIT_CODE=$?
+
+    # Orchestrator wrote pipeline_complete — clean exit
+    if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
+        echo ""
+        echo "[Coding Agent ${AGENT_ID}] Pipeline complete — exiting."
+        break
+    fi
+
+    # HALT — wait for reviewer to clear it, then resume
+    if [ -f "${STORIES_DIR}/HALT" ]; then
+        echo ""
+        echo "[Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
+        while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
+        sleep 2   # let renamed story files settle
+        echo "[Coding Agent ${AGENT_ID}] HALT cleared — resuming."
+        echo ""
+        continue
+    fi
+
+    # Unexpected non-zero exit — short pause before retrying
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo ""
+        echo "[Coding Agent ${AGENT_ID}] Agent exited with code $EXIT_CODE — retrying in 10s..."
+        sleep 10
+    fi
+done
 
 touch "${SENTINEL_DIR}/coding_${AGENT_ID}.done"
 echo ""
