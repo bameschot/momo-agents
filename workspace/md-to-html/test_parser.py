@@ -427,7 +427,7 @@ def test_inline_bold_italic_in_paragraph():
 
 
 # ---------------------------------------------------------------------------
-# embed_image function tests (STORY-003)
+# embed_image function tests (STORY-009)
 # ---------------------------------------------------------------------------
 
 def test_embed_image_http_passthrough():
@@ -439,6 +439,12 @@ def test_embed_image_https_passthrough():
     source = Path("/some/dir/doc.md")
     result = embed_image("https://example.com/img.png", source)
     assert result == "https://example.com/img.png"
+
+def test_embed_image_any_scheme_passthrough():
+    """Any URL scheme (containing "://") should be returned unchanged."""
+    source = Path("/some/dir/doc.md")
+    result = embed_image("ftp://example.com/img.png", source)
+    assert result == "ftp://example.com/img.png"
 
 def test_embed_image_local_exists():
     test_dir = Path(__file__).parent
@@ -458,7 +464,7 @@ def test_embed_image_unknown_mime():
         tmp_path.write_bytes(b"data")
         source = Path(tmpdir) / "doc.md"
         result = embed_image("file.unknownext12345", source)
-        assert result.startswith("data:application/octet-stream;base64,")
+        assert result.startswith("data:image/png;base64,")
 
 def test_parser_with_source_path():
     test_dir = Path(__file__).parent

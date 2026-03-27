@@ -83,21 +83,21 @@ def embed_image(path: str, source_md_path: Path) -> str:
     Resolve *path* relative to *source_md_path.parent* and return a data URI.
 
     Returns the original *path* string unchanged if:
-    - path starts with http:// or https://
+    - path contains "://" (remote URL with any scheme)
     - the resolved local file does not exist or cannot be read
     """
-    if path.startswith("http://") or path.startswith("https://"):
+    if "://" in path:
         return path
 
     resolved = (source_md_path.parent / path).resolve()
     try:
         data = resolved.read_bytes()
-    except (OSError, IOError):
+    except OSError:
         return path
 
     mime, _ = mimetypes.guess_type(str(resolved))
     if mime is None:
-        mime = "application/octet-stream"
+        mime = "image/png"
 
     encoded = base64.b64encode(data).decode("ascii")
     return f"data:{mime};base64,{encoded}"
