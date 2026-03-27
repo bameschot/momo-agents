@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import base64
-import glob as glob_module
 import mimetypes
 import re
 import sys
@@ -44,7 +43,7 @@ class FileEntry:
 class RenderContext:
     output_path: Path
     title: str               # Derived from output filename stem
-    entries: list[FileEntry] = field(default_factory=list)
+    entries: "list[FileEntry]" = field(default_factory=list)
     toc: str = ""            # Pre-rendered TOC HTML
 
 
@@ -762,7 +761,7 @@ def _render_toc_items(
 # CSS
 # ---------------------------------------------------------------------------
 
-_CSS = """\
+STYLESHEET = """\
 :root {
     --bg-page:         #f5f5f5;
     --bg-section-even: #ffffff;
@@ -903,18 +902,28 @@ blockquote {
     font-weight: bold;
     color: var(--link);
 }
+
+img { max-width: 100%; height: auto; }
+
+input[type="checkbox"][disabled] {
+    cursor: default;
+    pointer-events: none;
+}
 """
+
+# Keep backward-compatible alias
+_CSS = STYLESHEET
 
 
 # ---------------------------------------------------------------------------
 # Scroll-Spy Script
 # ---------------------------------------------------------------------------
 
-_SCRIPT = """\
+SCROLL_SPY_JS = """\
 (function () {
   'use strict';
   if (typeof IntersectionObserver === 'undefined') return;
-  var sections = document.querySelectorAll('section[id]');
+  var headings = document.querySelectorAll('h1[id],h2[id],h3[id],h4[id],h5[id],h6[id]');
   var tocLinks = document.querySelectorAll('#toc a');
   function setActive(id) {
     tocLinks.forEach(function (a) {
@@ -931,10 +940,13 @@ _SCRIPT = """\
         setActive(entry.target.id);
       }
     });
-  }, { rootMargin: '-40% 0px -55% 0px' });
-  sections.forEach(function (s) { observer.observe(s); });
+  }, { rootMargin: '-10% 0px -85% 0px' });
+  headings.forEach(function (h) { observer.observe(h); });
 })();
 """
+
+# Keep backward-compatible alias
+_SCRIPT = SCROLL_SPY_JS
 
 
 # ---------------------------------------------------------------------------
@@ -973,25 +985,17 @@ def assemble_html(ctx: RenderContext) -> str:
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{ctx.title}</title>
-<style>
-{_CSS}
-</style>
+<style>{STYLESHEET}</style>
 </head>
 <body>
-<nav id="toc">
-<div id="toc-inner">
-<p class="toc-title">Contents</p>
-{ctx.toc}
-</div>
-</nav>
+<nav id="toc"><div id="toc-inner"><p class="toc-title">Contents</p>{ctx.toc}</div></nav>
 <main>
 {sections_html}
 </main>
-<script>
-{_SCRIPT}</script>
+<script>{SCROLL_SPY_JS}</script>
 </body>
 </html>"""
 
@@ -1005,79 +1009,61 @@ def parse_args() -> argparse.Namespace:
     Parse command-line arguments and perform all validation.
 
     Returns a Namespace with:
-      - files: list[Path]  — resolved, ordered list of matched .md files
-      - output: Path       — resolved output path
-      - title: str         — page title (output stem)
+      - input_path: Path   — resolved absolute path to the .md input file
+      - output_path: Path  — resolved absolute output path
     """
     parser = argparse.ArgumentParser(
         prog="md_to_html.py",
-        description="Bundle one or more Markdown files into a single styled HTML file.",
+        description="Convert a single Markdown file into a styled HTML file.",
     )
 
     parser.add_argument(
-        "glob",
-        metavar="glob",
-        help='Glob pattern matching .md files (e.g. "docs/*.md")',
+        "-i", "--input",
+        metavar="FILE",
+        required=True,
+        help="Path to the input .md file",
     )
 
     parser.add_argument(
         "-o", "--output",
         metavar="PATH",
-        default="output.html",
-        help="Output HTML file path (default: ./output.html)",
-    )
-
-    parser.add_argument(
-        "--order",
-        metavar="FILE",
-        nargs="+",
-        help="Explicit ordered list of file paths, overriding the glob expansion order",
+        default=None,
+        help=(
+            "Output HTML file path "
+            "(default: <input-stem>.html in the current working directory)"
+        ),
     )
 
     args = parser.parse_args()
 
-    # --- Expand glob ----------------------------------------------------------
-    raw_matches = glob_module.glob(args.glob, recursive=True)
-    # Filter to .md files only and resolve to absolute paths, preserving order
-    ordered_matches: list[Path] = []
-    seen: set[Path] = set()
-    for p in raw_matches:
-        resolved = Path(p).resolve()
-        if resolved.suffix.lower() == ".md" and resolved not in seen:
-            ordered_matches.append(resolved)
-            seen.add(resolved)
+    # --- Validate input path --------------------------------------------------
+    input_path = Path(args.input).resolve()
 
-    if not ordered_matches:
+    if not input_path.exists():
         print(
-            f"Error: glob pattern {args.glob!r} matched zero .md files.",
+            f"Error: input file {str(args.input)!r} does not exist.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # --- Handle --order override ----------------------------------------------
-    if args.order is not None:
-        reordered: list[Path] = []
-        matched_set = set(ordered_matches)
-        for raw_path in args.order:
-            resolved = Path(raw_path).resolve()
-            if resolved not in matched_set:
-                print(
-                    f"Error: --order path {raw_path!r} is not in the set of files "
-                    f"matched by the glob pattern.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-            reordered.append(resolved)
-        final_files = reordered
-    else:
-        final_files = ordered_matches
+    if input_path.suffix.lower() != ".md":
+        print(
+            f"Error: input file {str(args.input)!r} does not have a .md extension.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    # --- Validate output path -------------------------------------------------
-    output_path = Path(args.output)
+    # --- Resolve output path --------------------------------------------------
+    if args.output is None:
+        output_path = Path.cwd() / (Path(args.input).stem + ".html")
+    else:
+        output_path = Path(args.output)
+
     if not output_path.is_absolute():
         output_path = Path.cwd() / output_path
     output_path = output_path.resolve()
 
+    # --- Validate output directory --------------------------------------------
     if not output_path.parent.exists():
         print(
             f"Error: output directory {str(output_path.parent)!r} does not exist.",
@@ -1086,10 +1072,8 @@ def parse_args() -> argparse.Namespace:
         sys.exit(1)
 
     # --- Build result ---------------------------------------------------------
-    title = output_path.stem
-    args.files = final_files
-    args.output = output_path
-    args.title = title
+    args.input_path = input_path
+    args.output_path = output_path
 
     return args
 
@@ -1101,48 +1085,46 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    entries: list[FileEntry] = []
-    for path in args.files:
-        raw_markdown = path.read_text(encoding="utf-8")
-        parser = MarkdownParser(source_path=path)
-        html_body = parser.parse(raw_markdown)
+    path = args.input_path
+    raw_markdown = path.read_text(encoding="utf-8")
+    md_parser = MarkdownParser(source_path=path)
+    html_body = md_parser.parse(raw_markdown)
 
-        # Warn if no top-level (#) heading found
-        has_h1 = bool(re.search(r"^# ", raw_markdown, re.MULTILINE))
-        if not has_h1:
-            print(
-                f"Warning: {path.name} has no top-level heading; using filename as title.",
-                file=sys.stderr,
-            )
-
-        slug = slugify(path.stem)
-        if parser.headings:
-            title = parser.headings[0].text
-        else:
-            title = slug
-
-        entry = FileEntry(
-            path=path,
-            slug=slug,
-            title=title,
-            raw_markdown=raw_markdown,
-            html_body=html_body,
-            headings=parser.headings,
+    # Warn if no top-level (#) heading found
+    has_h1 = bool(re.search(r"^# ", raw_markdown, re.MULTILINE))
+    if not has_h1:
+        print(
+            f"Warning: {path.name} has no top-level heading; using filename as title.",
+            file=sys.stderr,
         )
-        entries.append(entry)
 
-    toc = build_toc(entries)
+    slug = slugify(path.stem)
+    if md_parser.headings:
+        title = md_parser.headings[0].text
+    else:
+        title = slug
+
+    entry = FileEntry(
+        path=path,
+        slug=slug,
+        title=title,
+        raw_markdown=raw_markdown,
+        html_body=html_body,
+        headings=md_parser.headings,
+    )
+
+    toc = build_toc([entry])
 
     ctx = RenderContext(
-        output_path=args.output,
-        title=args.title,
-        entries=entries,
+        output_path=args.output_path,
+        title=title,
+        entries=[entry],
         toc=toc,
     )
 
     html = assemble_html(ctx)
-    args.output.write_text(html, encoding="utf-8")
-    print(f"Written: {args.output}")
+    args.output_path.write_text(html, encoding="utf-8")
+    print(f"Written: {args.output_path}")
 
 
 if __name__ == "__main__":

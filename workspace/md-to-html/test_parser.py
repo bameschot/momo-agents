@@ -5,19 +5,16 @@ and inline elements (STORY-003).
 
 from __future__ import annotations
 
-import sys
 import os
+import sys
 
 # Allow running from any directory
 sys.path.insert(0, os.path.dirname(__file__))
 
-import base64
-import struct
-import zlib
 import tempfile
 from pathlib import Path
 
-from md_to_html import MarkdownParser, slugify, Heading, embed_image, _process_inline
+from md_to_html import Heading, MarkdownParser, _process_inline, embed_image, slugify
 
 
 def assert_equal(actual: str, expected: str, msg: str = "") -> None:
@@ -375,9 +372,8 @@ def test_inline_image_url():
 
 def test_inline_image_local_exists():
     test_dir = Path(__file__).parent
-    image_path = test_dir / "test_image.png"
     source_md = test_dir / "test.md"
-    result = _process_inline(f"![alt](test_image.png)", source_path=source_md)
+    result = _process_inline("![alt](test_image.png)", source_path=source_md)
     assert result.startswith('<img src="data:image/png;base64,')
     assert 'alt="alt"' in result
 
@@ -559,7 +555,7 @@ def test_footnote_inline_markdown_in_definition():
 # TOC Builder (STORY-005)
 # ---------------------------------------------------------------------------
 
-def _make_entry(slug: str, md: str) -> "FileEntry":
+def _make_entry(slug: str, md: str):  # -> FileEntry
     from md_to_html import FileEntry
     p = MarkdownParser()
     html = p.parse(md)
@@ -642,7 +638,7 @@ def test_toc_heading_anchor_updated_inplace():
 # ---------------------------------------------------------------------------
 
 def test_render_section_no_divider_at_index_0():
-    from md_to_html import render_section, FileEntry
+    from md_to_html import FileEntry, render_section
     entry = FileEntry(
         path=Path("/test/a.md"), slug="intro", title="Introduction",
         raw_markdown="", html_body="<p>body</p>", headings=[]
@@ -652,7 +648,7 @@ def test_render_section_no_divider_at_index_0():
     assert '<section id="intro"' in html
 
 def test_render_section_divider_at_index_1():
-    from md_to_html import render_section, FileEntry
+    from md_to_html import FileEntry, render_section
     entry = FileEntry(
         path=Path("/test/b.md"), slug="second", title="Second",
         raw_markdown="", html_body="<p>body</p>", headings=[]
@@ -661,7 +657,7 @@ def test_render_section_divider_at_index_1():
     assert '<hr class="section-divider">' in html
 
 def test_render_section_even_odd_classes():
-    from md_to_html import render_section, FileEntry
+    from md_to_html import FileEntry, render_section
     entry = FileEntry(
         path=Path("/test/x.md"), slug="x", title="X",
         raw_markdown="", html_body="", headings=[]
@@ -674,7 +670,7 @@ def test_render_section_even_odd_classes():
     assert 'class="section-even"' in html2
 
 def test_render_section_header():
-    from md_to_html import render_section, FileEntry
+    from md_to_html import FileEntry, render_section
     entry = FileEntry(
         path=Path("/test/x.md"), slug="my-doc", title="My Document",
         raw_markdown="", html_body="<p>content</p>", headings=[]
@@ -684,7 +680,7 @@ def test_render_section_header():
     assert "<p>content</p>" in html
 
 def test_assemble_html_structure():
-    from md_to_html import assemble_html, FileEntry, RenderContext
+    from md_to_html import FileEntry, RenderContext, assemble_html
     entry = FileEntry(
         path=Path("/test/a.md"), slug="intro", title="Introduction",
         raw_markdown="", html_body="<p>Hello</p>", headings=[]
@@ -705,7 +701,7 @@ def test_assemble_html_structure():
     assert html.strip().endswith("</html>")
 
 def test_assemble_html_toc_sidebar():
-    from md_to_html import assemble_html, FileEntry, RenderContext
+    from md_to_html import FileEntry, RenderContext, assemble_html
     entry = FileEntry(
         path=Path("/test/a.md"), slug="a", title="A",
         raw_markdown="", html_body="", headings=[]
@@ -722,11 +718,15 @@ def test_assemble_html_toc_sidebar():
     assert "<ul><li>item</li></ul>" in html
 
 def test_assemble_html_css_variables():
-    from md_to_html import assemble_html, FileEntry, RenderContext
+    from md_to_html import FileEntry, RenderContext, assemble_html
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="a", title="A",
+        raw_markdown="", html_body="", headings=[]
+    )
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Test",
-        entries=[],
+        entries=[entry],
         toc="",
     )
     html = assemble_html(ctx)
@@ -737,15 +737,119 @@ def test_assemble_html_css_variables():
     assert "#4da6ff" in html  # --link dark
 
 def test_assemble_html_no_external_stylesheets():
-    from md_to_html import assemble_html, FileEntry, RenderContext
+    from md_to_html import FileEntry, RenderContext, assemble_html
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="a", title="A",
+        raw_markdown="", html_body="", headings=[]
+    )
     ctx = RenderContext(
         output_path=Path("/out/output.html"),
         title="Test",
-        entries=[],
+        entries=[entry],
         toc="",
     )
     html = assemble_html(ctx)
     assert "<link" not in html
+
+
+# ---------------------------------------------------------------------------
+# STORY-013: STYLESHEET, SCROLL_SPY_JS, and assemble_html tests
+# ---------------------------------------------------------------------------
+
+def test_story013_stylesheet_constant():
+    """STYLESHEET is a non-empty module-level string with required values."""
+    from md_to_html import STYLESHEET
+    assert isinstance(STYLESHEET, str) and STYLESHEET, "STYLESHEET must be a non-empty string"
+    assert "prefers-color-scheme: dark" in STYLESHEET
+    assert "#f5f5f5" in STYLESHEET
+    assert "260px" in STYLESHEET
+    assert "system-ui" in STYLESHEET
+
+
+def test_story013_scroll_spy_js_constant():
+    """SCROLL_SPY_JS is a non-empty module-level string referencing TOC."""
+    from md_to_html import SCROLL_SPY_JS
+    assert isinstance(SCROLL_SPY_JS, str) and SCROLL_SPY_JS, (
+        "SCROLL_SPY_JS must be a non-empty string"
+    )
+    assert "toc" in SCROLL_SPY_JS.lower()
+
+
+def test_story013_assemble_html_full():
+    """assemble_html returns a complete standalone HTML document."""
+    from md_to_html import FileEntry, RenderContext, assemble_html
+    entry = FileEntry(
+        path=Path("/test/first.md"), slug="first", title="First Section",
+        raw_markdown="", html_body="<p>Hello</p>", headings=[]
+    )
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="Test Doc",
+        entries=[entry],
+        toc="<ul><li>item</li></ul>",
+    )
+    html = assemble_html(ctx)
+
+    # Starts with DOCTYPE
+    assert html.startswith("<!DOCTYPE html>")
+
+    # Has correct title
+    assert "<title>Test Doc</title>" in html
+
+    # Has style block with STYLESHEET content (check for dark mode media query)
+    assert "<style>" in html
+    assert "prefers-color-scheme: dark" in html
+
+    # Has TOC nav structure
+    assert '<nav id="toc">' in html
+    assert '<div id="toc-inner">' in html
+
+    # Contains the injected toc string
+    assert "<ul><li>item</li></ul>" in html
+
+    # Has main content area and section ID
+    assert "<main>" in html
+    assert 'id="first"' in html
+
+    # Has script with SCROLL_SPY_JS content
+    assert "<script>" in html
+    assert "toc" in html.lower()
+
+
+def test_story013_assemble_html_purity():
+    """assemble_html is a pure function: same inputs always produce same output."""
+    from md_to_html import FileEntry, RenderContext, assemble_html
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="alpha", title="Alpha",
+        raw_markdown="", html_body="<p>content</p>", headings=[]
+    )
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="Purity Test",
+        entries=[entry],
+        toc="<ul><li>alpha</li></ul>",
+    )
+    result1 = assemble_html(ctx)
+    result2 = assemble_html(ctx)
+    assert result1 == result2, "assemble_html must be a pure function"
+
+
+def test_story013_assemble_html_meta_tags():
+    """assemble_html includes required meta tags with correct casing."""
+    from md_to_html import FileEntry, RenderContext, assemble_html
+    entry = FileEntry(
+        path=Path("/test/a.md"), slug="a", title="A",
+        raw_markdown="", html_body="", headings=[]
+    )
+    ctx = RenderContext(
+        output_path=Path("/out/output.html"),
+        title="Meta Test",
+        entries=[entry],
+        toc="",
+    )
+    html = assemble_html(ctx)
+    assert '<meta charset="UTF-8">' in html
+    assert 'initial-scale=1.0' in html
 
 
 # ---------------------------------------------------------------------------
