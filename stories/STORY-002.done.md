@@ -1,47 +1,44 @@
-# STORY-002: Markdown Parser — Block Elements
+# STORY-002: Block-Level Markdown Parser
 
 **Index**: 2
 **Attempts**: 1
-**Design ref**: design/md-to-html.md
+**Design ref**: design/md-to-html-cli.md
 **Depends on**: STORY-001
 
 ## Context
-Implements the `MarkdownParser` class covering all block-level Markdown constructs. Inline elements (bold, italic, links, images, etc.) are left as a stub — this story's parser emits raw text inside block containers. The goal is a clean block-structure pass whose output can be tested in isolation before inline processing is layered on in STORY-003.
+Implements the first phase of Markdown-to-HTML conversion: block-level parsing. The `convert()` function (or a `MarkdownParser` class it delegates to) walks the raw Markdown text line by line or block by block and emits HTML for each recognized block type. Inline parsing (bold, links, images, etc.) is **not** applied here — block parsing emits raw span text as plain strings, which will be post-processed in STORY-004. This story also collects `Heading` objects for later ToC generation.
 
 ## Acceptance Criteria
-- [ ] `MarkdownParser` class exists in `md_to_html.py` with a public method `parse(markdown: str) -> str` that returns an HTML fragment string.
-- [ ] `MarkdownParser` exposes a `headings: list[Heading]` attribute populated after each `parse()` call.
-- [ ] ATX headings `#` through `######` are converted to `<h1>`–`<h6>` with an `id` attribute set to the slugified heading text (lowercase, spaces→hyphens, non-alphanumeric stripped, consecutive hyphens collapsed).
-- [ ] Blank-line-delimited paragraphs are wrapped in `<p>` tags.
-- [ ] Fenced code blocks (triple-backtick ` ``` ` or triple-tilde `~~~`) with an optional language label are rendered as `<pre><code class="language-{lang}">...</code></pre>`; content inside is HTML-escaped (no syntax highlighting).
-- [ ] Blockquotes (`>` prefix, nestable) are rendered as `<blockquote>` elements; consecutive `>` lines form one blockquote; `>>` nests.
-- [ ] Horizontal rules from `---`, `***`, or `___` (on their own line, optionally with spaces between chars) are rendered as `<hr>`.
-- [ ] Unordered lists (`-`, `*`, `+` bullets) are rendered as `<ul><li>` trees; nested lists (indented 2+ spaces or a tab) produce `<ul>` inside `<li>`.
-- [ ] Ordered lists (`1.` style) are rendered as `<ol><li>` trees with proper nesting.
-- [ ] Task list items `- [ ]` render as `<li><input type="checkbox" disabled> text</li>`; `- [x]` renders with `checked`.
-- [ ] GFM pipe tables with an alignment row are rendered as `<table><thead><tr><th>` / `<tbody><tr><td>` with `style="text-align:{left|center|right}"` derived from the alignment row.
-- [ ] Hard line breaks (two trailing spaces or a backslash `\` at end of line, within a paragraph) are rendered as `<br>`.
-- [ ] Raw HTML lines (lines starting with `<` and ending with `>` or lines that are self-contained HTML tags) are passed through unmodified.
-- [ ] Inline content inside block elements is passed through as plain text (the inline stub); this will be replaced in STORY-003.
+- [ ] `convert(markdown_text: str, base_dir: Path) -> ParseResult` exists and is callable.
+- [ ] **ATX headings** (`#` through `######`): rendered as `<h1>`–`<h6>` with a slug-based `id` attribute. H1–H3 are collected into `ParseResult.headings`; H4–H6 render but are NOT added to `headings`.
+- [ ] **Fenced code blocks** (` ``` ` … ` ``` `): rendered as `<pre><code class="language-<lang>">…</code></pre>`. Optional language tag after the opening fence is captured. Content inside is HTML-escaped (no inline processing).
+- [ ] **Blockquotes** (`>`): rendered as `<blockquote><p>…</p></blockquote>`. Multi-line blockquotes (consecutive `>` lines) are joined into a single blockquote. Inline processing will be applied in STORY-004.
+- [ ] **Unordered lists** (`-`, `*`, `+`): rendered as `<ul><li>…</li></ul>`. Indentation (2 or 4 spaces) creates nested `<ul>` elements.
+- [ ] **Ordered lists** (`1.`, `2.`, …): rendered as `<ol><li>…</li></ol>`. Indentation creates nested `<ol>` elements.
+- [ ] **Tables** (GFM pipe syntax): rendered as `<table><thead>…</thead><tbody>…</tbody></table>`. Alignment row (`:---`, `:---:`, `---:`) is parsed and reflected via `style="text-align: …"` on `<td>` and `<th>` elements. Malformed tables (e.g. column count mismatch) fall back to a `<pre>` containing the raw block text.
+- [ ] **Horizontal rules** (`---`, `***`, `___` on their own line, optionally with spaces): rendered as `<hr>`.
+- [ ] **Paragraphs**: all remaining text runs rendered as `<p>…</p>`.
+- [ ] `ParseResult.title` is set to the plain text of the first H1 encountered, or `None` if no H1 exists.
+- [ ] Slug generation for heading `id` attributes: lowercase, spaces→hyphens, strip non-alphanumeric-hyphen characters; duplicate slugs get `-2`, `-3`, … suffixes.
+- [ ] A blank stub for inline processing is called on paragraph/heading/blockquote text (identity function is fine — STORY-004 will replace it).
 
 ## Implementation Hints
-- A clean approach: split the input into lines, then use a state-machine / multipass approach: first identify block boundaries (fences, blank lines, list continuations, blockquote runs), then emit HTML for each block type.
-- Fenced code block content must be HTML-escaped (`<`, `>`, `&`, `"` → entities) before insertion.
-- For list nesting, track indentation level. Compare leading whitespace of each list item line to detect nesting. Two spaces or one tab = one extra level.
-- Table detection: a line matching `|...|` followed immediately by a separator line matching `|[-: |]+|`.
-- Slug generation function (used for heading IDs): lowercase the text, replace spaces with `-`, strip any character that is not alphanumeric or `-`, collapse runs of `-` to a single `-`, strip leading/trailing `-`. Extract this as a module-level helper `slugify(text: str) -> str` for reuse in STORY-005.
-- Inline HTML passthrough heuristic: if a stripped line starts with `<` and is a known block-level tag opener (`<div`, `<table`, `<p`, `<ul`, `<ol`, `<pre`, `<blockquote`, `<h1`–`<h6`, `<hr`, `<br`, `<section`, `<nav`, `<article`, `<header`, `<footer`) or is a closing tag `</...>`, pass it through as-is.
+- Process the Markdown as a list of lines. Use a state machine or a "collect current block then flush" pattern to handle multi-line constructs (fenced code, lists, tables, blockquotes).
+- Avoid repeated full-string regex scans for performance — compile all regexes once at module level.
+- Fenced code blocks: once inside a fence, accumulate lines verbatim until the closing fence; do NOT apply any inline processing to their contents.
+- Lists: track indentation depth via a stack. Each increase in indentation opens a new nested `<ul>`/`<ol>`; each decrease pops it.
+- Tables: detect by presence of `|` in the line AND a following separator row. Validate column count; fall back to `<pre>` on mismatch.
+- The slug generator should be a standalone helper (e.g. `slugify(text: str) -> str`) so `TocBuilder` (STORY-005) can reuse it.
 
 ## Test Requirements
-- Unit-test `MarkdownParser.parse()` directly (no file I/O required).
-- Test each block element type with a minimal input/expected-output pair.
-- Test nested blockquotes (two levels deep).
-- Test nested lists (two levels deep), both ordered and unordered.
-- Test a task list mixed with regular list items.
-- Test a fenced code block whose content contains `<`, `>`, and `&` to verify HTML escaping.
-- Test a pipe table with left, center, and right alignment columns.
-- Test that `headings` is populated correctly after `parse()`, including `level`, `text`, and `anchor`.
-- Tests can be placed in a `if __name__ == "__main__"` guard or a standalone `test_parser.py` file in `md-to-html/`.
+- Unit tests covering each block type in isolation.
+- Test nested lists (2 levels deep minimum).
+- Test a table with left/center/right alignment columns.
+- Test a fenced code block with and without a language tag.
+- Test that duplicate heading slugs receive numeric suffixes.
+- Test that a malformed table (column count mismatch) produces `<pre>` output.
+- Test that H4 headings appear in `body_html` but NOT in `ParseResult.headings`.
+- Test that `ParseResult.title` is the first H1 plain text, and `None` when no H1 present.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->
