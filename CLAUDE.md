@@ -18,7 +18,7 @@ momo-agents/
 ├── README.md               # Project overview
 ├── LICENSE                 # MIT License
 ├── pyproject.toml          # Project metadata and dependencies
-├── agents/                 # Python agent implementations
+├── python-agents/          # Python agent implementations
 │   ├── designer.py         # Interactive design session → design/<feature>.md
 │   ├── business_analyst.py # Breaks design into story files
 │   ├── project_initialiser.py  # Scaffolds workspace/ from design
@@ -71,17 +71,17 @@ ruff check .
 ruff format .
 
 # Run type checker
-mypy agents/
+mypy python-agents/
 
 # Run the pipeline
 ./orchestrate.sh <feature-name>
 
 # Run an agent directly
-python -m agents.designer
-python -m agents.business_analyst --design design/my-feature.md
-python -m agents.project_initialiser --design design/my-feature.md
-python -m agents.coding_agent
-python -m agents.story_reviewer
+python python-agents/designer.py
+python python-agents/business_analyst.py --design design/my-feature.md
+python python-agents/project_initialiser.py --design design/my-feature.md
+python python-agents/coding_agent.py
+python python-agents/story_reviewer.py
 
 # Check pipeline status
 ./status.sh

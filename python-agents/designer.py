@@ -21,7 +21,7 @@ async def run() -> None:
         "Use the AskUserQuestion tool to conduct the Q&A. "
         "Ask clarifying questions freely until you have a complete, unambiguous picture "
         "of the requirements. "
-        "When the user types the command 'write', produce the design document and save it "
+        "Produce the design document and save it when asked "
         f"to {DESIGN_DIR}/<feature-name>.md, where <feature-name> is a short kebab-case "
         "identifier derived from the feature being designed."
     )
