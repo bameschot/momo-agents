@@ -70,7 +70,17 @@ def extract_chapter_title(md_text: str, filename: str) -> str:
 
 
 def collect_images(html: str, source_dir: Path) -> dict[str, bytes]:
-    ...
+    srcs = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', html, re.IGNORECASE)
+    result: dict[str, bytes] = {}
+    for src in srcs:
+        if src.startswith(('http://', 'https://', 'data:')):
+            continue
+        img_path = (source_dir / src).resolve()
+        try:
+            result[src] = img_path.read_bytes()
+        except (FileNotFoundError, OSError):
+            warnings.warn(f"Image not found or unreadable: {src}", UserWarning)
+    return result
 
 
 def md_file_to_chapter(md_path: Path) -> Chapter:
