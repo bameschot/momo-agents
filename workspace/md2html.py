@@ -972,16 +972,75 @@ def build_toc(headings: list[Heading]) -> str:
 def render_page(result: ParseResult, title: str, toc_html: str) -> str:
     """Assemble and return a complete HTML5 document string.
 
+    Combines *result.body_html*, *toc_html*, the page *title*, and the
+    ``STYLES`` / ``SCRIPTS`` module constants into a valid HTML5 document.
+
     Args:
         result:   ParseResult with converted body HTML.
-        title:    The page title string.
-        toc_html: Pre-rendered ToC HTML.
+        title:    The resolved page title string (HTML-escaped in output).
+        toc_html: Pre-rendered ToC ``<nav>`` HTML, or ``""`` to suppress ToC.
 
     Returns:
         A complete HTML5 document as a string.
     """
-    # Stub — real implementation added in a later story.
-    return ""
+    import html as _html
+
+    safe_title = _html.escape(title)
+
+    # ── No-flash theme snippet (applied before paint) ─────────────────────
+    no_flash_script = (
+        "<script>"
+        "(function(){"
+        "var t=localStorage.getItem('md2html-theme');"
+        "if(t)document.documentElement.setAttribute('data-theme',t);"
+        "else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)"
+        "document.documentElement.setAttribute('data-theme','dark');"
+        "})();"
+        "</script>"
+    )
+
+    # ── <head> ────────────────────────────────────────────────────────────
+    head = (
+        f"<head>"
+        f"<meta charset=\"UTF-8\">"
+        f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+        f"<title>{safe_title}</title>"
+        f"<style>{STYLES}</style>"
+        f"{no_flash_script}"
+        f"</head>"
+    )
+
+    # ── ToC components (conditional) ──────────────────────────────────────
+    if toc_html:
+        mobile_toc = (
+            f"<details id=\"toc-mobile\">"
+            f"<summary>Contents &#9660;</summary>"
+            f"{toc_html}"
+            f"</details>"
+        )
+        sidebar_toc = f"<aside id=\"toc-sidebar\">{toc_html}</aside>"
+    else:
+        mobile_toc = ""
+        sidebar_toc = ""
+
+    # ── <body> ────────────────────────────────────────────────────────────
+    body = (
+        f"<body>"
+        f"<header>"
+        f"<button id=\"theme-toggle\" aria-label=\"Toggle theme\">&#127769;</button>"
+        f"</header>"
+        f"<main>"
+        f"<div class=\"page-wrapper\">"
+        f"{mobile_toc}"
+        f"<article>{result.body_html}</article>"
+        f"{sidebar_toc}"
+        f"</div>"
+        f"</main>"
+        f"<script>{SCRIPTS}</script>"
+        f"</body>"
+    )
+
+    return f"<!DOCTYPE html><html lang=\"en\">{head}{body}</html>"
 
 
 def embed_image(src: str, base_dir: Path) -> str:
