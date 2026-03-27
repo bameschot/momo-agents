@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import glob as glob_module
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,6 +44,399 @@ class RenderContext:
     title: str               # Derived from output filename stem
     entries: list[FileEntry] = field(default_factory=list)
     toc: str = ""            # Pre-rendered TOC HTML
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def slugify(text: str) -> str:
+    """Convert text to a URL-friendly slug for heading IDs."""
+    text = text.lower()
+    text = text.replace(" ", "-")
+    text = re.sub(r"[^a-z0-9\-]", "", text)
+    text = re.sub(r"-{2,}", "-", text)
+    text = text.strip("-")
+    return text
+
+
+def html_escape(text: str) -> str:
+    """Escape HTML special characters."""
+    return (
+        text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+# ---------------------------------------------------------------------------
+# Markdown Parser — Block Elements
+# ---------------------------------------------------------------------------
+
+class MarkdownParser:
+    """
+    Parse Markdown text into an HTML fragment string.
+
+    Block elements are fully implemented. Inline elements are passed through
+    as plain text (stub — will be replaced in STORY-003).
+    """
+
+    def __init__(self) -> None:
+        self.headings: list[Heading] = []
+
+    def parse(self, markdown: str) -> str:
+        """Parse *markdown* and return an HTML fragment string."""
+        self.headings = []
+        lines = markdown.splitlines()
+        blocks = self._split_blocks(lines)
+        html_parts: list[str] = []
+        for block in blocks:
+            html_parts.append(self._render_block(block))
+        return "\n".join(p for p in html_parts if p)
+
+    # ------------------------------------------------------------------
+    # Block splitting
+    # ------------------------------------------------------------------
+
+    def _split_blocks(self, lines: list[str]) -> list[list[str]]:
+        """
+        Split *lines* into logical blocks separated by blank lines,
+        respecting fenced code blocks.
+        """
+        blocks: list[list[str]] = []
+        current: list[str] = []
+        in_fence = False
+        fence_char = ""
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Detect fence open/close
+            if not in_fence:
+                m = re.match(r"^(`{3,}|~{3,})", line)
+                if m:
+                    in_fence = True
+                    fence_char = m.group(1)[0]
+                    if current:
+                        blocks.append(current)
+                    current = [line]
+                    continue
+            else:
+                # Inside fence — look for closing fence
+                m = re.match(r"^(`{3,}|~{3,})", line)
+                if m and m.group(1)[0] == fence_char and len(m.group(1)) >= 3:
+                    current.append(line)
+                    blocks.append(current)
+                    current = []
+                    in_fence = False
+                    fence_char = ""
+                else:
+                    current.append(line)
+                continue
+
+            if stripped == "":
+                if current:
+                    blocks.append(current)
+                    current = []
+            else:
+                current.append(line)
+
+        if current:
+            blocks.append(current)
+
+        return blocks
+
+    # ------------------------------------------------------------------
+    # Block rendering dispatcher
+    # ------------------------------------------------------------------
+
+    def _render_block(self, block: list[str]) -> str:
+        if not block:
+            return ""
+
+        first = block[0]
+        stripped_first = first.strip()
+
+        # Fenced code block
+        m = re.match(r"^(`{3,}|~{3,})(.*)", first)
+        if m:
+            return self._render_fenced_code(block, m)
+
+        # ATX heading
+        m = re.match(r"^(#{1,6})\s+(.*)", first)
+        if m and len(block) == 1:
+            return self._render_heading(m)
+
+        # Horizontal rule (must be checked before list/blockquote)
+        if self._is_hr(stripped_first) and len(block) == 1:
+            return "<hr>"
+
+        # Blockquote
+        if stripped_first.startswith(">"):
+            return self._render_blockquote(block)
+
+        # GFM table — first two lines must be table rows
+        if len(block) >= 2 and self._is_table_row(block[0]) and self._is_separator_row(block[1]):
+            return self._render_table(block)
+
+        # Unordered list
+        if re.match(r"^(\s*)[-*+]\s", first):
+            return self._render_list(block, ordered=False)
+
+        # Ordered list
+        if re.match(r"^(\s*)\d+\.\s", first):
+            return self._render_list(block, ordered=True)
+
+        # Raw HTML passthrough
+        if self._is_raw_html(stripped_first):
+            return "\n".join(block)
+
+        # Paragraph
+        return self._render_paragraph(block)
+
+    # ------------------------------------------------------------------
+    # Individual block renderers
+    # ------------------------------------------------------------------
+
+    def _render_heading(self, m: re.Match) -> str:
+        level = len(m.group(1))
+        text = m.group(2).strip()
+        anchor = slugify(text)
+        self.headings.append(Heading(level=level, text=text, anchor=anchor))
+        return f'<h{level} id="{anchor}">{text}</h{level}>'
+
+    def _render_fenced_code(self, block: list[str], m: re.Match) -> str:
+        lang = m.group(2).strip()
+        # Content is everything between first and last line
+        content_lines = block[1:-1] if len(block) > 1 else []
+        content = html_escape("\n".join(content_lines))
+        if lang:
+            return f'<pre><code class="language-{lang}">{content}</code></pre>'
+        else:
+            return f"<pre><code>{content}</code></pre>"
+
+    def _render_paragraph(self, block: list[str]) -> str:
+        text = self._process_paragraph_lines(block)
+        return f"<p>{text}</p>"
+
+    def _process_paragraph_lines(self, lines: list[str]) -> str:
+        """Join paragraph lines, handling hard line breaks."""
+        parts: list[str] = []
+        for i, line in enumerate(lines):
+            if line.endswith("  ") or line.endswith("\\ "):
+                parts.append(line.rstrip())
+                if i < len(lines) - 1:
+                    parts.append("<br>")
+            elif line.endswith("\\"):
+                parts.append(line[:-1])
+                if i < len(lines) - 1:
+                    parts.append("<br>")
+            else:
+                parts.append(line)
+                if i < len(lines) - 1:
+                    parts.append(" ")
+        return "".join(parts).strip()
+
+    def _render_blockquote(self, block: list[str]) -> str:
+        # Strip leading '>' from each line.
+        # Insert blank lines between transitions so inner parser splits blocks properly.
+        inner_lines: list[str] = []
+        prev_was_deeper: bool | None = None
+
+        for line in block:
+            stripped = line.strip()
+            if stripped.startswith(">"):
+                content = stripped[1:]
+                if content.startswith(" "):
+                    content = content[1:]
+                is_deeper = content.strip().startswith(">")
+                # Insert blank line on transition between non-deeper and deeper content
+                if prev_was_deeper is not None and prev_was_deeper != is_deeper:
+                    inner_lines.append("")
+                inner_lines.append(content)
+                prev_was_deeper = is_deeper
+            else:
+                inner_lines.append(line)
+                prev_was_deeper = False
+
+        # Recursively parse inner content
+        inner_parser = MarkdownParser()
+        inner_html = inner_parser.parse("\n".join(inner_lines))
+        # Merge headings from inner parser
+        self.headings.extend(inner_parser.headings)
+        return f"<blockquote>\n{inner_html}\n</blockquote>"
+
+    def _render_table(self, block: list[str]) -> str:
+        header_row = block[0]
+        separator_row = block[1]
+        body_rows = block[2:]
+
+        headers = self._parse_table_row(header_row)
+        alignments = self._parse_separator_row(separator_row)
+
+        # Pad alignments to match header count
+        while len(alignments) < len(headers):
+            alignments.append("left")
+
+        html = ["<table>", "<thead>", "<tr>"]
+        for i, cell in enumerate(headers):
+            align = alignments[i] if i < len(alignments) else "left"
+            html.append(f'<th style="text-align:{align}">{cell.strip()}</th>')
+        html.append("</tr>")
+        html.append("</thead>")
+
+        if body_rows:
+            html.append("<tbody>")
+            for row_line in body_rows:
+                cells = self._parse_table_row(row_line)
+                html.append("<tr>")
+                for i, cell in enumerate(cells):
+                    align = alignments[i] if i < len(alignments) else "left"
+                    html.append(f'<td style="text-align:{align}">{cell.strip()}</td>')
+                html.append("</tr>")
+            html.append("</tbody>")
+
+        html.append("</table>")
+        return "\n".join(html)
+
+    def _parse_table_row(self, line: str) -> list[str]:
+        line = line.strip()
+        if line.startswith("|"):
+            line = line[1:]
+        if line.endswith("|"):
+            line = line[:-1]
+        return line.split("|")
+
+    def _parse_separator_row(self, line: str) -> list[str]:
+        cells = self._parse_table_row(line)
+        alignments: list[str] = []
+        for cell in cells:
+            cell = cell.strip()
+            if cell.startswith(":") and cell.endswith(":"):
+                alignments.append("center")
+            elif cell.endswith(":"):
+                alignments.append("right")
+            else:
+                alignments.append("left")
+        return alignments
+
+    def _render_list(self, block: list[str], ordered: bool) -> str:
+        tag = "ol" if ordered else "ul"
+        html = self._render_list_items(block, ordered)
+        return f"<{tag}>{html}</{tag}>"
+
+    def _render_list_items(self, lines: list[str], ordered: bool) -> str:
+        """
+        Render list items supporting nesting. Returns inner HTML (the <li> elements).
+        """
+        result: list[str] = []
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+            # Match list item
+            m = re.match(r"^(\s*)([-*+]|\d+\.)\s+(.*)", line)
+            if not m:
+                # Continuation line — append to previous item
+                if result:
+                    # Remove the closing </li> and add the text
+                    last = result.pop()
+                    last = last.rstrip("</li>").rstrip()
+                    result.append(last + " " + line.strip() + "</li>")
+                i += 1
+                continue
+
+            indent = len(m.group(1))
+            bullet = m.group(2)
+            text = m.group(3)
+
+            # Task list detection
+            task_m = re.match(r"^\[([ xX])\]\s+(.*)", text)
+            if task_m:
+                checked = task_m.group(1).lower() == "x"
+                text = task_m.group(2)
+                checkbox = '<input type="checkbox" disabled checked>' if checked else '<input type="checkbox" disabled>'
+                item_text = f"{checkbox} {text}"
+            else:
+                item_text = text
+
+            # Collect nested lines (next lines with greater indentation)
+            nested: list[str] = []
+            j = i + 1
+            while j < len(lines):
+                next_line = lines[j]
+                next_m = re.match(r"^(\s*)([-*+]|\d+\.)\s+(.*)", next_line)
+                if next_m:
+                    next_indent = len(next_m.group(1))
+                    if next_indent > indent:
+                        nested.append(next_line)
+                        j += 1
+                    else:
+                        break
+                elif next_line.startswith(" " * (indent + 2)) or (indent == 0 and next_line.startswith("  ")):
+                    nested.append(next_line)
+                    j += 1
+                else:
+                    break
+
+            if nested:
+                # Determine if nested is ordered or unordered
+                nested_first = nested[0].strip()
+                nested_ordered = bool(re.match(r"\d+\.\s", nested_first))
+                nested_tag = "ol" if nested_ordered else "ul"
+                nested_html = self._render_list_items(nested, nested_ordered)
+                result.append(f"<li>{item_text}<{nested_tag}>{nested_html}</{nested_tag}></li>")
+            else:
+                result.append(f"<li>{item_text}</li>")
+
+            i = j
+
+        return "".join(result)
+
+    # ------------------------------------------------------------------
+    # Helpers / detectors
+    # ------------------------------------------------------------------
+
+    def _is_hr(self, line: str) -> bool:
+        """Return True if *line* is a horizontal rule."""
+        for char in ("-", "*", "_"):
+            if re.match(rf"^[{re.escape(char)}\s]{{3,}}$", line) and line.replace(" ", "").replace(char, "") == "":
+                chars = [c for c in line if c == char]
+                if len(chars) >= 3:
+                    return True
+        return False
+
+    def _is_table_row(self, line: str) -> bool:
+        return "|" in line.strip()
+
+    def _is_separator_row(self, line: str) -> bool:
+        stripped = line.strip()
+        if not stripped.startswith("|") and "|" not in stripped:
+            return False
+        # Remove outer pipes
+        inner = stripped
+        if inner.startswith("|"):
+            inner = inner[1:]
+        if inner.endswith("|"):
+            inner = inner[:-1]
+        cells = inner.split("|")
+        return all(re.match(r"^:?-+:?$", cell.strip()) for cell in cells if cell.strip())
+
+    def _is_raw_html(self, line: str) -> bool:
+        """Return True if the line should be passed through as raw HTML."""
+        block_tags = (
+            "div", "table", "p", "ul", "ol", "pre", "blockquote",
+            "h1", "h2", "h3", "h4", "h5", "h6", "hr", "br",
+            "section", "nav", "article", "header", "footer",
+        )
+        if line.startswith("</"):
+            return True
+        for tag in block_tags:
+            if line.lower().startswith(f"<{tag}"):
+                return True
+        return False
 
 
 # ---------------------------------------------------------------------------
