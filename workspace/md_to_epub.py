@@ -62,7 +62,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def extract_chapter_title(md_text: str, filename: str) -> str:
-    ...
+    match = re.search(r'^#\s+(.+)', md_text, re.MULTILINE)
+    if match:
+        heading_text = match.group(1)
+        return re.sub(r'[*_`]', '', heading_text).strip()
+    return Path(filename).stem
 
 
 def collect_images(html: str, source_dir: Path) -> dict[str, bytes]:
