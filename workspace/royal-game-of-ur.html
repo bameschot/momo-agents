@@ -382,6 +382,14 @@
       opacity: 0.85;
     }
 
+    /* Focus-visible styles for keyboard accessibility */
+    .square:focus-visible,
+    .piece:focus-visible,
+    button:focus-visible {
+      outline: 2px solid var(--highlight);
+      outline-offset: 2px;
+    }
+
     /* Respect user's motion preferences */
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -771,6 +779,7 @@
       });
       document.querySelectorAll('.square').forEach(function (el) {
         el.classList.remove('valid-move', 'selected');
+        el.removeAttribute('aria-label');
       });
     }
 
@@ -799,10 +808,17 @@
         if (el) el.classList.add('movable');
       });
 
-      // Apply .valid-move to board squares
+      // Apply .valid-move to board squares and add aria-label
       validSquareIds.forEach(function (squareId) {
         const el = document.querySelector('[data-square-id="' + squareId + '"]');
-        if (el) el.classList.add('valid-move');
+        if (el) {
+          el.classList.add('valid-move');
+          // Find the path position for this square
+          const pathPos = squareIdToPathPos(squareId, gameState.currentPlayer);
+          if (pathPos !== undefined) {
+            el.setAttribute('aria-label', 'Move to position ' + pathPos);
+          }
+        }
       });
     }
 
@@ -919,8 +935,14 @@
       // Update borne-off badge counts
       const borneLight = document.getElementById('borne-light');
       const borneShadow = document.getElementById('borne-shadow');
-      if (borneLight) borneLight.textContent = String(gameState.players[0].borneOff);
-      if (borneShadow) borneShadow.textContent = String(gameState.players[1].borneOff);
+      if (borneLight) {
+        borneLight.textContent = String(gameState.players[0].borneOff);
+        borneLight.setAttribute('aria-label', 'Light borne off: ' + gameState.players[0].borneOff);
+      }
+      if (borneShadow) {
+        borneShadow.textContent = String(gameState.players[1].borneOff);
+        borneShadow.setAttribute('aria-label', 'Shadow borne off: ' + gameState.players[1].borneOff);
+      }
 
       const trayContainers = [
         document.getElementById('tray-light-pieces'),
@@ -928,9 +950,21 @@
       ];
 
       gameState.players.forEach(function (player, playerIndex) {
-        player.pieces.forEach(function (piece) {
+        player.pieces.forEach(function (piece, pieceIndex) {
           const el = document.querySelector('[data-piece-id="' + piece.id + '"]');
           if (!el) return;
+
+          // Update aria-label based on position
+          const playerLabel = player.label;
+          let posLabel;
+          if (piece.position === 0) {
+            posLabel = 'waiting';
+          } else if (piece.position === 15) {
+            posLabel = 'borne off';
+          } else {
+            posLabel = 'position ' + piece.position;
+          }
+          el.setAttribute('aria-label', playerLabel + ' piece ' + (pieceIndex + 1) + ', ' + posLabel);
 
           if (piece.position === 0) {
             // Return to waiting tray
@@ -1124,6 +1158,26 @@
         }
       }, { passive: false });
 
+      // Keyboard support for pieces: Enter or Space activates them
+      document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const pieceEl = e.target.closest('[data-piece-id]');
+        if (!pieceEl) return;
+        e.preventDefault();
+        const pieceId = pieceEl.getAttribute('data-piece-id');
+
+        if (pieceEl.classList.contains('selected')) {
+          // If the only valid move for this piece is bearing off (toPos=15), execute it
+          const pieceMoves = gameState.validMoves.filter(function (m) { return m.pieceId === pieceId; });
+          const hasBoardMove = pieceMoves.some(function (m) { return m.toPos < 15; });
+          if (!hasBoardMove && pieceMoves.some(function (m) { return m.toPos === 15; })) {
+            movePiece(15);
+          }
+        } else if (pieceEl.classList.contains('movable')) {
+          selectPiece(pieceId);
+        }
+      });
+
       // Reset to initial state and render pieces in their trays
       resetGame();
       // Ensure pieces are initialised (resetGame also calls initPieces; safe to call again)
@@ -1183,6 +1237,9 @@
           const piece = document.createElement('div');
           piece.className = 'piece piece-light';
           piece.dataset.pieceId = `L${i}`;
+          piece.setAttribute('role', 'button');
+          piece.setAttribute('tabindex', '0');
+          piece.setAttribute('aria-label', `Light piece ${i + 1}, waiting`);
           trayLightPiecesContainer.appendChild(piece);
         }
       }
@@ -1195,6 +1252,9 @@
           const piece = document.createElement('div');
           piece.className = 'piece piece-shadow';
           piece.dataset.pieceId = `S${i}`;
+          piece.setAttribute('role', 'button');
+          piece.setAttribute('tabindex', '0');
+          piece.setAttribute('aria-label', `Shadow piece ${i + 1}, waiting`);
           trayShadowPiecesContainer.appendChild(piece);
         }
       }
