@@ -13,7 +13,9 @@ import base64
 import html
 import re
 import shutil
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -918,8 +920,47 @@ def render_page(result: ParseResult, title: str | None, toc_html: str) -> str:
 
 
 def export_pdf(html_content: str, output_path: Path) -> None:
-    """Export HTML content to a PDF using wkhtmltopdf."""
-    raise NotImplementedError
+    """Export HTML content to a PDF using wkhtmltopdf.
+
+    Writes *html_content* to a temporary file, then invokes wkhtmltopdf to
+    render it as a PDF at *output_path*.  The temporary file is deleted in a
+    ``finally`` block regardless of success or failure.
+
+    Args:
+        html_content: Complete HTML document string (UTF-8).
+        output_path:  Destination path for the generated PDF.
+
+    Raises:
+        SystemExit(1): If wkhtmltopdf exits with a non-zero return code.
+    """
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as f:
+            tmp_path = f.name
+            f.write(html_content)
+
+        cmd = [
+            "wkhtmltopdf",
+            "--page-size", "A4",
+            "--margin-top", "20mm",
+            "--margin-right", "20mm",
+            "--margin-bottom", "20mm",
+            "--margin-left", "20mm",
+            "--enable-internal-links",
+            "--enable-local-file-access",
+            tmp_path,
+            str(output_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True)
+        if result.returncode != 0:
+            sys.stderr.buffer.write(result.stderr)
+            sys.exit(1)
+    finally:
+        if tmp_path is not None:
+            try:
+                Path(tmp_path).unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def check_wkhtmltopdf() -> None:
@@ -959,14 +1000,33 @@ def check_wkhtmltopdf() -> None:
 
 
 def main() -> None:
-    """Main entry point — stub pipeline (no PDF written yet)."""
+    """Orchestrate the full Markdown → PDF pipeline."""
     check_wkhtmltopdf()
     args = parse_args()
-    print(f"[md2pdf] Input:  {args.input}")
-    print(f"[md2pdf] Output: {args.output}")
-    if args.title:
-        print(f"[md2pdf] Title:  {args.title}")
-    print("[md2pdf] Pipeline not yet implemented.")
+
+    # Read input Markdown file
+    try:
+        markdown_text = args.input.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: cannot read input file: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # Convert Markdown to HTML fragments + metadata
+    result = convert(markdown_text, base_dir=args.input.parent)
+
+    # Resolve title: CLI flag > first H1 > input file stem
+    title = args.title or result.title or args.input.stem
+
+    # Build table of contents
+    toc_html = build_toc(result.headings)
+
+    # Assemble full HTML document
+    page_html = render_page(result, title, toc_html)
+
+    # Invoke wkhtmltopdf
+    export_pdf(page_html, args.output)
+
+    print(f"Written: {args.output}")
 
 
 if __name__ == "__main__":
