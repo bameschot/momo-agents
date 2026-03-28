@@ -18,12 +18,12 @@ momo-agents/
 ├── README.md               # Project overview
 ├── LICENSE                 # MIT License
 ├── pyproject.toml          # Project metadata and dependencies
-├── python-agents/          # Python agent implementations
-│   ├── designer.py         # Interactive design session → design/<feature>.md
-│   ├── business_analyst.py # Breaks design into story files
-│   ├── project_initialiser.py  # Scaffolds workspace/ from design
+├── scripts/          # Python agent implementations
+│   ├── designer_agent.py         # Interactive design session → design/<feature>.md
+│   ├── business_analyst_agent.py # Breaks design into story files
+│   ├── project_initialiser_agent.py  # Scaffolds workspace/ from design
 │   ├── coding_agent.py     # Claims and implements stories
-│   └── story_reviewer.py   # Triages failed stories with user
+│   └── story_reviewer_agent.py   # Triages failed stories with user
 ├── roles/                  # System prompts (read by each agent)
 │   ├── designer.md
 │   ├── business-analyst.md
@@ -71,17 +71,17 @@ ruff check .
 ruff format .
 
 # Run type checker
-mypy python-agents/
+mypy scripts/
 
 # Run the pipeline
 ./orchestrate.sh <feature-name>
 
 # Run an agent directly
-python python-agents/designer.py
-python python-agents/business_analyst.py --design design/my-feature.md
-python python-agents/project_initialiser.py --design design/my-feature.md
-python python-agents/coding_agent.py
-python python-agents/story_reviewer.py
+python scripts/designer_agent.py
+python scripts/business_analyst_agent.py --design design/my-feature.md
+python scripts/project_initialiser_agent.py --design design/my-feature.md
+python scripts/coding_agent.py
+python scripts/story_reviewer_agent.py
 
 # Check pipeline status
 ./status.sh

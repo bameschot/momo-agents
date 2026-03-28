@@ -258,7 +258,7 @@ echo "║        Designer Agent            ║"
 echo "╚══════════════════════════════════╝"
 echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
-"$PYTHON" "${SCRIPT_DIR}/python-agents/designer.py" \
+"$PYTHON" "${SCRIPT_DIR}/scripts/designer_agent.py" \
     --model "${MODEL_DESIGNER}" \
     --design-dir "${SCRIPT_DIR}/design" \
     --token-log "${SENTINEL_DIR}/tokens/designer.jsonl"
@@ -303,7 +303,7 @@ while true; do
 
         echo "[Business Analyst] New design: ${feature} — decomposing into stories..."
         echo ""
-        "$PYTHON" "${SCRIPT_DIR}/python-agents/business_analyst.py" \
+        "$PYTHON" "${SCRIPT_DIR}/scripts/business_analyst_agent.py" \
             --design "$design_file" \
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_BA}" \
@@ -371,7 +371,7 @@ done
 echo "Design file found: ${design_file}"
 echo "Scaffolding workspace..."
 echo ""
-"$PYTHON" "${SCRIPT_DIR}/python-agents/project_initialiser.py" \
+"$PYTHON" "${SCRIPT_DIR}/scripts/project_initialiser_agent.py" \
     --design "${design_file}" \
     --workspace-dir "${WORKSPACE_DIR}" \
     --model "${MODEL_PI}" \
@@ -411,7 +411,7 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    "${PYTHON}" "${SCRIPT_DIR}/python-agents/junior_coding_agent.py" \
+    "${PYTHON}" "${SCRIPT_DIR}/scripts/junior_coding_agent.py" \
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_JUNIOR}" \
@@ -490,7 +490,7 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    "${PYTHON}" "${SCRIPT_DIR}/python-agents/senior_coding_agent.py" \
+    "${PYTHON}" "${SCRIPT_DIR}/scripts/senior_coding_agent.py" \
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_SENIOR}" \
@@ -553,7 +553,7 @@ echo "║      Story Orchestrator          ║"
 echo "╚══════════════════════════════════╝"
 echo "Watches stories/ — marks stories ready when dependencies are met."
 echo ""
-"${PYTHON}" "${SCRIPT_DIR}/python-agents/story_orchestrator.py" \
+"${PYTHON}" "${SCRIPT_DIR}/scripts/story_orchestrator.py" \
     --stories-dir "${STORIES_DIR}"
 echo ""
 echo "[Story Orchestrator exited]"
@@ -602,7 +602,7 @@ while true; do
 
     echo "[Story Reviewer] HALT detected — starting review session..."
     echo ""
-    "${PYTHON}" "${SCRIPT_DIR}/python-agents/story_reviewer.py" \
+    "${PYTHON}" "${SCRIPT_DIR}/scripts/story_reviewer_agent.py" \
         --stories-dir "${STORIES_DIR}" \
         --model "${MODEL_REVIEWER}" \
         --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl"
@@ -700,10 +700,32 @@ _token_summary() {
     shopt -u nullglob
     [ "${#logs[@]}" -eq 0 ] && return 0
 
-    "$PYTHON" - "$tokens_dir" <<'PYEOF'
+    "$PYTHON" - "$tokens_dir" \
+        "designer=${MODEL_DESIGNER}" \
+        "ba=${MODEL_BA}" \
+        "pi=${MODEL_PI}" \
+        "junior=${MODEL_JUNIOR}" \
+        "senior=${MODEL_SENIOR}" \
+        "reviewer=${MODEL_REVIEWER}" <<'PYEOF'
 import sys, json, os, glob
 
 tokens_dir = sys.argv[1]
+# Parse "agentprefix=model-name" args into a lookup dict
+models = {}
+for arg in sys.argv[2:]:
+    if '=' in arg:
+        k, v = arg.split('=', 1)
+        models[k] = v
+
+def get_model(agent):
+    if agent in models:
+        return models[agent]
+    # junior_1, senior_2 etc. — strip the numeric suffix
+    for prefix, model in models.items():
+        if agent.startswith(prefix + '_') or agent == prefix:
+            return model
+    return ''
+
 totals = {}
 for path in sorted(glob.glob(os.path.join(tokens_dir, "*.jsonl"))):
     agent = os.path.basename(path).replace(".jsonl", "")
@@ -731,8 +753,10 @@ if not totals:
 
 print("  Tokens:")
 for agent, (inp, out, cache_r, cache_w) in totals.items():
+    model = get_model(agent)
+    model_note = f"  [{model}]" if model else ""
     cache_note = f"  cache r={cache_r:,} w={cache_w:,}" if cache_r or cache_w else ""
-    print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}")
+    print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}{model_note}")
 PYEOF
 }
 
@@ -777,7 +801,7 @@ while true; do
 
     # Also refresh token summary every ~60 s even when story counts haven't changed
     TOKEN_TICK=$(( TOKEN_TICK + 1 ))
-    if [ "$TOKEN_TICK" -ge 6 ]; then
+    if [ "$TOKEN_TICK" -ge 3 ]; then
         echo ""
         echo "  $(date '+%H:%M:%S')  stories: $STATUS"
         _token_summary

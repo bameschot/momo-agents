@@ -2,7 +2,7 @@
 
 ## What It Is
 
-A multi-agent coding team built on the Claude Agent SDK. The user describes what they want to build; a pipeline of specialised agents turns that description into a design, breaks it into stories, implements the stories in parallel, and escalates to the user only when something is genuinely stuck.
+A multi-agent coding team built on the Claude Agent SDK. The user describes what they want to build; a pipeline of specialised agents turns that description into a design, breaks it into stories, orchestrates which stories are ready to implement, implements the stories in parallel using tier-matched agents, and escalates to the user only when something is genuinely stuck.
 
 ---
 
@@ -10,28 +10,33 @@ A multi-agent coding team built on the Claude Agent SDK. The user describes what
 
 ```
 momo-agents/
-├── python-agents/             ← Python agent implementations
-│   ├── designer.py
-│   ├── business_analyst.py
-│   ├── project_initialiser.py
-│   ├── coding_agent.py
-│   └── story_reviewer.py
-├── roles/                     ← system prompt files (one per agent)
+├── scripts/                   ← Python agent and utility implementations
+│   ├── designer_agent.py
+│   ├── business_analyst_agent.py
+│   ├── project_initialiser_agent.py
+│   ├── story_orchestrator.py      ← non-LLM utility; marks stories ready
+│   ├── junior_coding_agent.py     ← claims easy stories
+│   ├── senior_coding_agent.py     ← claims medium/hard stories
+│   ├── story_reviewer_agent.py
+│   └── token_logger.py            ← shared JSONL token-usage logger
+├── roles/                     ← system prompt files (one per LLM agent)
 │   ├── designer.md
 │   ├── business-analyst.md
 │   ├── project-initialiser.md
-│   ├── coding-agent.md
+│   ├── junior-coding-agent.md
+│   ├── senior-coding-agent.md
 │   └── story-reviewer.md
 ├── design/                    ← Designer Agent outputs
 │   ├── <feature>.new.md       ← written/updated by Designer; queued for BA
 │   └── <feature>.processed.md ← renamed by BA after stories are generated
-├── stories/                   ← story files; state encoded in filename suffix
-│   ├── STORY-001.md           ← pending
-│   ├── STORY-002.working.md   ← claimed by a Coding Agent
-│   ├── STORY-003.done.md      ← complete
-│   ├── STORY-004.failed.md    ← exhausted retries; awaiting review
-│   ├── STORY-005.reviewing.md ← claimed by Story Reviewer
-│   └── HALT                   ← sentinel: all Coding Agents must pause
+├── stories/                   ← story files; complexity + state encoded in filename
+│   ├── STORY-001.md                      ← unprocessed (written by BA)
+│   ├── STORY-002.easy.ready.md           ← deps met; ready for Junior Agent
+│   ├── STORY-003.medium.working.md       ← claimed by a Senior Agent
+│   ├── STORY-004.easy.done.md            ← complete
+│   ├── STORY-005.hard.failed.md          ← exhausted retries; awaiting review
+│   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
+│   └── HALT                              ← sentinel: all Coding Agents must pause
 ├── workspace/                 ← generated source code
 │   ├── CLAUDE.md              ← build/test/lint instructions for Coding Agents
 │   ├── src/
@@ -49,13 +54,15 @@ momo-agents/
 | Agent | Role | Reads from | Writes to |
 |---|---|---|---|
 | **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `design/` |
-| **Business Analyst** | Watches `design/` for `*.new.md` files; decomposes each into stories; renames to `*.processed.md` | `design/*.new.md` | `stories/`, `design/` |
-| **Project Initialiser** | Scaffolds `workspace/` once before any Coding Agent runs | `design/` | `workspace/` |
-| **Coding Agent** (×N) | Claims and implements one story at a time; polls indefinitely for new work | `stories/`, `workspace/CLAUDE.md` | `workspace/` |
-| **Story Reviewer** | Triages permanently-failed stories with user guidance | `stories/*.failed.md` | `stories/` |
+| **Business Analyst** | Watches `design/` for `*.new.md` files; decomposes each into stories with a `**Complexity**` field; renames to `*.processed.md` | `design/*.new.md` | `stories/STORY-NNN.md` |
+| **Project Initialiser** | Scaffolds `workspace/` once when it is empty | `design/` | `workspace/` |
+| **Story Orchestrator** | Watches `stories/` for bare `STORY-NNN.md` files; parses complexity and dependencies; renames to `STORY-NNN.[complexity].ready.md` when deps are met | `stories/STORY-NNN.md`, `stories/*.done.md` | `stories/` |
+| **Junior Coding Agent** (×N) | Claims and implements `easy` stories; polls indefinitely for new work | `stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Senior Coding Agent** (×N) | Claims and implements `medium` and `hard` stories; polls indefinitely | `stories/*.medium.ready.md`, `stories/*.hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Story Reviewer** | Triages permanently-failed stories with user guidance; resets them to unprocessed | `stories/*.failed.md` | `stories/` |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled | `stories/` | `stories/` |
 
-Each agent reads its system prompt from the corresponding file in `roles/` at startup.
+Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` is a plain Python utility — it makes no LLM calls.
 
 ---
 
@@ -74,12 +81,6 @@ The Designer runs as a genuine multi-turn conversation backed by `ClaudeSDKClien
 7. The session continues — the user can keep refining and issue `write` again at any time.
 8. Type `exit`, `quit`, or press `Ctrl+C` to end the session.
 
-### Implementation notes
-
-- Uses `ClaudeSDKClient` (not the one-shot `query()`) so that the SDK session — and therefore Claude's conversation memory — spans the whole session.
-- Allowed tools: `Read`, `Write` (for reading existing files and saving the design doc).
-- Permission mode: `acceptEdits`.
-
 ---
 
 ## Business Analyst Agent
@@ -96,11 +97,11 @@ The BA agent uses design file **state encoded in the filename** — no mtime tra
 ### Watch loop
 
 1. Every 5 seconds, glob all `*.new.md` files in `design/`.
-2. For each `<feature>.new.md` found: run `business_analyst.py --design <file>`.
-3. On completion, rename `<feature>.new.md` → `<feature>.processed.md` (overwrites any previous processed version for that feature).
+2. For each `<feature>.new.md` found: run `business_analyst_agent.py --design <file>`.
+3. On completion, rename `<feature>.new.md` → `<feature>.processed.md`.
 4. Sleep and repeat until `pipeline_complete` is written.
 
-If the designer revises a design and issues `write` again, it saves as `<feature>.new.md`. The BA finds it on the next poll and processes it, naturally overwriting the old `<feature>.processed.md`. No mtime tracking, no intermediate state files.
+Each story written by the BA includes a `**Complexity**: easy | medium | hard` field and a `**Depends on**` field. Stories are written as bare `STORY-NNN.md` files; it is the Story Orchestrator's job to validate them and assign the `.ready` state.
 
 ---
 
@@ -113,41 +114,100 @@ Runs once automatically when the workspace is empty:
 3. Scaffolds the initial directory layout, config files, and empty entry points.
 4. Does **not** implement any story logic.
 
-If `workspace/` already contains files (beyond the skeleton `CLAUDE.md`), the initialiser skips immediately.
+If `workspace/` already contains files beyond the skeleton `CLAUDE.md`, the initialiser skips immediately.
 
 ---
 
-## Coding Agent
+## Story Orchestrator
+
+The Story Orchestrator is a **plain Python utility** (no LLM calls) that continuously watches `stories/` and manages the transition from unprocessed to ready.
+
+### Responsibilities
+
+- Scan for bare `STORY-NNN.md` files (written by the BA, not yet evaluated).
+- Parse `**Complexity**` and `**Depends on**` fields from each file.
+- Check whether all listed dependencies have a corresponding `STORY-NNN.[complexity].done.md` file.
+- If all deps are done (or there are no deps): rename `STORY-NNN.md` → `STORY-NNN.[complexity].ready.md`.
+- If deps are unmet: log the blocked story and re-check on the next poll.
+
+### Why a separate orchestrator?
+
+Moving dependency resolution out of the coding agents has two advantages:
+
+1. **Coding agents stay simple** — they look only for `.ready.md` files with the right complexity; no dependency graph traversal inside a long-running LLM session.
+2. **Automatic unblocking** — when a story finishes and becomes `.done.md`, the orchestrator detects it on the next poll and immediately marks any dependent stories as ready, without any agent needing to be aware.
+
+### Poll interval
+
+Default: 5 seconds. Configurable via `--poll-interval`.
+
+---
+
+## Coding Agents
+
+The pipeline uses two tiers of coding agent, differentiated by the story complexity they handle:
+
+| Agent | Handles | Default model |
+|---|---|---|
+| **Junior Coding Agent** | `easy` stories | `claude-haiku-4-5-20251001` |
+| **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` |
+
+Both agents follow the same loop structure.
 
 ### Polling behaviour
 
-Coding Agents **never stop on their own** — they poll indefinitely for eligible work. The agent loop:
+Coding Agents **never stop on their own** — they poll indefinitely for eligible work:
 
 1. Wait for `workspace/CLAUDE.md` to exist (proof that the Project Initialiser has finished).
-2. Enter the main work loop:
+2. Wait for at least one `.ready.md` story of the correct complexity tier to appear.
+3. Enter the main work loop:
    - If `pipeline_complete` exists → exit cleanly.
-   - If `HALT` exists → wait for it to be removed (Story Reviewer is working), then resume.
-   - Attempt to claim and implement the next eligible story.
-   - If no eligible story is currently available (all are working, done, or blocked by unresolved dependencies) → sleep briefly and poll again.
-   - On unexpected exit code → retry after 10 seconds.
+   - If `HALT` exists → wait for it to be removed, then resume.
+   - Attempt to claim the lowest-numbered eligible `.ready.md` story.
+   - On unexpected exit → retry after 10 seconds.
 
-The agent continues polling even when all current stories are done, because the BA may write new stories at any time (e.g. after the designer updates the design document). The only way to stop a Coding Agent is via the `pipeline_complete` sentinel, which is written when the operator presses `Ctrl+C` in the `start-team.sh` terminal.
+The agents continue polling even when all current stories are done, because the BA may write new stories at any time and the orchestrator will mark them ready automatically.
 
 ### Story claiming
 
-Claiming is an atomic filesystem rename: `STORY-NNN.md` → `STORY-NNN.working.md`. POSIX `rename(2)` is atomic; if two agents race, exactly one succeeds and the other moves to the next candidate.
+Claiming is an atomic filesystem rename:
 
-Before claiming, the agent reads `**Depends on**` from each candidate and skips any whose dependency is not yet `.done.md`.
+```
+STORY-NNN.[complexity].ready.md  →  STORY-NNN.[complexity].working.md
+```
 
-### Workspace commit policy
+POSIX `rename(2)` is atomic; if two agents race, exactly one succeeds and the other moves to the next candidate. The complexity segment is preserved in the filename throughout all state transitions.
 
-Coding Agents do **not** commit workspace changes until a story is successfully completed and renamed `.done.md`. All in-progress work stays uncommitted, making a git-based revert clean and safe on HALT.
+### On success
+
+```
+STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].done.md
+```
+
+Workspace changes are committed. The agent loops back and looks for another story.
+
+### On failure (attempts < 5)
+
+```
+STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].ready.md
+```
+
+A failure note is appended to the story file and the agent retries. The story goes back to `.ready.md` (not bare `.md`) because the orchestrator has already confirmed it is ready — there is no need to re-evaluate.
+
+### On failure (attempts == 5)
+
+```
+STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].failed.md
+                                         + stories/HALT created
+```
+
+All coding agents detect `HALT`, revert uncommitted workspace changes, and wait.
 
 ### HALT handling
 
 On detecting `stories/HALT`:
 1. Discard all uncommitted workspace changes (`git checkout -- workspace/`).
-2. Rename `.working.md` back to `.md`.
+2. Rename `.[complexity].working.md` back to `.[complexity].ready.md`.
 3. Wait until HALT is removed, then resume polling.
 
 ---
@@ -155,26 +215,26 @@ On detecting `stories/HALT`:
 ## Story Reviewer Agent
 
 1. Watches for `stories/HALT` in a continuous loop.
-2. On detection, atomically claims `STORY-NNN.failed.md` → `STORY-NNN.reviewing.md`.
+2. On detection, atomically claims `STORY-NNN.[complexity].failed.md` → `STORY-NNN.[complexity].reviewing.md`.
 3. Reads the full story file including all accumulated failure notes.
 4. Presents the user with the original goal, acceptance criteria, and a plain-language summary of each failed attempt.
 5. Asks the user how to proceed (new approach, relaxed constraints, split the story, etc.).
 6. Rewrites the entire file with a clean, updated story; resets `**Attempts**: 0`; preserves `**Index**` and `**Depends on**`.
-7. If no more `.failed.md` files exist: deletes `stories/HALT`.
-8. Renames `.reviewing.md` → `.md` — story re-enters the pending queue.
+7. Renames `STORY-NNN.[complexity].reviewing.md` → `STORY-NNN.md` (bare, no complexity or state).
+   - This returns the story to the **unprocessed** queue. The Story Orchestrator will re-evaluate the rewritten content and re-assign complexity and readiness.
+8. Once all `.failed.md` stories are resolved: deletes `stories/HALT`.
 9. Returns to watching for the next HALT.
-
-Exits cleanly when `pipeline_complete` is written.
 
 ---
 
 ## Story File Format
 
 ```markdown
-# STORY-NNN: <Short Title>
+# STORY-NNN: [easy|medium|hard] <Short Title>
 
-**Index**: N          ← priority order; lower = worked first
-**Attempts**: 0       ← incremented by each Coding Agent attempt; max 5
+**Index**: N                        ← priority order; lower = worked first
+**Complexity**: easy | medium | hard ← assigned by BA; used by orchestrator and agents
+**Attempts**: 0                     ← incremented by each Coding Agent attempt; max 5
 **Design ref**: design/<feature>.md
 **Depends on**: STORY-NNN | none
 
@@ -192,43 +252,56 @@ Exits cleanly when `pipeline_complete` is written.
 ## Story Lifecycle
 
 ```
-BA Agent writes STORY-NNN.md  (Attempts: 0)
+BA writes STORY-NNN.md  (bare, unprocessed)
       │
-      │  Coding Agent polls → checks dependency → atomically claims:
+      │  Story Orchestrator polls:
+      │    - parses **Complexity** and **Depends on**
+      │    - checks all deps have .done.md
       ▼
-STORY-NNN.working.md   ← owned by exactly one Coding Agent
-      │                  Attempts incremented on claim
-   ┌──┴──────────────┐
-success            failure
-   │                   │  append failure note
-   ▼                Attempts < 5?
-STORY-NNN.done.md   ├─ yes → rename back to STORY-NNN.md  (pending again)
-(commit workspace)  └─ no  → create stories/HALT
-                             rename to STORY-NNN.failed.md
-                                  │
-                           all Coding Agents detect HALT:
-                           revert workspace, release story, wait
-                                  │
-                     Story Reviewer claims .failed.md → .reviewing.md
-                     summarises to user; rewrites story; resets Attempts
-                     deletes HALT when all .failed.md resolved
-                     renames .reviewing.md → .md
-                                  │
-                     Coding Agents resume polling automatically
+STORY-NNN.[complexity].ready.md    ← deps met; complexity confirmed
+      │
+      │  Coding Agent atomically claims (rename):
+      ▼
+STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
+      │                               Attempts incremented in story file
+   ┌──┴────────────────────────┐
+success                     failure
+   │                            │  append failure note
+   ▼                       Attempts < 5?
+STORY-NNN.[complexity].done.md  ├─ yes → rename to .ready.md  (retry)
+(commit workspace)              └─ no  → create stories/HALT
+                                         rename to .failed.md
+                                              │
+                                   All Coding Agents detect HALT:
+                                   revert workspace, release to .ready.md, wait
+                                              │
+                                   Story Reviewer claims:
+                                   .failed.md → .reviewing.md
+                                   rewrites story with user guidance
+                                   renames → bare STORY-NNN.md
+                                   deletes HALT when all .failed.md resolved
+                                              │
+                                   Story Orchestrator re-evaluates bare .md
+                                   → marks .ready.md again
+                                              │
+                                   Coding Agents resume automatically
 ```
 
 ---
 
 ## Story States
 
-| Filename suffix | State | Who can claim it |
-|---|---|---|
-| `.md` | Pending | Any Coding Agent (dependency permitting) |
-| `.working.md` | In progress | — (owned by one Coding Agent) |
-| `.done.md` | Complete | Nobody |
-| `.failed.md` | Exhausted retries | Story Reviewer Agent |
-| `.reviewing.md` | Under review | — (owned by Story Reviewer) |
-| `HALT` (sentinel) | System paused | Triggers stop + revert in all Coding Agents |
+| Filename pattern | State | Written by | Who claims it next |
+|---|---|---|---|
+| `STORY-NNN.md` | **Unprocessed** | Business Analyst | Story Orchestrator |
+| `STORY-NNN.[c].ready.md` | **Ready** | Story Orchestrator | Coding Agent (matching complexity) |
+| `STORY-NNN.[c].working.md` | **In progress** | Coding Agent | — (owned by one agent) |
+| `STORY-NNN.[c].done.md` | **Complete** | Coding Agent | Nobody |
+| `STORY-NNN.[c].failed.md` | **Exhausted retries** | Coding Agent | Story Reviewer |
+| `STORY-NNN.[c].reviewing.md` | **Under review** | Story Reviewer | — (owned by reviewer) |
+| `HALT` *(sentinel)* | **System paused** | Coding Agent | Triggers stop + revert in all Coding Agents |
+
+`[c]` = `easy`, `medium`, or `hard`.
 
 ---
 
@@ -236,7 +309,7 @@ STORY-NNN.done.md   ├─ yes → rename back to STORY-NNN.md  (pending again)
 
 | Attempts so far | On next failure |
 |---|---|
-| 1 – 4 | Append failure note; release story back to pending |
+| 1 – 4 | Append failure note; release story back to `.ready.md` |
 | 5 | Append failure note; create `HALT`; mark `.failed.md` |
 
 Each failure note records the attempt number, a UTC timestamp, and a summary of what went wrong.
@@ -249,12 +322,13 @@ All agent coordination is via atomic filesystem operations — no database, no m
 
 | Operation | Mechanism |
 |---|---|
-| Claim a story | `rename(STORY-NNN.md, STORY-NNN.working.md)` — POSIX atomic |
-| Dependency check | Read `**Depends on**`; skip if dependency not `.done.md` |
+| Mark story ready | Story Orchestrator renames `STORY-NNN.md` → `STORY-NNN.[c].ready.md` after dep check |
+| Claim a story | Coding Agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic |
+| Complexity routing | Filename pattern: Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
 | Halt detection | Check for `stories/HALT` before claiming; wait in loop until removed |
 | Workspace revert | `git checkout -- workspace/` on HALT detection |
 | Pipeline shutdown | `pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
-| Stale agent recovery | Watchdog resets `.working.md` files idle > 10 minutes |
+| Stale agent recovery | Watchdog resets `.[c].working.md` files idle > 10 minutes → `.[c].ready.md` |
 
 ---
 
@@ -265,115 +339,71 @@ All agent coordination is via atomic filesystem operations — no database, no m
 ### Syntax
 
 ```bash
-./start-team.sh <feature-name> [--dev-agents N]
+./start-team.sh <feature-name> [options]
 ```
 
-| Argument | Description | Default |
+| Flag | Description | Default |
 |---|---|---|
-| `feature-name` | Kebab-case name of the feature being built. Used to derive the expected design file path (`design/<feature-name>.md`). | required |
-| `--dev-agents N` | Number of parallel Coding Agents to spawn. All other agents always run as a single instance. | `2` |
-
-### Examples
-
-```bash
-# Start with default 2 coding agents
-./start-team.sh my-feature
-
-# Start with 4 coding agents for a large story backlog
-./start-team.sh my-feature --dev-agents 4
-
-# Start with a single coding agent (useful for debugging)
-./start-team.sh my-feature --dev-agents 1
-```
-
-### What happens on launch
-
-1. The script detects the available terminal emulator (macOS Terminal.app, gnome-terminal, konsole, xfce4-terminal, mate-terminal, xterm, or tmux as fallback).
-2. All agent windows open **simultaneously** — no sequential waiting.
-3. Each window is named after its agent (via ANSI title escape codes and, on macOS, AppleScript `custom title`).
-4. If `workspace/` is empty the Project Initialiser scaffolds it from the design; if it already has content the initialiser skips automatically.
-5. The `start-team.sh` terminal itself becomes the **pipeline monitor** — it prints a status line whenever story counts change.
+| `feature-name` | Kebab-case name of the feature being built | required |
+| `--junior-agents N` | Junior Coding Agents to spawn (easy stories) | `2` |
+| `--senior-agents N` | Senior Coding Agents to spawn (medium/hard stories) | `1` |
+| `--model-designer M` | Model for Designer Agent | `claude-sonnet-4-6` |
+| `--model-ba M` | Model for Business Analyst | `claude-sonnet-4-6` |
+| `--model-pi M` | Model for Project Initialiser | `claude-sonnet-4-6` |
+| `--model-junior M` | Model for Junior Coding Agents | `claude-haiku-4-5-20251001` |
+| `--model-senior M` | Model for Senior Coding Agents | `claude-sonnet-4-6` |
+| `--model-reviewer M` | Model for Story Reviewer | `claude-sonnet-4-6` |
 
 ### Agent windows opened
 
 | Window title | Agent | Notes |
 |---|---|---|
-| `Designer Agent` | Interactive design session | Type your requirements; type `write` to save the design |
-| `Business Analyst` | Design watcher | Polls `design/` every 5 s; re-runs when any `.md` changes |
-| `Project Initialiser` | Workspace scaffolder | Runs once; skips if workspace already populated |
-| `Watchdog` | Stale story reset | Runs continuously until pipeline_complete |
-| `Story Reviewer` | Failed-story triage | Wakes on HALT; interactive with user |
-| `Coding Agent 1` … `Coding Agent N` | Implementation | Polls indefinitely for eligible stories |
+| `🎨 Designer Agent` | Interactive design session | Type requirements; `write` saves the design |
+| `📋 Business Analyst` | Design watcher | Polls `design/` every 5 s for `*.new.md` |
+| `🏗️ Project Initialiser` | Workspace scaffolder | Runs once; skips if workspace already populated |
+| `🎯 Story Orchestrator` | Readiness manager | Continuously marks stories ready as deps complete |
+| `🐕 Watchdog` | Stale story reset | Runs continuously; resets stories idle > 10 min |
+| `🔍 Story Reviewer` | Failed-story triage | Wakes on HALT; interactive with user |
+| `🟢 Junior Coding Agent N [easy]` | Easy story implementation | Polls for `*.easy.ready.md` |
+| `🔵 Senior Coding Agent N [medium/hard]` | Medium/hard story implementation | Polls for `*.medium.ready.md` + `*.hard.ready.md` |
 
 ### Shutting down
 
 Press **`Ctrl+C`** in the `start-team.sh` terminal. This:
 1. Writes `.sentinels/pipeline_complete` — signals all agent windows to exit cleanly.
 2. Kills the watchdog process.
-3. Removes the `.sentinels/` directory.
-4. Prints a final `status.sh` summary.
-
-The individual agent terminal windows remain open (showing their last output) until you close them manually.
-
-### Terminal fallback (tmux)
-
-If no graphical terminal is found, all agents open as panes in a tmux session named `momo-agents`. Attach with:
-
-```bash
-tmux attach -t momo-agents
-```
+3. Prints a final per-agent token-usage summary and `status.sh` snapshot.
+4. Removes the `.sentinels/` directory.
 
 ---
 
 ## `reset-team.sh` — Usage Guide
 
-`reset-team.sh` wipes all generated artefacts and returns the repository to a clean state, ready for a completely fresh run.
-
-### Syntax
+`reset-team.sh` wipes all generated artefacts and returns the repository to a clean state.
 
 ```bash
-./reset-team.sh [--yes]
+./reset-team.sh        # interactive — asks for confirmation
+./reset-team.sh --yes  # non-interactive
 ```
-
-| Argument | Description |
-|---|---|
-| *(none)* | Interactive mode — prints a summary and asks for confirmation before deleting anything. |
-| `--yes` | Non-interactive mode — skips the confirmation prompt. Useful in scripts. |
-
-### What is removed
 
 | Path | What gets deleted |
 |---|---|
-| `stories/` | All `STORY-*` files in every state (`.md`, `.working.md`, `.done.md`, `.failed.md`, `.reviewing.md`) and the `HALT` sentinel |
+| `stories/` | All `STORY-*` files in every state and the `HALT` sentinel |
 | `design/` | All `*.md` design documents |
-| `.sentinels/` | Entire directory (config, wrapper scripts, mtime store, done flags) |
-| `workspace/` | All generated source code, tests, and build artefacts |
-
-### What is preserved
-
-| Path | Why |
-|---|---|
-| `workspace/CLAUDE.md` | Build/test/lint instructions written by hand; not regenerated |
-| `workspace/src/` | Skeleton directory with `.gitkeep` |
-| `workspace/tests/` | Skeleton directory with `.gitkeep` |
-
-### After reset
-
-```bash
-./start-team.sh <new-feature-name>
-```
+| `.sentinels/` | Entire directory |
+| `workspace/` | All generated source code, tests, `CLAUDE.md`, and build artefacts |
 
 ---
 
 ## Watchdog (`watchdog.sh`)
 
-Runs continuously alongside Coding Agents. Every 60 seconds it scans `stories/` for `.working.md` files and checks each file's last-modified timestamp. Any story in `.working.md` state for more than **10 minutes** is assumed to belong to a dead or stalled agent and is reset to pending:
+Runs continuously alongside Coding Agents. Every 60 seconds it scans `stories/` for `.working.md` files older than **10 minutes** and resets them to `.ready.md`:
 
 ```
-STORY-NNN.working.md  →  STORY-NNN.md
+STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].ready.md
 ```
 
-The watchdog does not revert workspace changes — those are handled by the agent itself on halt detection, or remain as uncommitted noise that the next successful agent cleans up via `git checkout -- workspace/`.
+The complexity segment is preserved so the story can be immediately re-claimed by an appropriate agent without going through the orchestrator again.
 
 ---
 
@@ -384,12 +414,13 @@ Prints a live count and list of stories in each state:
 ```
 $ ./status.sh
 
-  pending    2   STORY-001.md  STORY-004.md
-  working    1   STORY-002.working.md
-  done       3   STORY-003  STORY-005  STORY-006
-  failed     0
-  reviewing  0
-  HALT       no
+  unprocessed    2   STORY-001.md  STORY-007.md
+  ready          1   STORY-002.easy.ready.md
+  working        1   STORY-003.medium.working.md
+  done           4   STORY-004.easy.done.md  ...
+  failed         0
+  reviewing      0
+  HALT           no
 ```
 
 Run at any time from any terminal to check pipeline progress.
