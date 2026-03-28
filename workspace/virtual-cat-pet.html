@@ -597,14 +597,10 @@
        * (Actual loop logic lives in later stories; this is the hook.)
        */
       _startGame() {
-        // Update cat name in the header immediately.
-        const nameEl = document.getElementById('cat-name');
-        if (nameEl) nameEl.textContent = this.name;
-        // Wire action buttons (ActionHandler defined in the next <script> block).
+        // Wire action buttons (ActionHandler defined in a later <script> block).
         if (typeof ActionHandler !== 'undefined') ActionHandler.init();
-        // Start the animation loop (AnimationRenderer defined later).
-        if (typeof AnimationRenderer !== 'undefined') AnimationRenderer.start();
-        // Game loop will be wired here in subsequent stories.
+        // Delegate full game startup to the Game orchestrator (defined last).
+        if (typeof Game !== 'undefined') Game.start();
       },
 
       /**
@@ -857,6 +853,9 @@
         if (el && CAT_FRAMES[state]) {
           el.textContent = CAT_FRAMES[state][this._frameIdx];
         }
+
+        // Also refresh non-animation UI (cooldown countdowns etc.) at 4 FPS.
+        if (typeof UIRenderer !== 'undefined') UIRenderer.render();
       }
     };
   </script>
@@ -971,6 +970,122 @@
           el.textContent = baseLabel;
           el.disabled = false;
         }
+      }
+    };
+  </script>
+
+  <script>
+    /* ── Game ────────────────────────────────────────────────────────
+     * Top-level orchestrator. Wires all subsystems into the game loop.
+     * Called by GameState._startGame() after state is ready.
+     * ────────────────────────────────────────────────────────────── */
+    const Game = {
+      /** Handle returned by the 10-second setInterval (null = stopped) */
+      _loopId: null,
+
+      /**
+       * Start (or restart) the game.
+       * Safe to call when already running — stops first.
+       */
+      start() {
+        this.stop(); // clear any existing loop
+
+        // 1. Apply offline catch-up decay.
+        DecayEngine.catchUp();
+
+        // 2. Initial render.
+        UIRenderer.render();
+
+        // 3. Start animation loop.
+        AnimationRenderer.start();
+
+        // 4. Start the 10-second game tick.
+        this._loopId = setInterval(() => this._tick(), 10_000);
+
+        // 5. Wire the resurrect button (idempotent via flag).
+        this._bindResurrect();
+      },
+
+      /**
+       * Stop the game loop and animation.
+       */
+      stop() {
+        if (this._loopId !== null) {
+          clearInterval(this._loopId);
+          this._loopId = null;
+        }
+        AnimationRenderer.stop();
+      },
+
+      /**
+       * 10-second tick — the heartbeat of the game.
+       */
+      _tick() {
+        // a. Apply live decay.
+        DecayEngine.tick(10_000);
+
+        // b. Evaluate neglect → sickness (NeglectChecker from STORY-006).
+        if (typeof NeglectChecker !== 'undefined') NeglectChecker.evaluate();
+
+        // c. Check death condition.
+        if (!GameState.isDead && GameState.health <= 0) {
+          GameState.isDead = true;
+        }
+
+        // d. Tick sleep probability.
+        StateClassifier.tickSleep();
+
+        // e-f. Update lastTick and persist.
+        GameState.lastTick = Date.now();
+        GameState.save();
+
+        // g. Render UI.
+        UIRenderer.render();
+      },
+
+      /**
+       * Wire the #btn-resurrect click handler (once).
+       */
+      _bindResurrect() {
+        if (this._resurrectBound) return;
+        this._resurrectBound = true;
+
+        document.getElementById('btn-resurrect').addEventListener('click', () => {
+          const overlay = document.getElementById('name-prompt');
+          // Update overlay text to communicate death context.
+          const pEl = overlay.querySelector('p');
+          if (pEl) pEl.innerHTML = 'Your cat has died.<br>Give your new cat a name:';
+
+          overlay.style.display = '';
+
+          const input  = document.getElementById('name-input');
+          const button = document.getElementById('btn-start');
+          input.value  = '';
+
+          const onResurrect = () => {
+            const trimmed = input.value.trim();
+            if (!trimmed) return;
+
+            // Reset to fresh defaults with new name.
+            Object.assign(GameState, GameState._defaults(), { name: trimmed });
+            CookieManager.save(GameState);
+            overlay.style.display = 'none';
+
+            // Reset overlay text for future first-run use.
+            if (pEl) pEl.innerHTML = 'What will you name<br>your new cat?';
+
+            button.removeEventListener('click', onResurrect);
+            input.removeEventListener('keydown', keyHandler);
+
+            // The loop is already running — next tick will pick up fresh state.
+            UIRenderer.render();
+          };
+
+          const keyHandler = e => { if (e.key === 'Enter') onResurrect(); };
+
+          button.addEventListener('click', onResurrect);
+          input.addEventListener('keydown', keyHandler);
+        });
       }
     };
   </script>

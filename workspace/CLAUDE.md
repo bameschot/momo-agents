@@ -9,7 +9,15 @@ Coding Agents must read this before implementing any story.
 
 ## Test
 
-> _To be filled in by the Project Initialiser Agent._
+Run all Python test files:
+```
+python3 tests/test_decay_engine.py
+```
+
+If a Node.js runtime is available, the JS-native tests can also be run:
+```
+node tests/decay-engine.test.js
+```
 
 ## Lint / Format
 
