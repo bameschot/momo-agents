@@ -629,13 +629,16 @@
     }
 
     /**
-     * Bootstrap: builds the board and dice UI, then starts the game.
-     * Called once on DOMContentLoaded.
+     * Bootstrap: binds events and starts the game.
+     * Called once on DOMContentLoaded after buildBoard() and buildDiceArea().
      */
     function initGame() {
-      resetGame();
+      // Bind Roll button click handler
       const btn = document.getElementById('btn-roll');
       if (btn) btn.addEventListener('click', rollDice);
+      // Reset to initial state and render pieces in their trays
+      resetGame();
+      // Ensure pieces are initialised (resetGame also calls initPieces; safe to call again)
       initPieces();
     }
 
@@ -737,20 +740,23 @@
       sumEl.textContent = '—';
       diceAreaEl.appendChild(sumEl);
 
-      // Roll button
+      // Roll button — click listener is bound by initGame()
       const btnEl = document.createElement('button');
       btnEl.id = 'btn-roll';
       btnEl.textContent = 'Roll';
       btnEl.setAttribute('aria-label', 'Roll the dice');
-      btnEl.addEventListener('click', rollDice);
       diceAreaEl.appendChild(btnEl);
     }
 
     /**
-     * Roll all 4 dice: randomise values, animate, then update display.
-     * Debounced: button is disabled during the 600 ms animation.
+     * Roll all 4 dice: randomise values, animate, then compute valid moves.
+     * Phase-gated: does nothing if phase !== 'roll'.
+     * Button is disabled for the duration of the animation and during 'select' phase.
      */
     function rollDice() {
+      // Phase guard — only allowed during roll phase
+      if (gameState.phase !== 'roll') return;
+
       const btn = document.getElementById('btn-roll');
       if (!btn || btn.disabled) return;
 
@@ -770,7 +776,7 @@
         die.classList.add('rolling');
       });
 
-      // After animation completes: update visuals and re-enable button
+      // After animation completes: update visuals and transition phase
       setTimeout(function () {
         dice.forEach(function (die, i) {
           die.classList.remove('rolling');
@@ -778,15 +784,31 @@
         });
         const sumEl = document.getElementById('dice-sum');
         if (sumEl) sumEl.textContent = 'Rolled: ' + gameState.diceResult;
-        btn.disabled = false;
+
+        // Compute valid moves for the current player
+        gameState.validMoves = getValidMoves(
+          gameState.currentPlayer,
+          gameState.diceResult,
+          gameState
+        );
+
+        if (gameState.validMoves.length === 0) {
+          // No legal moves — auto-pass to opponent
+          const name = gameState.players[gameState.currentPlayer].label;
+          autoPass('No legal moves for ' + name);
+        } else {
+          // Advance to selection phase
+          gameState.phase = 'select';
+          highlightMoves();
+        }
       }, 600);
     }
 
-    // Bootstrap: build board and pieces on page load
+    // Bootstrap: build board and pieces on page load, then start game
     document.addEventListener('DOMContentLoaded', function () {
       buildBoard();
-      initPieces();
       buildDiceArea();
+      initGame();
     });
   </script>
 </body>
