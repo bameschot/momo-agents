@@ -40,6 +40,7 @@ def _system_prompt() -> str:
 
 async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
     halt_file = stories_dir / "HALT"
+    # Glob matches STORY-NNN.[complexity].failed.md
     failed_stories = sorted(stories_dir.glob("STORY-*.failed.md"))
 
     if not halt_file.exists():
@@ -59,8 +60,10 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
         f"Stories directory: {stories_dir}\n"
         f"HALT file: {halt_file}\n"
         f"Failed stories: {', '.join(s.name for s in failed_stories)}\n\n"
+        "Story filenames follow the pattern STORY-NNN.[complexity].[state].md.\n\n"
         "Work through each failed story one at a time:\n"
-        "1. Atomically claim the next .failed.md story by renaming it to .reviewing.md.\n"
+        "1. Atomically claim the next .failed.md story by renaming it to .reviewing.md "
+        "(preserve the complexity segment, e.g. STORY-001.easy.failed.md → STORY-001.easy.reviewing.md).\n"
         "2. Read the full story file including all accumulated failure notes.\n"
         "3. Use AskUserQuestion to present the user with:\n"
         "   - The story title, goal, and acceptance criteria.\n"
@@ -71,7 +74,9 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
         "   - Preserve **Index** and **Depends on**.\n"
         "   - Rewrite context, acceptance criteria, and hints.\n"
         "   - Remove all old failure notes.\n"
-        "5. Rename .reviewing.md → .md (story re-enters the pending queue).\n"
+        "5. Rename STORY-NNN.[complexity].reviewing.md → STORY-NNN.md (bare, no complexity or state). "
+        "This returns the story to the unprocessed queue so the Story Orchestrator "
+        "re-evaluates it with the rewritten content.\n"
         "6. After ALL failed stories are resolved:\n"
         f"   - Delete {halt_file}.\n"
         "   - Report to the user that the pipeline is ready to resume."
@@ -95,7 +100,6 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
             log_usage(token_log, "reviewer", message.usage)
             print(f"\n\n[Story Reviewer Agent finished — stop reason: {message.stop_reason}]")
 
-    # Confirm HALT was removed.
     if halt_file.exists():
         print(
             f"\nWarning: HALT file still exists at {halt_file}. "

@@ -12,7 +12,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
 
 POLL_INTERVAL = 60  # seconds between polls when no eligible story is available
-ELIGIBLE_COMPLEXITIES = ("medium", "hard")
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -46,37 +45,15 @@ def _system_prompt() -> str:
     return (ROLES_DIR / "senior-coding-agent.md").read_text()
 
 
-def _read_complexity(path: Path) -> str:
-    """Extract the Complexity field value from a story file. Returns empty string if not found."""
-    try:
-        content = path.read_text()
-        match = re.search(r"\*\*Complexity\*\*:\s*(\w+)", content)
-        return match.group(1).lower() if match else ""
-    except OSError:
-        return ""
+def _unclaimed_ready_stories(stories_dir: Path) -> list[Path]:
+    """Return STORY-NNN.[medium|hard].ready.md files, sorted by story number."""
+    medium = list(stories_dir.glob("STORY-*.medium.ready.md"))
+    hard = list(stories_dir.glob("STORY-*.hard.ready.md"))
+    return sorted(medium + hard, key=lambda p: p.name)
 
 
-def _unclaimed_eligible_stories(stories_dir: Path) -> list[Path]:
-    """Return bare STORY-NNN.md files with an eligible complexity, sorted by filename."""
-    candidates = [
-        p for p in stories_dir.glob("STORY-*.md")
-        if re.match(r"^STORY-\d+\.md$", p.name)
-    ]
-    return sorted(
-        (p for p in candidates if _read_complexity(p) in ELIGIBLE_COMPLEXITIES),
-        key=lambda p: p.name,
-    )
-
-
-def _in_progress_stories(stories_dir: Path) -> list[Path]:
-    return list(stories_dir.glob("STORY-*.working.md"))
-
-
-async def _wait_for_eligible_story(stories_dir: Path, pipeline_complete: Path) -> bool:
-    """
-    Poll until at least one unclaimed medium/hard story exists, then return True.
-    Returns False on HALT or pipeline_complete.
-    """
+async def _wait_for_ready_story(stories_dir: Path, pipeline_complete: Path) -> bool:
+    """Poll until at least one unclaimed medium/hard.ready story exists. Returns False on HALT/pipeline_complete."""
     halt_file = stories_dir / "HALT"
     last_status = ""
     while True:
@@ -88,15 +65,13 @@ async def _wait_for_eligible_story(stories_dir: Path, pipeline_complete: Path) -
             print("[Senior Coding Agent] Pipeline complete sentinel detected — exiting.")
             return False
 
-        eligible = _unclaimed_eligible_stories(stories_dir)
-        if eligible:
+        if _unclaimed_ready_stories(stories_dir):
             return True
 
-        in_progress = _in_progress_stories(stories_dir)
-        status = f"in-progress={len(in_progress)}" if in_progress else "all done or no medium/hard stories"
+        status = "waiting for medium/hard.ready stories"
         if status != last_status:
             print(
-                f"[Senior Coding Agent] No unclaimed medium/hard story available ({status}). "
+                f"[Senior Coding Agent] No ready medium/hard stories available. "
                 f"Polling every {POLL_INTERVAL}s..."
             )
             last_status = status
@@ -112,35 +87,39 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
         print("[Senior Coding Agent] HALT file detected on startup — exiting immediately.")
         return
 
-    if not await _wait_for_eligible_story(stories_dir, pipeline_complete):
+    if not await _wait_for_ready_story(stories_dir, pipeline_complete):
         print("[Senior Coding Agent] No medium/hard stories to process — exiting.")
         return
 
     task = (
         f"Project root: {PROJECT_ROOT}\n"
         f"Stories directory: {stories_dir}\n"
-        f"Workspace directory: {workspace_dir}\n"
-        f"Eligible complexity levels: {', '.join(ELIGIBLE_COMPLEXITIES)}\n\n"
+        f"Workspace directory: {workspace_dir}\n\n"
         "Begin the coding agent loop now:\n"
         f"1. Check for {halt_file} — exit immediately if it exists.\n"
-        f"2. Scan {stories_dir} for pending stories (STORY-*.md, not .working/.done/.failed/.reviewing).\n"
-        f"3. Filter to stories where **Complexity** is one of: {', '.join(ELIGIBLE_COMPLEXITIES)}. "
-        "Skip any story whose complexity does not match — those belong to Junior Coding Agents.\n"
-        "4. Sort eligible candidates by the **Index** field (ascending). For each candidate, check "
-        "**Depends on** and skip if the dependency is not yet .done.md.\n"
-        "5. Atomically claim the lowest-index eligible story by renaming "
-        "STORY-NNN.md → STORY-NNN.working.md. If the rename fails (another agent claimed "
-        "it first), try the next candidate. If no story can be claimed, exit.\n"
-        f"6. Read {workspace_dir}/CLAUDE.md for build, test, and lint instructions.\n"
+        f"2. Scan {stories_dir} for files matching STORY-NNN.medium.ready.md or "
+        "STORY-NNN.hard.ready.md. These have already been validated as ready to implement "
+        "by the Story Orchestrator.\n"
+        "3. Sort candidates by story number (ascending). Pick the lowest-numbered one.\n"
+        "4. Atomically claim it by renaming STORY-NNN.[complexity].ready.md → "
+        "STORY-NNN.[complexity].working.md (preserving the complexity segment). "
+        "If the rename fails (race with another agent), try the next candidate. "
+        "If none can be claimed, exit.\n"
+        f"5. Read {workspace_dir}/CLAUDE.md for build, test, and lint instructions.\n"
+        "6. Read the story file fully.\n"
         "7. Increment **Attempts** in the story file header.\n"
         "8. Implement the story's acceptance criteria inside the workspace directory.\n"
         "9. Run tests and linter as instructed in CLAUDE.md.\n"
         f"10. Before committing, check for {halt_file} again — if found, perform the "
-        "halt procedure (discard uncommitted changes, rename .working.md back to .md, exit).\n"
-        "11. On success: rename .working.md → .done.md, commit workspace changes, loop to step 1.\n"
+        "halt procedure (discard uncommitted changes, rename .working.md back to "
+        ".ready.md, exit).\n"
+        "11. On success: rename STORY-NNN.[complexity].working.md → "
+        "STORY-NNN.[complexity].done.md, commit workspace changes, loop to step 1.\n"
         "12. On failure: append a timestamped failure note below the --- separator. "
-        "If Attempts < 5, rename back to .md and loop. "
-        f"If Attempts == 5, create {halt_file}, rename to .failed.md, perform halt procedure, exit."
+        "If Attempts < 5, rename STORY-NNN.[complexity].working.md → "
+        "STORY-NNN.[complexity].ready.md and loop. "
+        f"If Attempts == 5, create {halt_file}, rename to "
+        "STORY-NNN.[complexity].failed.md, perform halt procedure, exit."
     )
 
     options = ClaudeAgentOptions(

@@ -537,6 +537,28 @@ exec bash '$SENTINEL_DIR/senior_coding_agent_body.sh'
 STUB
 done
 
+# ── Story Orchestrator ────────────────────────────────────────────────────────
+# Watches stories/ for new STORY-NNN.md files, parses complexity and deps,
+# and renames them to STORY-NNN.[complexity].ready.md when deps are met.
+cat > "$SENTINEL_DIR/run_orchestrator.sh" << 'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '\033]0;Story Orchestrator\007'
+source "$(dirname "$0")/config.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/.venv/bin/activate"
+
+echo "╔══════════════════════════════════╗"
+echo "║      Story Orchestrator          ║"
+echo "╚══════════════════════════════════╝"
+echo "Watches stories/ — marks stories ready when dependencies are met."
+echo ""
+"${PYTHON}" "${SCRIPT_DIR}/python-agents/story_orchestrator.py" \
+    --stories-dir "${STORIES_DIR}"
+echo ""
+echo "[Story Orchestrator exited]"
+WRAPPER
+
 # ── Watchdog ──────────────────────────────────────────────────────────────────
 cat > "$SENTINEL_DIR/run_watchdog.sh" << 'WRAPPER'
 #!/usr/bin/env bash
@@ -594,6 +616,7 @@ chmod +x \
     "$SENTINEL_DIR/run_designer.sh" \
     "$SENTINEL_DIR/run_ba.sh" \
     "$SENTINEL_DIR/run_pi.sh" \
+    "$SENTINEL_DIR/run_orchestrator.sh" \
     "$SENTINEL_DIR/junior_coding_agent_body.sh" \
     "$SENTINEL_DIR/senior_coding_agent_body.sh" \
     "$SENTINEL_DIR/run_watchdog.sh" \
@@ -610,13 +633,14 @@ done
 # ─────────────────────────────────────────────────────────────────────────────
 # Launch ALL windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
-TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 5 ))
-echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 5 fixed agents)..."
+TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 6 ))
+echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 6 fixed agents)..."
 echo ""
 
 open_window "🎨 Designer Agent"        "$SENTINEL_DIR/run_designer.sh"
 open_window "📋 Business Analyst"      "$SENTINEL_DIR/run_ba.sh"
 open_window "🏗️  Project Initialiser"  "$SENTINEL_DIR/run_pi.sh"
+open_window "🎯 Story Orchestrator"    "$SENTINEL_DIR/run_orchestrator.sh"
 open_window "🐕 Watchdog"              "$SENTINEL_DIR/run_watchdog.sh"
 open_window "🔍 Story Reviewer"        "$SENTINEL_DIR/run_story_reviewer.sh"
 
@@ -646,13 +670,23 @@ echo ""
 echo "Monitoring pipeline (press Ctrl+C to shut down the team)..."
 echo ""
 
-_count_pending_stories() {
+_count_stories() {
+    # _count_stories <state-suffix>
+    # state-suffix examples: "ready" "working" "done" "failed"
+    # For bare unprocessed stories use state-suffix "unprocessed"
+    local state="$1"
     local count=0 f base
-    for f in "$STORIES_DIR"/STORY-*.md; do
-        [[ -f "$f" ]] || continue
-        base="$(basename "$f")"
-        [[ "$base" =~ ^STORY-[0-9]+\.md$ ]] && (( count++ )) || true
-    done
+    if [[ "$state" == "unprocessed" ]]; then
+        for f in "$STORIES_DIR"/STORY-*.md; do
+            [[ -f "$f" ]] || continue
+            base="$(basename "$f")"
+            [[ "$base" =~ ^STORY-[0-9]+\.md$ ]] && (( count++ )) || true
+        done
+    else
+        for f in "$STORIES_DIR"/STORY-*."${state}".md; do
+            [[ -f "$f" ]] && (( count++ )) || true
+        done
+    fi
     echo "$count"
 }
 
@@ -725,13 +759,14 @@ trap '_teardown' INT TERM
 LAST_STATUS=""
 TOKEN_TICK=0
 while true; do
-    pending="$(_count_pending_stories)"
-    working=$(find "$STORIES_DIR" -maxdepth 1 -name "STORY-*.working.md"  2>/dev/null | wc -l | tr -d ' ')
-    done_n=$(find  "$STORIES_DIR" -maxdepth 1 -name "STORY-*.done.md"     2>/dev/null | wc -l | tr -d ' ')
-    failed=$(find  "$STORIES_DIR" -maxdepth 1 -name "STORY-*.failed.md"   2>/dev/null | wc -l | tr -d ' ')
+    unproc="$(_count_stories unprocessed)"
+    ready="$(_count_stories ready)"
+    working="$(_count_stories working)"
+    done_n="$(_count_stories done)"
+    failed="$(_count_stories failed)"
     halt_flag=$( [ -f "$STORIES_DIR/HALT" ] && echo "  ⚠ HALTED" || echo "" )
 
-    STATUS="pending=${pending}  working=${working}  done=${done_n}  failed=${failed}${halt_flag}"
+    STATUS="unproc=${unproc}  ready=${ready}  working=${working}  done=${done_n}  failed=${failed}${halt_flag}"
     if [ "$STATUS" != "$LAST_STATUS" ]; then
         echo ""
         echo "  $(date '+%H:%M:%S')  stories: $STATUS"

@@ -19,9 +19,10 @@ while true; do
         age=$(( now - last_modified ))
 
         if [ "$age" -gt "$STALE_SECONDS" ]; then
-            pending_file="${working_file%.working.md}.md"
-            if mv "$working_file" "$pending_file" 2>/dev/null; then
-                echo "[watchdog] reset stale story: $(basename "$working_file") → $(basename "$pending_file") (age: ${age}s)"
+            # STORY-NNN.[complexity].working.md → STORY-NNN.[complexity].ready.md
+            ready_file="${working_file%.working.md}.ready.md"
+            if mv "$working_file" "$ready_file" 2>/dev/null; then
+                echo "[watchdog] reset stale story: $(basename "$working_file") → $(basename "$ready_file") (age: ${age}s)"
             fi
         fi
     done
