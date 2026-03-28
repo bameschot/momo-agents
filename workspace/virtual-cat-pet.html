@@ -600,6 +600,8 @@
         // Update cat name in the header immediately.
         const nameEl = document.getElementById('cat-name');
         if (nameEl) nameEl.textContent = this.name;
+        // Wire action buttons (ActionHandler defined in the next <script> block).
+        if (typeof ActionHandler !== 'undefined') ActionHandler.init();
         // Game loop will be wired here in subsequent stories.
       },
 
@@ -614,6 +616,77 @@
 
     /* Auto-initialise once the DOM is ready. */
     document.addEventListener('DOMContentLoaded', () => GameState.init());
+  </script>
+
+  <script>
+    /* ── ActionHandler ───────────────────────────────────────────────
+     * Implements the Feed, Play, and Care player actions.
+     * Reads / mutates GameState, then calls GameState.save().
+     * Transient animation state is stored here for StateClassifier.
+     * ────────────────────────────────────────────────────────────── */
+    const ActionHandler = {
+      /** Current transient animation name ('eating' | 'playing' | null) */
+      transientState: null,
+      /** Timestamp (ms) when the transient animation expires */
+      transientUntil: 0,
+
+      /**
+       * Feed the cat: +35 hunger (capped 100), 2-min cooldown, eating anim.
+       * No-op when dead or cooldown active.
+       */
+      feed() {
+        if (GameState.isDead) return;
+        if (Date.now() < GameState.cooldowns.feed) return;
+
+        GameState.hunger = Math.min(100, GameState.hunger + 35);
+        GameState.cooldowns.feed = Date.now() + 120_000;
+        this.transientState = 'eating';
+        this.transientUntil = Date.now() + 2_000;
+        GameState.save();
+      },
+
+      /**
+       * Play with the cat: +28 happiness (capped 100), 3-min cooldown, playing anim.
+       * No-op when dead, sick (forceSick), or cooldown active.
+       */
+      play() {
+        if (GameState.isDead) return;
+        if (GameState.forceSick) return;
+        if (Date.now() < GameState.cooldowns.play) return;
+
+        GameState.happiness = Math.min(100, GameState.happiness + 28);
+        GameState.cooldowns.play = Date.now() + 180_000;
+        this.transientState = 'playing';
+        this.transientUntil = Date.now() + 2_000;
+        GameState.save();
+      },
+
+      /**
+       * Care for the cat: +40 health (capped 100), clears forceSick, 5-min cooldown.
+       * No-op when dead, cooldown active, AND neither forceSick nor health < 40.
+       */
+      care() {
+        if (GameState.isDead) return;
+        if (Date.now() < GameState.cooldowns.care) return;
+        // Care is only available when sick or health is critically low.
+        if (!GameState.forceSick && GameState.health >= 40) return;
+
+        GameState.health = Math.min(100, GameState.health + 40);
+        GameState.forceSick = false;
+        GameState.cooldowns.care = Date.now() + 300_000;
+        GameState.save();
+      },
+
+      /**
+       * Wire click listeners to the three action buttons.
+       * Called once during game startup.
+       */
+      init() {
+        document.getElementById('btn-feed').addEventListener('click', () => this.feed());
+        document.getElementById('btn-play').addEventListener('click', () => this.play());
+        document.getElementById('btn-care').addEventListener('click', () => this.care());
+      }
+    };
   </script>
 
 </body>
