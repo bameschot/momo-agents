@@ -3,6 +3,8 @@
 # Agents self-coordinate via the filesystem; no window needs to wait for another.
 #
 # Usage: ./start-team.sh <feature-name> [--dev-agents N]
+#        [--model-designer M] [--model-ba M] [--model-pi M]
+#        [--model-coder M] [--model-reviewer M]
 #
 # Supported terminal environments (auto-detected in priority order):
 #   macOS   : Terminal.app via osascript
@@ -22,22 +24,42 @@ SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
 
 FEATURE="${1:-}"
 N_DEV_AGENTS=2
+DEFAULT_MODEL="claude-sonnet-4-6"
+MODEL_DESIGNER="$DEFAULT_MODEL"
+MODEL_BA="$DEFAULT_MODEL"
+MODEL_PI="$DEFAULT_MODEL"
+MODEL_CODER="$DEFAULT_MODEL"
+MODEL_REVIEWER="$DEFAULT_MODEL"
 
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
-        --dev-agents=*) N_DEV_AGENTS="${args[$i]#*=}" ;;
-        --dev-agents)   N_DEV_AGENTS="${args[$((i + 1))]:-2}" ;;
+        --dev-agents=*)     N_DEV_AGENTS="${args[$i]#*=}" ;;
+        --dev-agents)       N_DEV_AGENTS="${args[$((i + 1))]:-2}" ;;
+        --model-designer=*) MODEL_DESIGNER="${args[$i]#*=}" ;;
+        --model-designer)   MODEL_DESIGNER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-ba=*)       MODEL_BA="${args[$i]#*=}" ;;
+        --model-ba)         MODEL_BA="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-pi=*)       MODEL_PI="${args[$i]#*=}" ;;
+        --model-pi)         MODEL_PI="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-coder=*)    MODEL_CODER="${args[$i]#*=}" ;;
+        --model-coder)      MODEL_CODER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-reviewer=*) MODEL_REVIEWER="${args[$i]#*=}" ;;
+        --model-reviewer)   MODEL_REVIEWER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
     esac
 done
 
 if [ -z "$FEATURE" ]; then
-    echo "Usage: $0 <feature-name> [--dev-agents N]"
+    echo "Usage: $0 <feature-name> [options]"
     echo ""
-    echo "  feature-name   Short kebab-case name for the feature to build"
-    echo "  --dev-agents N Number of parallel Coding Agents to spawn (default: 2)"
-    echo "                 All other agents (Designer, BA, PI, Watchdog, Reviewer)"
-    echo "                 always start as a single instance."
+    echo "  feature-name         Short kebab-case name for the feature to build"
+    echo ""
+    echo "  --dev-agents N       Parallel Coding Agents to spawn (default: 2)"
+    echo "  --model-designer M   Model for Designer Agent      (default: $DEFAULT_MODEL)"
+    echo "  --model-ba M         Model for Business Analyst    (default: $DEFAULT_MODEL)"
+    echo "  --model-pi M         Model for Project Initialiser (default: $DEFAULT_MODEL)"
+    echo "  --model-coder M      Model for each Coding Agent   (default: $DEFAULT_MODEL)"
+    echo "  --model-reviewer M   Model for Story Reviewer      (default: $DEFAULT_MODEL)"
     exit 1
 fi
 
@@ -174,6 +196,11 @@ DESIGN_FILE='$DESIGN_FILE'
 SENTINEL_DIR='$SENTINEL_DIR'
 PYTHON='$PYTHON'
 ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
+MODEL_DESIGNER='$MODEL_DESIGNER'
+MODEL_BA='$MODEL_BA'
+MODEL_PI='$MODEL_PI'
+MODEL_CODER='$MODEL_CODER'
+MODEL_REVIEWER='$MODEL_REVIEWER'
 CONFIG
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -190,6 +217,13 @@ echo "  Dev Agents : $N_DEV_AGENTS  (coding agents only; all others are single-i
 echo "  Python     : $PYTHON"
 echo "  Terminal   : $TERMINAL"
 echo "  Workspace  : $WS_STATE"
+echo ""
+echo "  Models:"
+echo "    Designer   : $MODEL_DESIGNER"
+echo "    BA         : $MODEL_BA"
+echo "    PI         : $MODEL_PI"
+echo "    Coder      : $MODEL_CODER"
+echo "    Reviewer   : $MODEL_REVIEWER"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -213,7 +247,9 @@ echo "║        Designer Agent            ║"
 echo "╚══════════════════════════════════╝"
 echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
-"$PYTHON" "${SCRIPT_DIR}/python-agents/designer.py"
+"$PYTHON" "${SCRIPT_DIR}/python-agents/designer.py" \
+    --model "${MODEL_DESIGNER}" \
+    --design-dir "${SCRIPT_DIR}/design"
 touch "${SENTINEL_DIR}/designer.done"
 echo ""
 echo "[Designer Agent complete]"
@@ -255,7 +291,10 @@ while true; do
 
         echo "[Business Analyst] New design: ${feature} — decomposing into stories..."
         echo ""
-        "$PYTHON" "${SCRIPT_DIR}/python-agents/business_analyst.py" --design "$design_file"
+        "$PYTHON" "${SCRIPT_DIR}/python-agents/business_analyst.py" \
+            --design "$design_file" \
+            --stories-dir "${STORIES_DIR}" \
+            --model "${MODEL_BA}"
 
         # Mark as processed — overwrites any previous .processed.md for the same feature
         mv "$design_file" "$processed"
@@ -299,7 +338,10 @@ echo "Waiting for design file: ${DESIGN_FILE}"
 while [ ! -f "${DESIGN_FILE}" ]; do sleep 3; done
 echo "Design file found — scaffolding workspace..."
 echo ""
-"$PYTHON" "${SCRIPT_DIR}/python-agents/project_initialiser.py" --design "${DESIGN_FILE}"
+"$PYTHON" "${SCRIPT_DIR}/python-agents/project_initialiser.py" \
+    --design "${DESIGN_FILE}" \
+    --workspace-dir "${WORKSPACE_DIR}" \
+    --model "${MODEL_PI}"
 touch "${SENTINEL_DIR}/pi.done"
 echo ""
 echo "[Project Initialiser Agent complete]"
@@ -335,7 +377,10 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    "${PYTHON}" "${SCRIPT_DIR}/python-agents/coding_agent.py"
+    "${PYTHON}" "${SCRIPT_DIR}/python-agents/coding_agent.py" \
+        --stories-dir "${STORIES_DIR}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_CODER}"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -422,7 +467,9 @@ while true; do
 
     echo "[Story Reviewer] HALT detected — starting review session..."
     echo ""
-    "${PYTHON}" "${SCRIPT_DIR}/python-agents/story_reviewer.py"
+    "${PYTHON}" "${SCRIPT_DIR}/python-agents/story_reviewer.py" \
+        --stories-dir "${STORIES_DIR}" \
+        --model "${MODEL_REVIEWER}"
     echo ""
     echo "[Story Reviewer] Session complete — resuming watch."
     echo ""

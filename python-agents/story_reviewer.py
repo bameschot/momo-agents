@@ -1,4 +1,5 @@
 """Story Reviewer Agent — triages .failed.md stories with the user and resets them."""
+import argparse
 import anyio
 import sys
 from pathlib import Path
@@ -6,17 +7,33 @@ from pathlib import Path
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
 
 PROJECT_ROOT = Path(__file__).parent.parent
-STORIES_DIR = PROJECT_ROOT / "stories"
 ROLES_DIR = PROJECT_ROOT / "roles"
+
+DEFAULT_MODEL = "claude-sonnet-4-6"
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Story Reviewer Agent")
+    parser.add_argument(
+        "--stories-dir",
+        default=str(PROJECT_ROOT / "stories"),
+        help="Directory containing story files (default: <project-root>/stories)",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"Claude model to use (default: {DEFAULT_MODEL})",
+    )
+    return parser.parse_args()
 
 
 def _system_prompt() -> str:
     return (ROLES_DIR / "story-reviewer.md").read_text()
 
 
-async def run() -> None:
-    halt_file = STORIES_DIR / "HALT"
-    failed_stories = sorted(STORIES_DIR.glob("STORY-*.failed.md"))
+async def run(stories_dir: Path, model: str) -> None:
+    halt_file = stories_dir / "HALT"
+    failed_stories = sorted(stories_dir.glob("STORY-*.failed.md"))
 
     if not halt_file.exists():
         print("[Story Reviewer] No HALT file found — nothing to review.")
@@ -32,7 +49,7 @@ async def run() -> None:
 
     task = (
         f"Project root: {PROJECT_ROOT}\n"
-        f"Stories directory: {STORIES_DIR}\n"
+        f"Stories directory: {stories_dir}\n"
         f"HALT file: {halt_file}\n"
         f"Failed stories: {', '.join(s.name for s in failed_stories)}\n\n"
         "Work through each failed story one at a time:\n"
@@ -59,6 +76,7 @@ async def run() -> None:
         allowed_tools=["AskUserQuestion", "Read", "Write", "Glob", "Bash"],
         permission_mode="default",
         max_turns=500,
+        model=model,
     )
 
     async for message in query(prompt=task, options=options):
@@ -79,4 +97,8 @@ async def run() -> None:
 
 
 if __name__ == "__main__":
-    anyio.run(run)
+    args = _parse_args()
+    stories_dir = Path(args.stories_dir)
+    if not stories_dir.is_absolute():
+        stories_dir = PROJECT_ROOT / stories_dir
+    anyio.run(run, stories_dir, args.model)

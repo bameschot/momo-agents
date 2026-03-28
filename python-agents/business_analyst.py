@@ -7,12 +7,9 @@ from pathlib import Path
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
 
 PROJECT_ROOT = Path(__file__).parent.parent
-STORIES_DIR = PROJECT_ROOT / "stories"
 ROLES_DIR = PROJECT_ROOT / "roles"
 
-
-def _system_prompt() -> str:
-    return (ROLES_DIR / "business-analyst.md").read_text()
+DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -22,22 +19,38 @@ def _parse_args() -> argparse.Namespace:
         required=True,
         help="Path to the design document (e.g. design/my-feature.md)",
     )
+    parser.add_argument(
+        "--stories-dir",
+        default=str(PROJECT_ROOT / "stories"),
+        help="Directory where story files are written (default: <project-root>/stories)",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"Claude model to use (default: {DEFAULT_MODEL})",
+    )
     return parser.parse_args()
 
 
-async def run(design_path: Path) -> None:
+def _system_prompt() -> str:
+    return (ROLES_DIR / "business-analyst.md").read_text()
+
+
+async def run(design_path: Path, stories_dir: Path, model: str) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
 
+    stories_dir.mkdir(parents=True, exist_ok=True)
+
     # Determine the next story number by counting existing story files.
-    existing = sorted(STORIES_DIR.glob("STORY-*.md"))
+    existing = sorted(stories_dir.glob("STORY-*.md"))
     next_index = len(existing) + 1
 
     task = (
         f"Project root: {PROJECT_ROOT}\n"
         f"Design document: {design_path}\n"
-        f"Stories output directory: {STORIES_DIR}\n"
+        f"Stories output directory: {stories_dir}\n"
         f"Next story number to use: {next_index:03d} (zero-padded three digits)\n\n"
         "Read the design document in full. Decompose it into an ordered set of discrete, "
         "implementable stories and write each one to the stories directory as STORY-NNN.md. "
@@ -51,6 +64,7 @@ async def run(design_path: Path) -> None:
         allowed_tools=["Read", "Write", "Glob"],
         permission_mode="acceptEdits",
         max_turns=200,
+        model=model,
     )
 
     async for message in query(prompt=task, options=options):
@@ -67,4 +81,7 @@ if __name__ == "__main__":
     design_path = Path(args.design)
     if not design_path.is_absolute():
         design_path = PROJECT_ROOT / design_path
-    anyio.run(run, design_path)
+    stories_dir = Path(args.stories_dir)
+    if not stories_dir.is_absolute():
+        stories_dir = PROJECT_ROOT / stories_dir
+    anyio.run(run, design_path, stories_dir, args.model)

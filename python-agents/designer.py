@@ -1,6 +1,6 @@
 """Designer Agent — interactive multi-turn Q&A session that produces design/<feature>.new.md."""
+import argparse
 import anyio
-import sys
 from pathlib import Path
 
 from claude_agent_sdk import (
@@ -12,28 +12,46 @@ from claude_agent_sdk import (
 )
 
 PROJECT_ROOT = Path(__file__).parent.parent
-DESIGN_DIR = PROJECT_ROOT / "design"
 ROLES_DIR = PROJECT_ROOT / "roles"
 
-INITIAL_PROMPT = (
-    f"Project root: {PROJECT_ROOT}\n"
-    f"Design output directory: {DESIGN_DIR}\n\n"
-    "Begin the design session. Greet the user and ask what they want to build. "
-    "Ask clarifying questions freely until you have a complete, unambiguous picture "
-    "of the requirements.\n\n"
-    "File naming rules:\n"
-    f"- Always save designs as {DESIGN_DIR}/<feature-name>.new.md, where <feature-name> "
-    "is a short kebab-case identifier derived from what is being designed.\n"
-    f"- If {DESIGN_DIR}/<feature-name>.processed.md already exists (an earlier version "
-    "was processed by the Business Analyst), still write to <feature-name>.new.md — "
-    "this signals the BA to re-process the updated design.\n"
-    "- Never write to <feature-name>.processed.md directly.\n\n"
-    "When the user says 'write', produce and save the design document using these rules."
-)
+DEFAULT_MODEL = "claude-sonnet-4-6"
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Designer Agent")
+    parser.add_argument(
+        "--design-dir",
+        default=str(PROJECT_ROOT / "design"),
+        help="Directory where design documents are written (default: <project-root>/design)",
+    )
+    parser.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help=f"Claude model to use (default: {DEFAULT_MODEL})",
+    )
+    return parser.parse_args()
 
 
 def _system_prompt() -> str:
     return (ROLES_DIR / "designer.md").read_text()
+
+
+def _initial_prompt(design_dir: Path) -> str:
+    return (
+        f"Project root: {PROJECT_ROOT}\n"
+        f"Design output directory: {design_dir}\n\n"
+        "Begin the design session. Greet the user and ask what they want to build. "
+        "Ask clarifying questions freely until you have a complete, unambiguous picture "
+        "of the requirements.\n\n"
+        "File naming rules:\n"
+        f"- Always save designs as {design_dir}/<feature-name>.new.md, where <feature-name> "
+        "is a short kebab-case identifier derived from what is being designed.\n"
+        f"- If {design_dir}/<feature-name>.processed.md already exists (an earlier version "
+        "was processed by the Business Analyst), still write to <feature-name>.new.md — "
+        "this signals the BA to re-process the updated design.\n"
+        "- Never write to <feature-name>.processed.md directly.\n\n"
+        "When the user says 'write', produce and save the design document using these rules."
+    )
 
 
 async def _stream_response(client: ClaudeSDKClient) -> str | None:
@@ -49,8 +67,8 @@ async def _stream_response(client: ClaudeSDKClient) -> str | None:
     return stop_reason
 
 
-async def run() -> None:
-    DESIGN_DIR.mkdir(parents=True, exist_ok=True)
+async def run(design_dir: Path, model: str) -> None:
+    design_dir.mkdir(parents=True, exist_ok=True)
 
     options = ClaudeAgentOptions(
         cwd=str(PROJECT_ROOT),
@@ -58,11 +76,12 @@ async def run() -> None:
         allowed_tools=["Read", "Write"],
         permission_mode="acceptEdits",
         max_turns=50,
+        model=model,
     )
 
     async with ClaudeSDKClient(options=options) as client:
         # Initial greeting turn
-        await client.query(INITIAL_PROMPT)
+        await client.query(_initial_prompt(design_dir))
         await _stream_response(client)
         print()  # newline after agent response
 
@@ -92,4 +111,8 @@ async def run() -> None:
 
 
 if __name__ == "__main__":
-    anyio.run(run)
+    args = _parse_args()
+    design_dir = Path(args.design_dir)
+    if not design_dir.is_absolute():
+        design_dir = PROJECT_ROOT / design_dir
+    anyio.run(run, design_dir, args.model)
