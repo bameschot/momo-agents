@@ -1,0 +1,477 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>momo-agents</title><style>
+/* ── Reset & Custom Properties ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #ffffff;
+  --text:         #1a1a1a;
+  --muted:        #555555;
+  --link:         #0066cc;
+  --border:       #d0d0d0;
+  --code-bg:      #f5f5f5;
+  --code-text:    #333333;
+  --pre-bg:       #f8f8f8;
+  --table-head:   #f0f0f0;
+  --table-alt:    #fafafa;
+  --bq-border:    #0066cc;
+  --bq-bg:        #f0f4ff;
+  --hr-color:     #cccccc;
+  --toggle-bg:    #e8e8e8;
+}
+
+[data-theme="dark"] {
+  --bg:           #1e1e1e;
+  --text:         #d4d4d4;
+  --muted:        #999999;
+  --link:         #66b3ff;
+  --border:       #444444;
+  --code-bg:      #2d2d2d;
+  --code-text:    #c9d1d9;
+  --pre-bg:       #252525;
+  --table-head:   #2a2a2a;
+  --table-alt:    #232323;
+  --bq-border:    #66b3ff;
+  --bq-bg:        #1e2a3a;
+  --hr-color:     #444444;
+  --toggle-bg:    #333333;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:           #1e1e1e;
+    --text:         #d4d4d4;
+    --muted:        #999999;
+    --link:         #66b3ff;
+    --border:       #444444;
+    --code-bg:      #2d2d2d;
+    --code-text:    #c9d1d9;
+    --pre-bg:       #252525;
+    --table-head:   #2a2a2a;
+    --table-alt:    #232323;
+    --bq-border:    #66b3ff;
+    --bq-bg:        #1e2a3a;
+    --hr-color:     #444444;
+    --toggle-bg:    #333333;
+  }
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+html { font-size: 16px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  padding: 1rem;
+}
+
+.page-wrapper {
+  display: flex;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+article {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 860px;
+}
+
+/* ── Table of Contents Sidebar ──────────────────────────────────────────── */
+#toc-sidebar {
+  flex: 0 0 220px;
+  width: 220px;
+}
+
+#toc-sidebar nav {
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 4rem);
+  overflow-y: auto;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+#toc-sidebar nav a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.15rem 0;
+}
+
+#toc-sidebar nav a:hover { color: var(--link); }
+
+#toc-sidebar nav ul { list-style: none; padding-left: 0; }
+#toc-sidebar nav ul ul { padding-left: 1rem; }
+
+/* Mobile ToC (details/summary) */
+#toc-mobile { display: none; margin-bottom: 1.5rem; }
+#toc-mobile summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  color: var(--text);
+}
+#toc-mobile nav a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.2rem 0.5rem;
+}
+#toc-mobile nav a:hover { color: var(--link); }
+#toc-mobile nav ul { list-style: none; padding-left: 0; }
+#toc-mobile nav ul ul { padding-left: 1rem; }
+
+@media (max-width: 768px) {
+  .page-wrapper { display: block; }
+  #toc-sidebar { display: none; }
+  #toc-mobile { display: block; }
+  article { max-width: 100%; }
+}
+
+/* ── Theme Toggle ───────────────────────────────────────────────────────── */
+#theme-toggle {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: var(--toggle-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  z-index: 100;
+}
+
+#theme-toggle:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.5rem 0 0.5rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+h1 { font-size: 2rem;   }
+h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem;   }
+h6 { font-size: 0.9rem; color: var(--muted); }
+
+p { margin: 0.75rem 0; }
+
+a { color: var(--link); }
+a:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+
+/* ── Inline Code ────────────────────────────────────────────────────────── */
+code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+/* ── Code Blocks ────────────────────────────────────────────────────────── */
+pre {
+  position: relative;
+  background: var(--pre-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--code-text);
+  border-radius: 0;
+}
+
+/* Copy button (injected by JS) */
+.copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  background: var(--toggle-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  color: var(--muted);
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.copy-btn:hover { opacity: 1; }
+
+.copy-btn:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+th { background: var(--table-head); font-weight: 600; }
+
+tr:nth-child(even) td { background: var(--table-alt); }
+
+/* ── Blockquotes ────────────────────────────────────────────────────────── */
+blockquote {
+  border-left: 4px solid var(--bq-border);
+  background: var(--bq-bg);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  color: var(--muted);
+  border-radius: 0 4px 4px 0;
+}
+
+blockquote p { margin: 0; }
+
+/* ── Horizontal Rule ────────────────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 2px solid var(--hr-color);
+  margin: 2rem 0;
+}
+
+/* ── Lists ──────────────────────────────────────────────────────────────── */
+ul, ol { padding-left: 1.75rem; margin: 0.5rem 0; }
+li { margin: 0.25rem 0; }
+
+/* ── Images ─────────────────────────────────────────────────────────────── */
+img { max-width: 100%; height: auto; border-radius: 4px; }
+</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a><ul><li><a href="#story-lifecycle">Story lifecycle</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#check-pipeline-status">Check pipeline status</a></li><li><a href="#shut-down-the-team">Shut down the team</a></li></ul></li><li><a href="#clearing-the-workspace">Clearing the workspace</a><ul><li><a href="#reset-stories-only-keep-generated-code">Reset stories only (keep generated code)</a></li><li><a href="#full-reset--wipe-everything-generated">Full reset — wipe everything generated</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
+<p>A multi-agent coding pipeline powered by the Claude Agent SDK. A team of specialised agents collaborate over the filesystem to take a feature idea from concept through to working, tested code — without human intervention between steps.</p>
+<hr>
+<h2 id="pipeline-overview">Pipeline overview</h2>
+<pre><code>  You ──► Designer ──► Business Analyst ──► Project Initialiser
+                              │
+                      Story Orchestrator
+                       (marks stories ready
+                        when deps are met)
+                              │
+               ┌──────────────┴──────────────┐
+               ▼                             ▼
+     Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
+     Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► workspace/
+           [easy]            │         [medium/hard]      │
+                             └─────────────┬──────────────┘
+                                     (on failure)
+                                           ▼
+                                    Story Reviewer ──► You</code></pre>
+<table><thead><tr><th>Agent</th><th>Role</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Interactive Q&amp;A session with you. Produces <code>design/&lt;feature&gt;.new.md</code>.</td></tr><tr><td><strong>Business Analyst</strong></td><td>Watches <code>design/</code> for <code>*.new.md</code> files and decomposes each into <code>stories/STORY-NNN.md</code> files, each with a <strong>Complexity</strong> field (easy / medium / hard).</td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design and scaffolds <code>workspace/</code> — directory layout, config files, dependency manifests, and <code>workspace/CLAUDE.md</code> with build/test/lint commands.</td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Watches <code>stories/</code> for new <code>STORY-NNN.md</code> files, parses their complexity and dependencies, and renames them to <code>STORY-NNN.[complexity].ready.md</code> when all dependencies are complete.</td></tr><tr><td><strong>Junior Coding Agent</strong></td><td>Claims and implements <code>easy</code> stories (<code>STORY-NNN.easy.ready.md</code>). Defaults to <code>claude-haiku</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Senior Coding Agent</strong></td><td>Claims and implements <code>medium</code> and <code>hard</code> stories. Defaults to <code>claude-sonnet</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes when a <code>HALT</code> file appears (a story failed 5 times). Triages the failure with you and resets the story so coding can resume.</td></tr><tr><td><strong>Watchdog</strong></td><td>Background process that resets any stale <code>.working.md</code> story (idle &gt; 10 min) back to <code>.ready.md</code>, recovering from crashed agents.</td></tr></tbody></table>
+<h3 id="story-lifecycle">Story lifecycle</h3>
+<p>Stories move through states encoded in their filename. The filename carries both the <strong>complexity</strong> and the <strong>state</strong>:</p>
+<pre><code>STORY-NNN.md              ← written by BA (unprocessed)
+      │
+  Story Orchestrator checks deps
+      │
+      ▼
+STORY-NNN.[complexity].ready.md     ← deps met; ready to claim
+      │
+  Coding Agent atomically claims
+      │
+      ▼
+STORY-NNN.[complexity].working.md   ← owned by one agent
+      │
+  ┌───┴────────────────────┐
+success                 failure (append note)
+  │                         │
+  ▼                    Attempts &lt; 5?
+STORY-NNN.[complexity].done.md  ├─ yes → back to .ready.md
+(commit workspace)              └─ no  → create HALT
+                                         rename to .failed.md
+                                              │
+                                    Story Reviewer triages
+                                    rewrites story → bare STORY-NNN.md
+                                    Story Orchestrator re-evaluates</code></pre>
+<hr>
+<h2 id="setup">Setup</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul><li>Python 3.11+</li><li><a href="https://github.com/astral-sh/uv"> 0 </a> (recommended) or <code>pip</code></li><li>An Anthropic API key</li></ul>
+<h3 id="install">Install</h3>
+<pre><code class="language-bash"># 1. Clone the repository
+git clone https://github.com/bameschot/momo-agents.git
+cd momo-agents
+
+# 2. Create a virtual environment
+uv venv
+source .venv/bin/activate      # Linux / macOS
+
+# 3. Install the project and its dependencies
+uv pip install -e &quot;.[dev]&quot;
+
+# 4. Add your API key
+echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
+<hr>
+<h2 id="running-the-pipeline">Running the pipeline</h2>
+<h3 id="start-the-full-team">Start the full team</h3>
+<pre><code class="language-bash">./start-team.sh &lt;feature-name&gt; [options]</code></pre>
+<p>This opens every agent simultaneously, each in its own terminal window, and then monitors the pipeline in the current terminal until you press <strong>Ctrl+C</strong>.</p>
+<p><strong>Options:</strong></p>
+<table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--junior-agents N</code></td><td>Number of parallel Junior Coding Agents (easy stories)</td><td><code>2</code></td></tr><tr><td><code>--senior-agents N</code></td><td>Number of parallel Senior Coding Agents (medium/hard stories)</td><td><code>1</code></td></tr><tr><td><code>--model-designer M</code></td><td>Claude model for the Designer</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-ba M</code></td><td>Claude model for the Business Analyst</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-pi M</code></td><td>Claude model for the Project Initialiser</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-junior M</code></td><td>Claude model for Junior Coding Agents</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-senior M</code></td><td>Claude model for Senior Coding Agents</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-reviewer M</code></td><td>Claude model for the Story Reviewer</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table>
+<p><strong>Examples:</strong></p>
+<pre><code class="language-bash"># Default — 2 junior agents, 1 senior agent
+./start-team.sh my-feature
+
+# Scale up for a large backlog
+./start-team.sh my-feature --junior-agents 4 --senior-agents 2
+
+# Use opus for design, keep defaults elsewhere
+./start-team.sh my-feature --model-designer claude-opus-4-6
+
+# --flag=value form also works
+./start-team.sh my-feature --junior-agents=3 --model-junior=claude-sonnet-4-6</code></pre>
+<h3 id="check-pipeline-status">Check pipeline status</h3>
+<pre><code class="language-bash">./status.sh</code></pre>
+<p>Prints a snapshot of how many stories are in each state:</p>
+<pre><code>  unprocessed    2   STORY-001.md  STORY-004.md
+  ready          1   STORY-002.easy.ready.md
+  working        1   STORY-003.medium.working.md
+  done           3   STORY-005.easy.done.md  ...
+  failed         0
+  reviewing      0
+  HALT           no</code></pre>
+<h3 id="shut-down-the-team">Shut down the team</h3>
+<p>Press <strong>Ctrl+C</strong> in the terminal where <code>start-team.sh</code> is running. This:</p>
+<ol><li>Writes <code>.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process.</li><li>Prints a final token-usage summary and <code>./status.sh</code> snapshot.</li><li>Removes the <code>.sentinels/</code> directory.</li></ol>
+<hr>
+<h2 id="clearing-the-workspace">Clearing the workspace</h2>
+<h3 id="reset-stories-only-keep-generated-code">Reset stories only (keep generated code)</h3>
+<pre><code class="language-bash">rm -f stories/STORY-*.md stories/HALT</code></pre>
+<h3 id="full-reset--wipe-everything-generated">Full reset — wipe everything generated</h3>
+<pre><code class="language-bash">./reset-team.sh
+# or skip the confirmation prompt:
+./reset-team.sh --yes</code></pre>
+<p>After a full reset, re-running <code>./start-team.sh &lt;feature-name&gt;</code> will go through the complete pipeline from scratch.</p>
+<hr>
+<h2 id="running-agents-individually">Running agents individually</h2>
+<p>Each agent can also be invoked directly:</p>
+<pre><code class="language-bash"># Designer (interactive)
+python scripts/designer_agent.py --model claude-sonnet-4-6
+
+# Business Analyst
+python scripts/business_analyst_agent.py \
+  --design design/my-feature.new.md \
+  --model claude-sonnet-4-6
+
+# Project Initialiser
+python scripts/project_initialiser_agent.py \
+  --design design/my-feature.new.md \
+  --model claude-sonnet-4-6
+
+# Story Orchestrator (marks stories ready as deps are met)
+python scripts/story_orchestrator.py
+
+# Junior Coding Agent (easy stories)
+python scripts/junior_coding_agent.py \
+  --model claude-haiku-4-5-20251001
+
+# Senior Coding Agent (medium/hard stories)
+python scripts/senior_coding_agent.py \
+  --model claude-sonnet-4-6
+
+# Story Reviewer
+python scripts/story_reviewer_agent.py \
+  --model claude-sonnet-4-6</code></pre>
+<p>All path arguments default to the standard locations inside the repo root.</p>
+<hr>
+<h2 id="development">Development</h2>
+<pre><code class="language-bash"># Lint
+ruff check .
+ruff format .
+
+# Type check
+mypy scripts/
+
+# Tests
+pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a><ul><li><a href="#story-lifecycle">Story lifecycle</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#check-pipeline-status">Check pipeline status</a></li><li><a href="#shut-down-the-team">Shut down the team</a></li></ul></li><li><a href="#clearing-the-workspace">Clearing the workspace</a><ul><li><a href="#reset-stories-only-keep-generated-code">Reset stories only (keep generated code)</a></li><li><a href="#full-reset--wipe-everything-generated">Full reset — wipe everything generated</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
+(function () {
+  'use strict';
+
+  var STORAGE_KEY = 'md2html-theme';
+
+  function getEffectiveTheme() {
+    var stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'dark' || stored === 'light') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    var btn = document.getElementById('theme-toggle');
+    if (btn) {
+      btn.textContent = theme === 'dark' ? '\u2600' : '\uD83C\uDF19';
+      btn.setAttribute('aria-label',
+        theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    applyTheme(getEffectiveTheme());
+
+    var toggleBtn = document.getElementById('theme-toggle');
+    if (toggleBtn) {
+      toggleBtn.addEventListener('click', function () {
+        var current = document.documentElement.getAttribute('data-theme') ||
+                      getEffectiveTheme();
+        var next = current === 'dark' ? 'light' : 'dark';
+        localStorage.setItem(STORAGE_KEY, next);
+        applyTheme(next);
+      });
+    }
+
+    document.querySelectorAll('pre').forEach(function (pre) {
+      var btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.setAttribute('aria-label', 'Copy code to clipboard');
+
+      btn.addEventListener('click', function () {
+        var codeEl = pre.querySelector('code');
+        var text = codeEl ? codeEl.textContent : pre.textContent;
+        try {
+          navigator.clipboard.writeText(text).then(function () {
+            btn.textContent = 'Copied!';
+            setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+          }, function () {
+            btn.textContent = 'Failed';
+            setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+          });
+        } catch (err) {
+          btn.textContent = 'Failed';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 2000);
+        }
+      });
+
+      pre.appendChild(btn);
+    });
+  });
+}());
+</script></body></html>
