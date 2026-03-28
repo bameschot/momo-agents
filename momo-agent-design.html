@@ -324,13 +324,13 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
 <hr>
 <h2 id="project-initialiser-agent">Project Initialiser Agent</h2>
 <p>Runs once automatically when the workspace is empty:</p>
-<ol><li>Reads the design document for technology stack and project structure.</li><li>Creates <code>workspace/CLAUDE.md</code> with build, test, and lint commands.</li><li>Scaffolds the initial directory layout, config files, and empty entry points.</li><li>Does <strong>not</strong> implement any story logic.</li><li>Writes <code>.sentinels/pi.done</code> when complete — Coding Agents wait for this sentinel before starting.</li></ol>
-<p>If <code>workspace/</code> already contains files (beyond the skeleton <code>CLAUDE.md</code>), the initialiser skips immediately and writes the sentinel.</p>
+<ol><li>Reads the design document for technology stack and project structure.</li><li>Creates <code>workspace/CLAUDE.md</code> with build, test, and lint commands.</li><li>Scaffolds the initial directory layout, config files, and empty entry points.</li><li>Does <strong>not</strong> implement any story logic.</li></ol>
+<p>If <code>workspace/</code> already contains files (beyond the skeleton <code>CLAUDE.md</code>), the initialiser skips immediately.</p>
 <hr>
 <h2 id="coding-agent">Coding Agent</h2>
 <h3 id="polling-behaviour">Polling behaviour</h3>
 <p>Coding Agents <strong>never stop on their own</strong> — they poll indefinitely for eligible work. The agent loop:</p>
-<ol><li>Wait for <code>pi.done</code> sentinel (Project Initialiser has finished).</li><li>Enter the main work loop:</li></ol>
+<ol><li>Wait for <code>workspace/CLAUDE.md</code> to exist (proof that the Project Initialiser has finished).</li><li>Enter the main work loop:</li></ol>
 <ul><li>If <code>pipeline_complete</code> exists → exit cleanly.</li><li>If <code>HALT</code> exists → wait for it to be removed (Story Reviewer is working), then resume.</li><li>Attempt to claim and implement the next eligible story.</li><li>If no eligible story is currently available (all are working, done, or blocked by unresolved dependencies) → sleep briefly and poll again.</li><li>On unexpected exit code → retry after 10 seconds.</li></ul>
 <p>The agent continues polling even when all current stories are done, because the BA may write new stories at any time (e.g. after the designer updates the design document). The only way to stop a Coding Agent is via the <code>pipeline_complete</code> sentinel, which is written when the operator presses <code>Ctrl+C</code> in the <code>start-team.sh</code> terminal.</p>
 <h3 id="story-claiming">Story claiming</h3>

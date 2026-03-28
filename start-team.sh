@@ -2,9 +2,9 @@
 # start-team.sh — opens ALL agents simultaneously, each in its own console window.
 # Agents self-coordinate via the filesystem; no window needs to wait for another.
 #
-# Usage: ./start-team.sh <feature-name> [--dev-agents N]
+# Usage: ./start-team.sh <feature-name> [--junior-agents N] [--senior-agents N]
 #        [--model-designer M] [--model-ba M] [--model-pi M]
-#        [--model-coder M] [--model-reviewer M]
+#        [--model-junior M] [--model-senior M] [--model-reviewer M]
 #
 # Supported terminal environments (auto-detected in priority order):
 #   macOS   : Terminal.app via osascript
@@ -23,27 +23,35 @@ WORKSPACE_DIR="$SCRIPT_DIR/workspace"
 SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
 
 FEATURE="${1:-}"
-N_DEV_AGENTS=2
+N_JUNIOR_AGENTS=2
+N_SENIOR_AGENTS=1
 DEFAULT_MODEL="claude-sonnet-4-6"
+DEFAULT_JUNIOR_MODEL="claude-haiku-4-5-20251001"
+DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
 MODEL_DESIGNER="$DEFAULT_MODEL"
 MODEL_BA="$DEFAULT_MODEL"
 MODEL_PI="$DEFAULT_MODEL"
-MODEL_CODER="$DEFAULT_MODEL"
+MODEL_JUNIOR="$DEFAULT_JUNIOR_MODEL"
+MODEL_SENIOR="$DEFAULT_SENIOR_MODEL"
 MODEL_REVIEWER="$DEFAULT_MODEL"
 
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
-        --dev-agents=*)     N_DEV_AGENTS="${args[$i]#*=}" ;;
-        --dev-agents)       N_DEV_AGENTS="${args[$((i + 1))]:-2}" ;;
+        --junior-agents=*)  N_JUNIOR_AGENTS="${args[$i]#*=}" ;;
+        --junior-agents)    N_JUNIOR_AGENTS="${args[$((i + 1))]:-2}" ;;
+        --senior-agents=*)  N_SENIOR_AGENTS="${args[$i]#*=}" ;;
+        --senior-agents)    N_SENIOR_AGENTS="${args[$((i + 1))]:-1}" ;;
         --model-designer=*) MODEL_DESIGNER="${args[$i]#*=}" ;;
         --model-designer)   MODEL_DESIGNER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
         --model-ba=*)       MODEL_BA="${args[$i]#*=}" ;;
         --model-ba)         MODEL_BA="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
         --model-pi=*)       MODEL_PI="${args[$i]#*=}" ;;
         --model-pi)         MODEL_PI="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
-        --model-coder=*)    MODEL_CODER="${args[$i]#*=}" ;;
-        --model-coder)      MODEL_CODER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-junior=*)   MODEL_JUNIOR="${args[$i]#*=}" ;;
+        --model-junior)     MODEL_JUNIOR="${args[$((i + 1))]:-$DEFAULT_JUNIOR_MODEL}" ;;
+        --model-senior=*)   MODEL_SENIOR="${args[$i]#*=}" ;;
+        --model-senior)     MODEL_SENIOR="${args[$((i + 1))]:-$DEFAULT_SENIOR_MODEL}" ;;
         --model-reviewer=*) MODEL_REVIEWER="${args[$i]#*=}" ;;
         --model-reviewer)   MODEL_REVIEWER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
     esac
@@ -52,14 +60,16 @@ done
 if [ -z "$FEATURE" ]; then
     echo "Usage: $0 <feature-name> [options]"
     echo ""
-    echo "  feature-name         Short kebab-case name for the feature to build"
+    echo "  feature-name          Short kebab-case name for the feature to build"
     echo ""
-    echo "  --dev-agents N       Parallel Coding Agents to spawn (default: 2)"
-    echo "  --model-designer M   Model for Designer Agent      (default: $DEFAULT_MODEL)"
-    echo "  --model-ba M         Model for Business Analyst    (default: $DEFAULT_MODEL)"
-    echo "  --model-pi M         Model for Project Initialiser (default: $DEFAULT_MODEL)"
-    echo "  --model-coder M      Model for each Coding Agent   (default: $DEFAULT_MODEL)"
-    echo "  --model-reviewer M   Model for Story Reviewer      (default: $DEFAULT_MODEL)"
+    echo "  --junior-agents N     Junior Coding Agents to spawn — handle easy stories    (default: 2)"
+    echo "  --senior-agents N     Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
+    echo "  --model-designer M    Model for Designer Agent      (default: $DEFAULT_MODEL)"
+    echo "  --model-ba M          Model for Business Analyst    (default: $DEFAULT_MODEL)"
+    echo "  --model-pi M          Model for Project Initialiser (default: $DEFAULT_MODEL)"
+    echo "  --model-junior M      Model for Junior Coding Agents (default: $DEFAULT_JUNIOR_MODEL)"
+    echo "  --model-senior M      Model for Senior Coding Agents (default: $DEFAULT_SENIOR_MODEL)"
+    echo "  --model-reviewer M    Model for Story Reviewer      (default: $DEFAULT_MODEL)"
     exit 1
 fi
 
@@ -197,7 +207,8 @@ ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
 MODEL_DESIGNER='$MODEL_DESIGNER'
 MODEL_BA='$MODEL_BA'
 MODEL_PI='$MODEL_PI'
-MODEL_CODER='$MODEL_CODER'
+MODEL_JUNIOR='$MODEL_JUNIOR'
+MODEL_SENIOR='$MODEL_SENIOR'
 MODEL_REVIEWER='$MODEL_REVIEWER'
 CONFIG
 
@@ -210,17 +221,19 @@ echo "╔═══════════════════════�
 echo "║           momo-agents  ·  start-team             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
-echo "  Feature    : $FEATURE"
-echo "  Dev Agents : $N_DEV_AGENTS  (coding agents only; all others are single-instance)"
-echo "  Python     : $PYTHON"
-echo "  Terminal   : $TERMINAL"
-echo "  Workspace  : $WS_STATE"
+echo "  Feature        : $FEATURE"
+echo "  Junior Agents  : $N_JUNIOR_AGENTS  (easy stories — $MODEL_JUNIOR)"
+echo "  Senior Agents  : $N_SENIOR_AGENTS  (medium + hard stories — $MODEL_SENIOR)"
+echo "  Python         : $PYTHON"
+echo "  Terminal       : $TERMINAL"
+echo "  Workspace      : $WS_STATE"
 echo ""
 echo "  Models:"
 echo "    Designer   : $MODEL_DESIGNER"
 echo "    BA         : $MODEL_BA"
 echo "    PI         : $MODEL_PI"
-echo "    Coder      : $MODEL_CODER"
+echo "    Junior     : $MODEL_JUNIOR"
+echo "    Senior     : $MODEL_SENIOR"
 echo "    Reviewer   : $MODEL_REVIEWER"
 echo ""
 
@@ -329,7 +342,6 @@ ws_content=$(find "${WORKSPACE_DIR}" -mindepth 1 -maxdepth 1 \
 
 if [ "${ws_content}" -gt 0 ]; then
     echo "Workspace already initialised — skipping scaffold step."
-    touch "${SENTINEL_DIR}/pi.done"
     exit 0
 fi
 
@@ -361,15 +373,14 @@ echo ""
     --design "${design_file}" \
     --workspace-dir "${WORKSPACE_DIR}" \
     --model "${MODEL_PI}"
-touch "${SENTINEL_DIR}/pi.done"
 echo ""
 echo "[Project Initialiser Agent complete]"
 WRAPPER
 
-# ── Coding Agent (shared body, parameterised by $AGENT_ID) ───────────────────
-# Waits for PI to complete (or be skipped) and for at least one story to appear.
+# ── Junior Coding Agent (shared body, parameterised by $AGENT_ID) ────────────
+# Claims easy stories only. Waits for PI to complete and for stories to exist.
 # Loops through HALT/review cycles automatically — no new window needed.
-cat > "$SENTINEL_DIR/coding_agent_body.sh" << 'WRAPPER'
+cat > "$SENTINEL_DIR/junior_coding_agent_body.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
 source "$(dirname "$0")/config.sh"
@@ -378,13 +389,14 @@ export ANTHROPIC_API_KEY
 source "${SCRIPT_DIR}/.venv/bin/activate"
 # AGENT_ID is exported by the per-agent stub that execs this file.
 
-printf "\033]0;Coding Agent ${AGENT_ID}\007"
+printf "\033]0;Junior Coding Agent ${AGENT_ID} [easy]\007"
 echo "╔══════════════════════════════════╗"
-echo "║       Coding Agent ${AGENT_ID}              ║"
+echo "║   Junior Coding Agent ${AGENT_ID} [easy]  ║"
 echo "╚══════════════════════════════════╝"
-echo "Waiting for Project Initialiser..."
+echo "Handles: easy stories"
+echo "Waiting for Project Initialiser to create workspace/CLAUDE.md..."
 
-while [ ! -f "${SENTINEL_DIR}/pi.done" ]; do sleep 3; done
+while [ ! -f "${WORKSPACE_DIR}/CLAUDE.md" ]; do sleep 3; done
 
 echo "Waiting for stories..."
 while [ "$(find "${STORIES_DIR}" -maxdepth 1 -name 'STORY-*.md' \
@@ -396,26 +408,26 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    "${PYTHON}" "${SCRIPT_DIR}/python-agents/coding_agent.py" \
+    "${PYTHON}" "${SCRIPT_DIR}/python-agents/junior_coding_agent.py" \
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-        --model "${MODEL_CODER}"
+        --model "${MODEL_JUNIOR}"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
     if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
         echo ""
-        echo "[Coding Agent ${AGENT_ID}] Pipeline complete — exiting."
+        echo "[Junior Coding Agent ${AGENT_ID}] Pipeline complete — exiting."
         break
     fi
 
     # HALT — wait for reviewer to clear it, then resume
     if [ -f "${STORIES_DIR}/HALT" ]; then
         echo ""
-        echo "[Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
+        echo "[Junior Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
         while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
         sleep 2   # let renamed story files settle
-        echo "[Coding Agent ${AGENT_ID}] HALT cleared — resuming."
+        echo "[Junior Coding Agent ${AGENT_ID}] HALT cleared — resuming."
         echo ""
         continue
     fi
@@ -423,23 +435,100 @@ while true; do
     # Unexpected non-zero exit — short pause before retrying
     if [ $EXIT_CODE -ne 0 ]; then
         echo ""
-        echo "[Coding Agent ${AGENT_ID}] Agent exited with code $EXIT_CODE — retrying in 10s..."
+        echo "[Junior Coding Agent ${AGENT_ID}] Agent exited with code $EXIT_CODE — retrying in 10s..."
         sleep 10
     fi
 done
 
-touch "${SENTINEL_DIR}/coding_${AGENT_ID}.done"
+touch "${SENTINEL_DIR}/junior_${AGENT_ID}.done"
 echo ""
-echo "[Coding Agent ${AGENT_ID} finished]"
+echo "[Junior Coding Agent ${AGENT_ID} finished]"
 WRAPPER
 
-# Write a tiny per-agent stub that sets AGENT_ID and execs the shared body.
+# Write a tiny per-agent stub for each junior agent.
 # Unquoted heredoc (STUB) so $i and $SENTINEL_DIR expand at write time.
-for i in $(seq 1 "$N_DEV_AGENTS"); do
-    cat > "$SENTINEL_DIR/run_coding_${i}.sh" << STUB
+for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
+    cat > "$SENTINEL_DIR/run_junior_${i}.sh" << STUB
 #!/usr/bin/env bash
 export AGENT_ID=$i
-exec bash '$SENTINEL_DIR/coding_agent_body.sh'
+exec bash '$SENTINEL_DIR/junior_coding_agent_body.sh'
+STUB
+done
+
+# ── Senior Coding Agent (shared body, parameterised by $AGENT_ID) ────────────
+# Claims medium and hard stories only. Waits for PI to complete and for stories.
+# Loops through HALT/review cycles automatically — no new window needed.
+cat > "$SENTINEL_DIR/senior_coding_agent_body.sh" << 'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$(dirname "$0")/config.sh"
+export ANTHROPIC_API_KEY
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/.venv/bin/activate"
+# AGENT_ID is exported by the per-agent stub that execs this file.
+
+printf "\033]0;Senior Coding Agent ${AGENT_ID} [medium/hard]\007"
+echo "╔══════════════════════════════════════╗"
+echo "║  Senior Coding Agent ${AGENT_ID} [medium/hard]  ║"
+echo "╚══════════════════════════════════════╝"
+echo "Handles: medium and hard stories"
+echo "Waiting for Project Initialiser to create workspace/CLAUDE.md..."
+
+while [ ! -f "${WORKSPACE_DIR}/CLAUDE.md" ]; do sleep 3; done
+
+echo "Waiting for stories..."
+while [ "$(find "${STORIES_DIR}" -maxdepth 1 -name 'STORY-*.md' \
+           2>/dev/null | wc -l | tr -d ' ')" -eq 0 ]; do
+    sleep 3
+done
+
+echo "Prerequisites ready — starting agent loop."
+echo ""
+
+while true; do
+    "${PYTHON}" "${SCRIPT_DIR}/python-agents/senior_coding_agent.py" \
+        --stories-dir "${STORIES_DIR}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_SENIOR}"
+    EXIT_CODE=$?
+
+    # Orchestrator wrote pipeline_complete — clean exit
+    if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
+        echo ""
+        echo "[Senior Coding Agent ${AGENT_ID}] Pipeline complete — exiting."
+        break
+    fi
+
+    # HALT — wait for reviewer to clear it, then resume
+    if [ -f "${STORIES_DIR}/HALT" ]; then
+        echo ""
+        echo "[Senior Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
+        while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
+        sleep 2   # let renamed story files settle
+        echo "[Senior Coding Agent ${AGENT_ID}] HALT cleared — resuming."
+        echo ""
+        continue
+    fi
+
+    # Unexpected non-zero exit — short pause before retrying
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo ""
+        echo "[Senior Coding Agent ${AGENT_ID}] Agent exited with code $EXIT_CODE — retrying in 10s..."
+        sleep 10
+    fi
+done
+
+touch "${SENTINEL_DIR}/senior_${AGENT_ID}.done"
+echo ""
+echo "[Senior Coding Agent ${AGENT_ID} finished]"
+WRAPPER
+
+# Write a tiny per-agent stub for each senior agent.
+for i in $(seq 1 "$N_SENIOR_AGENTS"); do
+    cat > "$SENTINEL_DIR/run_senior_${i}.sh" << STUB
+#!/usr/bin/env bash
+export AGENT_ID=$i
+exec bash '$SENTINEL_DIR/senior_coding_agent_body.sh'
 STUB
 done
 
@@ -499,19 +588,24 @@ chmod +x \
     "$SENTINEL_DIR/run_designer.sh" \
     "$SENTINEL_DIR/run_ba.sh" \
     "$SENTINEL_DIR/run_pi.sh" \
-    "$SENTINEL_DIR/coding_agent_body.sh" \
+    "$SENTINEL_DIR/junior_coding_agent_body.sh" \
+    "$SENTINEL_DIR/senior_coding_agent_body.sh" \
     "$SENTINEL_DIR/run_watchdog.sh" \
     "$SENTINEL_DIR/run_story_reviewer.sh"
 
-for i in $(seq 1 "$N_DEV_AGENTS"); do
-    chmod +x "$SENTINEL_DIR/run_coding_${i}.sh"
+for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
+    chmod +x "$SENTINEL_DIR/run_junior_${i}.sh"
+done
+
+for i in $(seq 1 "$N_SENIOR_AGENTS"); do
+    chmod +x "$SENTINEL_DIR/run_senior_${i}.sh"
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Launch ALL windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
-TOTAL=$(( N_DEV_AGENTS + 5 ))   # 5 fixed: designer + ba + pi + watchdog + reviewer; plus N_DEV_AGENTS coding agents
-echo "Opening $TOTAL windows simultaneously ($N_DEV_AGENTS coding agent(s) + 5 fixed agents)..."
+TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 5 ))
+echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 5 fixed agents)..."
 echo ""
 
 open_window "🎨 Designer Agent"        "$SENTINEL_DIR/run_designer.sh"
@@ -520,8 +614,12 @@ open_window "🏗️  Project Initialiser"  "$SENTINEL_DIR/run_pi.sh"
 open_window "🐕 Watchdog"              "$SENTINEL_DIR/run_watchdog.sh"
 open_window "🔍 Story Reviewer"        "$SENTINEL_DIR/run_story_reviewer.sh"
 
-for i in $(seq 1 "$N_DEV_AGENTS"); do
-    open_window "💻 Coding Agent $i"   "$SENTINEL_DIR/run_coding_${i}.sh"
+for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
+    open_window "🟢 Junior Coding Agent $i [easy]"        "$SENTINEL_DIR/run_junior_${i}.sh"
+done
+
+for i in $(seq 1 "$N_SENIOR_AGENTS"); do
+    open_window "🔵 Senior Coding Agent $i [medium/hard]" "$SENTINEL_DIR/run_senior_${i}.sh"
 done
 
 if [ "$TERMINAL" = "tmux" ]; then

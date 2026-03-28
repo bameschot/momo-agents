@@ -112,9 +112,8 @@ Runs once automatically when the workspace is empty:
 2. Creates `workspace/CLAUDE.md` with build, test, and lint commands.
 3. Scaffolds the initial directory layout, config files, and empty entry points.
 4. Does **not** implement any story logic.
-5. Writes `.sentinels/pi.done` when complete — Coding Agents wait for this sentinel before starting.
 
-If `workspace/` already contains files (beyond the skeleton `CLAUDE.md`), the initialiser skips immediately and writes the sentinel.
+If `workspace/` already contains files (beyond the skeleton `CLAUDE.md`), the initialiser skips immediately.
 
 ---
 
@@ -124,7 +123,7 @@ If `workspace/` already contains files (beyond the skeleton `CLAUDE.md`), the in
 
 Coding Agents **never stop on their own** — they poll indefinitely for eligible work. The agent loop:
 
-1. Wait for `pi.done` sentinel (Project Initialiser has finished).
+1. Wait for `workspace/CLAUDE.md` to exist (proof that the Project Initialiser has finished).
 2. Enter the main work loop:
    - If `pipeline_complete` exists → exit cleanly.
    - If `HALT` exists → wait for it to be removed (Story Reviewer is working), then resume.

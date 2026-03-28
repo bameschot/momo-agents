@@ -6,8 +6,7 @@
 #   stories/    — all story files (STORY-*.md in every state)
 #   design/     — all design documents
 #   .sentinels/ — all orchestrator sentinel files
-#   workspace/  — all generated source code and tests
-#                 (CLAUDE.md and the src/ + tests/ skeleton are preserved)
+#   workspace/  — all generated source code, tests, and CLAUDE.md
 #
 # Usage: ./reset-team.sh [--yes]
 #   --yes   Skip the confirmation prompt
@@ -36,7 +35,7 @@ echo "  This will permanently delete:"
 echo "    • All story files in       stories/"
 echo "    • All design documents in  design/"
 echo "    • All sentinel files in    .sentinels/"
-echo "    • All generated code in    workspace/  (CLAUDE.md preserved)"
+echo "    • All generated code in    workspace/  (src/, tests/, CLAUDE.md)"
 echo ""
 
 if [ "$AUTO_YES" = false ]; then
@@ -93,25 +92,13 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Workspace — remove generated files, preserve CLAUDE.md + skeleton dirs
+# Workspace — remove all generated content including CLAUDE.md, src/, tests/
 # ─────────────────────────────────────────────────────────────────────────────
 ws_cleared=false
 if [ -d "$WORKSPACE_DIR" ]; then
-    # Remove everything except CLAUDE.md, then recreate skeleton dirs
-    find "$WORKSPACE_DIR" -mindepth 1 \
-        ! -name "CLAUDE.md" \
-        ! -path "$WORKSPACE_DIR/src" \
-        ! -path "$WORKSPACE_DIR/src/.gitkeep" \
-        ! -path "$WORKSPACE_DIR/tests" \
-        ! -path "$WORKSPACE_DIR/tests/.gitkeep" \
-        -delete 2>/dev/null || true
-
-    # Ensure skeleton dirs exist with their .gitkeep
-    mkdir -p "$WORKSPACE_DIR/src" "$WORKSPACE_DIR/tests"
-    touch "$WORKSPACE_DIR/src/.gitkeep" "$WORKSPACE_DIR/tests/.gitkeep"
-
+    find "$WORKSPACE_DIR" -mindepth 1 -delete 2>/dev/null || true
     ws_cleared=true
-    echo "  ✓ workspace/   cleared  (CLAUDE.md + src/ + tests/ preserved)"
+    echo "  ✓ workspace/   cleared  (src/, tests/, CLAUDE.md removed)"
 else
     echo "  – workspace/   does not exist (nothing to clear)"
 fi

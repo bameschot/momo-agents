@@ -545,6 +545,100 @@
       return state.players[playerIndex].borneOff === 7;
     }
 
+    // ── State Machine & Stubs ────────────────────────────────
+
+    /**
+     * Stub: update the status bar text content.
+     * Replaced with a richer implementation in STORY-009.
+     * @param {string} msg
+     */
+    function updateStatus(msg) {
+      const el = document.getElementById('status-bar');
+      if (el) el.textContent = msg || '';
+    }
+
+    /**
+     * Stub: highlight valid move squares and movable pieces.
+     * Replaced with a real implementation in STORY-008.
+     */
+    function highlightMoves() {
+      // no-op stub
+    }
+
+    /**
+     * Stub: show the win screen overlay.
+     * Replaced with a real implementation in STORY-010.
+     * @param {number} _playerIndex
+     */
+    function showWinScreen(_playerIndex) {
+      // no-op stub
+    }
+
+    /**
+     * Private helper: advance to the next turn.
+     * If grantExtraRoll is true, the current player rolls again (rosette bonus).
+     * Otherwise the other player takes their turn.
+     * Re-enables the Roll button.
+     * @param {boolean} grantExtraRoll
+     */
+    function nextTurn(grantExtraRoll) {
+      if (!grantExtraRoll) {
+        gameState.currentPlayer = 1 - gameState.currentPlayer;
+      }
+      gameState.phase = 'roll';
+      const btn = document.getElementById('btn-roll');
+      if (btn) btn.disabled = false;
+      const currentPlayerLabel = gameState.players[gameState.currentPlayer].label;
+      updateStatus(currentPlayerLabel + "\u2019s turn \u2014 roll the dice");
+    }
+
+    /**
+     * Pass the turn automatically when a player has no legal moves.
+     * Shows the reason message, then after 1 s hands over to the opponent.
+     * @param {string} reason
+     */
+    function autoPass(reason) {
+      updateStatus(reason);
+      setTimeout(function () {
+        nextTurn(false);
+      }, 1000);
+    }
+
+    /**
+     * Reset game state and re-render the board to the initial position.
+     * Called on first load and when "Play Again" is pressed.
+     */
+    function resetGame() {
+      gameState = createInitialState();
+      initPieces();
+
+      // Reset borne-off counters
+      const borneLight = document.getElementById('borne-light');
+      const borneShadow = document.getElementById('borne-shadow');
+      if (borneLight) borneLight.textContent = '0';
+      if (borneShadow) borneShadow.textContent = '0';
+
+      // Hide win overlay if present
+      const winOverlay = document.getElementById('overlay-win');
+      if (winOverlay) winOverlay.style.display = 'none';
+
+      // Enable Roll button and update status
+      const btn = document.getElementById('btn-roll');
+      if (btn) btn.disabled = false;
+      updateStatus(gameState.players[0].label + "\u2019s turn \u2014 roll the dice");
+    }
+
+    /**
+     * Bootstrap: builds the board and dice UI, then starts the game.
+     * Called once on DOMContentLoaded.
+     */
+    function initGame() {
+      resetGame();
+      const btn = document.getElementById('btn-roll');
+      if (btn) btn.addEventListener('click', rollDice);
+      initPieces();
+    }
+
     // ── Board constants ──────────────────────────────────────
     const ROSETTE_IDS = new Set(['r0c0', 'r0c3', 'r1c3', 'r2c0', 'r2c3']);
     const INACTIVE_IDS = new Set(['r0c4', 'r0c5', 'r2c4', 'r2c5']);
