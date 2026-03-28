@@ -348,8 +348,7 @@
   </div>
 
   <main>
-    <div id="status" aria-live="polite"></div>
-    <div id="status-bar" style="display:none"></div>
+    <div id="status-bar" aria-live="polite" aria-atomic="true"></div>
 
     <div id="tray-shadow">
       <div class="tray-label shadow">Shadow</div>
@@ -639,12 +638,42 @@
 
     /**
      * Update the status bar text content.
-     * Uses aria-live="polite" element with id="status".
+     * Uses aria-live="polite" element with id="status-bar".
      * @param {string} msg
      */
     function updateStatus(msg) {
-      const el = document.getElementById('status');
+      const el = document.getElementById('status-bar');
       if (el) el.textContent = msg || '';
+    }
+
+    /**
+     * Generate the appropriate status message for the current game state.
+     * @param {string} phase - 'roll', 'select', 'rosette', 'capture', 'auto-pass', or 'won'
+     * @param {number} playerIndex - 0 or 1
+     * @param {number} diceResult - the roll total (0-4)
+     * @returns {string}
+     */
+    function getStatusMessage(phase, playerIndex, diceResult) {
+      const playerLabel = gameState.players[playerIndex].label;
+      const otherPlayerLabel = gameState.players[1 - playerIndex].label;
+
+      if (phase === 'roll') {
+        return playerLabel + "\u2019s turn \u2014 roll the dice";
+      } else if (phase === 'select') {
+        return playerLabel + " rolled " + diceResult + " \u2014 choose a piece to move";
+      } else if (phase === 'rosette') {
+        return playerLabel + " landed on the rosette \u2014 roll again!";
+      } else if (phase === 'capture') {
+        return playerLabel + " captured an opponent\u2019s piece!";
+      } else if (phase === 'auto-pass') {
+        if (diceResult === 0) {
+          return playerLabel + " rolled 0 \u2014 no moves, turn passes";
+        }
+        return "No legal moves for " + playerLabel + " \u2014 turn passes to " + otherPlayerLabel;
+      } else if (phase === 'won') {
+        return playerLabel + " wins! \ud83c\udfc6";
+      }
+      return "";
     }
 
     /**
@@ -804,17 +833,21 @@
             capturedEl.removeEventListener('animationend', handler);
           }, { once: true });
         }
+        updateStatus(getStatusMessage('capture', movedByPlayer, 0));
       }
 
       // Check win condition
       if (checkWin(movedByPlayer, gameState)) {
         gameState.phase = 'won';
+        const winMsg = getStatusMessage('won', movedByPlayer, 0);
+        updateStatus(winMsg);
         showWinScreen(movedByPlayer);
         return;
       }
 
       // Rosette: same player rolls again; otherwise hand off
       if (isRosette(toPosition)) {
+        updateStatus(getStatusMessage('rosette', movedByPlayer, 0));
         nextTurn(true);
       } else {
         nextTurn(false);
@@ -898,8 +931,8 @@
       gameState.phase = 'roll';
       const btn = document.getElementById('btn-roll');
       if (btn) btn.disabled = false;
-      const currentPlayerLabel = gameState.players[gameState.currentPlayer].label;
-      updateStatus(currentPlayerLabel + "\u2019s turn \u2014 roll the dice");
+      const msg = getStatusMessage('roll', gameState.currentPlayer, 0);
+      updateStatus(msg);
     }
 
     /**
@@ -935,7 +968,8 @@
       // Enable Roll button and update status
       const btn = document.getElementById('btn-roll');
       if (btn) btn.disabled = false;
-      updateStatus(gameState.players[0].label + "\u2019s turn \u2014 roll the dice");
+      const msg = getStatusMessage('roll', gameState.currentPlayer, 0);
+      updateStatus(msg);
     }
 
     /**
@@ -1177,11 +1211,13 @@
 
         if (gameState.validMoves.length === 0) {
           // No legal moves — auto-pass to opponent
-          const name = gameState.players[gameState.currentPlayer].label;
-          autoPass('No legal moves for ' + name);
+          const msg = getStatusMessage('auto-pass', gameState.currentPlayer, gameState.diceResult);
+          autoPass(msg);
         } else {
           // Advance to selection phase
           gameState.phase = 'select';
+          const msg = getStatusMessage('select', gameState.currentPlayer, gameState.diceResult);
+          updateStatus(msg);
           highlightMoves();
         }
       }, 600);
