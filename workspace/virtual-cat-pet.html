@@ -323,5 +323,191 @@
     };
   </script>
 
+  <script>
+    /* ── CAT_FRAMES ──────────────────────────────────────────────────
+     * All 8 animation states × 2 frames each.
+     * Every frame is drawn on a 14-column × 8-row grid (padded with
+     * spaces so the <pre> bounding box never changes width).
+     * ────────────────────────────────────────────────────────────── */
+    const CAT_FRAMES = {
+
+      /* Sitting cat — tail sways left / right */
+      idle: [
+        // frame 0: tail left
+        "  /\\_____/\\ \n" +
+        " (  o   o  )\n" +
+        "  (  =^=  ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        " ~           \n" +
+        "             ",
+        // frame 1: tail right
+        "  /\\_____/\\ \n" +
+        " (  o   o  )\n" +
+        "  (  =^=  ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        "           ~ \n" +
+        "             "
+      ],
+
+      /* Cat looking upward with empty bowl */
+      hungry: [
+        // frame 0
+        "  /\\_____/\\ \n" +
+        " (  ^ . ^  )\n" +
+        "  (  =^=  ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        "  [  ..  ]  \n" +
+        "             ",
+        // frame 1: eyes looking further up
+        "  /\\_____/\\ \n" +
+        " (  ^ ^ ^  )\n" +
+        "  (  =^=  ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        "  [  ..  ]  \n" +
+        "             "
+      ],
+
+      /* Cat with drooping ears / sad expression */
+      unhappy: [
+        // frame 0
+        " \\._____./  \n" +
+        " (  - . -  )\n" +
+        "  ( =^=   ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        "  . . . . . \n" +
+        "             ",
+        // frame 1: slightly different droop
+        " \\._____./  \n" +
+        " (  - _ -  )\n" +
+        "  ( =^=   ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        "  . . . . . \n" +
+        "             "
+      ],
+
+      /* Cat lying down, sick — wavy lines alternate position */
+      sick: [
+        // frame 0: waves above
+        "  ~~  ~~    \n" +
+        " /\\_______/\\\n" +
+        "(  x . x   )\n" +
+        " \\__________/\n" +
+        "             \n" +
+        "             \n" +
+        "             \n" +
+        "             ",
+        // frame 1: waves shifted
+        "   ~~ ~~    \n" +
+        " /\\_______/\\\n" +
+        "(  x . x   )\n" +
+        " \\__________/\n" +
+        "             \n" +
+        "             \n" +
+        "             \n" +
+        "             "
+      ],
+
+      /* Cat at bowl — head dips in frame 1 */
+      eating: [
+        // frame 0: head up
+        "  /\\_____/\\ \n" +
+        " (  o   o  )\n" +
+        "  (  =^=  ) \n" +
+        "  (       ) \n" +
+        "   )     (  \n" +
+        "  (_,---,_) \n" +
+        "  [~~~~~~]  \n" +
+        "             ",
+        // frame 1: head dipped to bowl
+        "  /\\_____/\\ \n" +
+        " (  -   -  )\n" +
+        "  (  =^=  ) \n" +
+        "  (       ) \n" +
+        "   )    ,(  \n" +
+        "  (_,-v-,_) \n" +
+        "  [~~~~~~]  \n" +
+        "             "
+      ],
+
+      /* Cat batting a ball — ball moves left ↔ right */
+      playing: [
+        // frame 0: ball on left
+        "  /\\_____/\\ \n" +
+        " (  ^ . ^  )\n" +
+        "  (  =^=  ) \n" +
+        "  (  o    ) \n" +
+        " o )     (  \n" +
+        "  (_,---,_) \n" +
+        "             \n" +
+        "             ",
+        // frame 1: ball on right
+        "  /\\_____/\\ \n" +
+        " (  ^ . ^  )\n" +
+        "  (  =^=  ) \n" +
+        "  (    o  ) \n" +
+        "   )     ( o\n" +
+        "  (_,---,_) \n" +
+        "             \n" +
+        "             "
+      ],
+
+      /* Cat curled up sleeping — z count alternates */
+      sleeping: [
+        // frame 0
+        "             \n" +
+        "    z        \n" +
+        "  /\\_____/\\ \n" +
+        " ( - . -   )\n" +
+        "  (__^____) \n" +
+        "  (  ___  ) \n" +
+        "  (_______)  \n" +
+        "             ",
+        // frame 1
+        "             \n" +
+        "    z  Z     \n" +
+        "  /\\_____/\\ \n" +
+        " ( - . -   )\n" +
+        "  (__^____) \n" +
+        "  (  ___  ) \n" +
+        "  (_______)  \n" +
+        "             "
+      ],
+
+      /* Cat on its back, × eyes */
+      dead: [
+        // frame 0
+        "  /\\_____/\\ \n" +
+        " (  x   x  )\n" +
+        "  (  =^=  ) \n" +
+        "  (_______) \n" +
+        "  /|     |\\ \n" +
+        " / |     | \\\n" +
+        "   |     |  \n" +
+        "             ",
+        // frame 1 (identical — no animation)
+        "  /\\_____/\\ \n" +
+        " (  x   x  )\n" +
+        "  (  =^=  ) \n" +
+        "  (_______) \n" +
+        "  /|     |\\ \n" +
+        " / |     | \\\n" +
+        "   |     |  \n" +
+        "             "
+      ]
+    };
+  </script>
+
 </body>
 </html>
