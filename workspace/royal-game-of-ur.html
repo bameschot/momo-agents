@@ -31,19 +31,205 @@
     main {
       max-width: min(100vw, 480px);
       margin: 0 auto;
+      padding: 1rem 0.5rem;
+    }
+
+    /* Trays styling */
+    #tray-light,
+    #tray-shadow {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 1rem;
+      background-color: var(--surface);
+      border-radius: 0.5rem;
+      margin: 0.5rem 0;
+    }
+
+    .tray-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tray-label.light {
+      color: var(--accent-light);
+    }
+
+    .tray-label.shadow {
+      color: var(--accent-shadow);
+    }
+
+    .tray-pieces {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-grow: 1;
+      flex-wrap: wrap;
+    }
+
+    .borne-off-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.25rem;
+      flex-shrink: 0;
+    }
+
+    .borne-off-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .borne-off-badge {
+      font-size: 1.25rem;
+      font-weight: 700;
+      min-width: 2rem;
+      text-align: center;
+      color: var(--text);
+    }
+
+    /* Piece styling */
+    .piece {
+      width: 2.75rem;
+      height: 2.75rem;
+      border-radius: 50%;
+      cursor: pointer;
+      touch-action: manipulation;
+      user-select: none;
+      transition: box-shadow 0.2s ease;
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .piece-light {
+      background-color: var(--accent-light);
+    }
+
+    .piece-shadow {
+      background-color: var(--accent-shadow);
+    }
+
+    .piece:hover:not(:disabled) {
+      box-shadow: 0 0 0.5rem rgba(255, 255, 255, 0.2);
+    }
+
+    /* ── Board Grid ──────────────────────────────────────────── */
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(3, 1fr);
+      gap: 3px;
+      width: 100%;
+      background-color: var(--bg);
+      padding: 3px;
+      border-radius: 6px;
+      margin: 0.5rem 0;
+    }
+
+    .square {
+      aspect-ratio: 1;
+      min-height: 44px;
+      border-radius: 4px;
+      background-color: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      cursor: default;
+    }
+
+    .square.inactive {
+      visibility: hidden;
+    }
+
+    .square.battle-lane {
+      background-color: var(--surface-alt);
+    }
+
+    .square.rosette {
+      border: 2px solid var(--rosette);
+    }
+
+    .square.rosette.battle-lane {
+      background-color: var(--surface-alt);
+    }
+
+    .rosette-svg {
+      width: 65%;
+      height: 65%;
+      display: block;
+      pointer-events: none;
     }
   </style>
 </head>
 <body>
   <main>
     <div id="status-bar"></div>
-    <div id="tray-shadow"></div>
+
+    <div id="tray-shadow">
+      <div class="tray-label shadow">Shadow</div>
+      <div class="tray-pieces" id="tray-shadow-pieces"></div>
+      <div class="borne-off-section">
+        <div class="borne-off-label">Borne Off</div>
+        <div class="borne-off-badge" id="borne-shadow">0</div>
+      </div>
+    </div>
+
     <div id="board"></div>
-    <div id="tray-light"></div>
+
+    <div id="tray-light">
+      <div class="tray-label light">Light</div>
+      <div class="tray-pieces" id="tray-light-pieces"></div>
+      <div class="borne-off-section">
+        <div class="borne-off-label">Borne Off</div>
+        <div class="borne-off-badge" id="borne-light">0</div>
+      </div>
+    </div>
+
     <div id="dice-area"></div>
   </main>
 
   <script>
+    /**
+     * Initialize all 14 piece elements and inject them into the DOM.
+     * Creates 7 pieces for each player (Light and Shadow).
+     * Each piece is a styled div with a unique data-piece-id.
+     */
+    function initPieces() {
+      // Light player pieces (L0–L6)
+      const trayLightPiecesContainer = document.getElementById('tray-light-pieces');
+      if (trayLightPiecesContainer) {
+        trayLightPiecesContainer.innerHTML = ''; // Clear any existing pieces
+        for (let i = 0; i < 7; i++) {
+          const piece = document.createElement('div');
+          piece.className = 'piece piece-light';
+          piece.dataset.pieceId = `L${i}`;
+          trayLightPiecesContainer.appendChild(piece);
+        }
+      }
+
+      // Shadow player pieces (S0–S6)
+      const trayShadowPiecesContainer = document.getElementById('tray-shadow-pieces');
+      if (trayShadowPiecesContainer) {
+        trayShadowPiecesContainer.innerHTML = ''; // Clear any existing pieces
+        for (let i = 0; i < 7; i++) {
+          const piece = document.createElement('div');
+          piece.className = 'piece piece-shadow';
+          piece.dataset.pieceId = `S${i}`;
+          trayShadowPiecesContainer.appendChild(piece);
+        }
+      }
+    }
+
+    // Call initPieces on page load
+    document.addEventListener('DOMContentLoaded', initPieces);
   </script>
 </body>
 </html>
