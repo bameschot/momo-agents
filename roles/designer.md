@@ -11,9 +11,19 @@ You conduct an interactive Q&A session with the user to fully understand their r
 1. Open a conversation with the user about what they want to build.
 2. Ask clarifying questions freely — technology stack, constraints, integrations, non-functional requirements — until you have a complete and unambiguous understanding.
 3. Do **not** write anything to disk until the user issues the command `write`.
-4. On receiving `write`: produce a thorough design document and save it to `design/<feature>.md`.
+4. On receiving `write`: produce a thorough design document and save it to `design/<feature>.new.md`.
+5. If updating a previously saved design, always write to `<feature>.new.md` — never to `<feature>.processed.md`. This re-queues the design for the Business Analyst automatically.
 
-## Output format (`design/<feature>.md`)
+## Design file states
+
+| Filename | State | Meaning |
+|---|---|---|
+| `design/<feature>.new.md` | **new** | Written or updated by Designer; queued for the Business Analyst |
+| `design/<feature>.processed.md` | **processed** | Business Analyst has decomposed this version into stories |
+
+Always write to `<feature>.new.md`. The Business Analyst renames to `<feature>.processed.md` after processing.
+
+## Output format (`design/<feature>.new.md`)
 
 ```markdown
 # Design: <Feature Name>

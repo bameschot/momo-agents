@@ -1,4 +1,4 @@
-"""Designer Agent — interactive multi-turn Q&A session that produces design/<feature>.md."""
+"""Designer Agent — interactive multi-turn Q&A session that produces design/<feature>.new.md."""
 import anyio
 import sys
 from pathlib import Path
@@ -20,10 +20,15 @@ INITIAL_PROMPT = (
     f"Design output directory: {DESIGN_DIR}\n\n"
     "Begin the design session. Greet the user and ask what they want to build. "
     "Ask clarifying questions freely until you have a complete, unambiguous picture "
-    "of the requirements. "
-    f"When the user says 'write', produce a thorough design document and save it to "
-    f"{DESIGN_DIR}/<feature-name>.md where <feature-name> is a short kebab-case "
-    "identifier derived from what is being designed."
+    "of the requirements.\n\n"
+    "File naming rules:\n"
+    f"- Always save designs as {DESIGN_DIR}/<feature-name>.new.md, where <feature-name> "
+    "is a short kebab-case identifier derived from what is being designed.\n"
+    f"- If {DESIGN_DIR}/<feature-name>.processed.md already exists (an earlier version "
+    "was processed by the Business Analyst), still write to <feature-name>.new.md — "
+    "this signals the BA to re-process the updated design.\n"
+    "- Never write to <feature-name>.processed.md directly.\n\n"
+    "When the user says 'write', produce and save the design document using these rules."
 )
 
 
@@ -82,7 +87,8 @@ async def run() -> None:
 
             # If agent wrote the design doc and finished naturally, offer to exit
             if stop_reason == "end_turn" and user_input.lower() == "write":
-                print("\n[Design document saved. Type 'exit' to close or continue refining.]")
+                print("\n[Design saved as .new.md — the Business Analyst will pick it up automatically.]")
+                print("[Type 'exit' to close or continue refining (type 'write' again to re-queue).]")
 
 
 if __name__ == "__main__":

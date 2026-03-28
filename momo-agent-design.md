@@ -23,7 +23,8 @@ momo-agents/
 │   ├── coding-agent.md
 │   └── story-reviewer.md
 ├── design/                    ← Designer Agent outputs
-│   └── <feature>.md
+│   ├── <feature>.new.md       ← written/updated by Designer; queued for BA
+│   └── <feature>.processed.md ← renamed by BA after stories are generated
 ├── stories/                   ← story files; state encoded in filename suffix
 │   ├── STORY-001.md           ← pending
 │   ├── STORY-002.working.md   ← claimed by a Coding Agent
@@ -48,7 +49,7 @@ momo-agents/
 | Agent | Role | Reads from | Writes to |
 |---|---|---|---|
 | **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `design/` |
-| **Business Analyst** | Watches `design/` continuously; decomposes any new or updated design into stories | `design/*.md` | `stories/` |
+| **Business Analyst** | Watches `design/` for `*.new.md` files; decomposes each into stories; renames to `*.processed.md` | `design/*.new.md` | `stories/`, `design/` |
 | **Project Initialiser** | Scaffolds `workspace/` once before any Coding Agent runs | `design/` | `workspace/` |
 | **Coding Agent** (×N) | Claims and implements one story at a time; polls indefinitely for new work | `stories/`, `workspace/CLAUDE.md` | `workspace/` |
 | **Story Reviewer** | Triages permanently-failed stories with user guidance | `stories/*.failed.md` | `stories/` |
@@ -68,9 +69,10 @@ The Designer runs as a genuine multi-turn conversation backed by `ClaudeSDKClien
 2. The user types responses directly in the terminal; each message is sent to the agent via `client.query()`.
 3. The agent asks clarifying questions — technology stack, constraints, integrations, non-functional requirements — until it has a complete and unambiguous picture.
 4. The agent does **not** write anything to disk until the user types **`write`**.
-5. On `write`: the agent produces a thorough design document and saves it to `design/<feature-name>.md`.
-6. The session continues — the user can keep refining and issue `write` again at any time.
-7. Type `exit`, `quit`, or press `Ctrl+C` to end the session.
+5. On `write`: the agent produces a thorough design document and saves it to `design/<feature-name>.new.md`. This immediately queues the design for the Business Analyst.
+6. If `design/<feature-name>.processed.md` already exists (an earlier version was processed), the agent still writes to `<feature-name>.new.md` — this re-queues the design and the BA will regenerate its stories.
+7. The session continues — the user can keep refining and issue `write` again at any time.
+8. Type `exit`, `quit`, or press `Ctrl+C` to end the session.
 
 ### Implementation notes
 
@@ -82,16 +84,23 @@ The Designer runs as a genuine multi-turn conversation backed by `ClaudeSDKClien
 
 ## Business Analyst Agent
 
-The BA agent watches the `design/` folder **continuously** rather than waiting for a single named file. It re-triggers automatically whenever any `.md` file is created or its modification time changes.
+The BA agent uses design file **state encoded in the filename** — no mtime tracking, no external state store. The Designer writes `*.new.md`; the BA processes it and renames it to `*.processed.md`. If the designer updates and re-saves a design as `*.new.md`, the BA picks it up again automatically.
+
+### Design file states
+
+| Filename | State | Written by | Meaning |
+|---|---|---|---|
+| `design/<feature>.new.md` | **new** | Designer Agent | Queued for BA; not yet processed |
+| `design/<feature>.processed.md` | **processed** | Business Analyst | Stories have been generated for this version |
 
 ### Watch loop
 
-1. Every 5 seconds, glob all `*.md` files in `design/`.
-2. For each file, compare the current `mtime` against the last-recorded value (stored per-file in `.sentinels/ba_mtimes/`).
-3. If mtime changed (new file or designer re-saved an existing one): record the new mtime immediately (to avoid double-triggering), then run `business_analyst.py --design <file>`.
-4. The agent sleeps and repeats until `pipeline_complete` is written.
+1. Every 5 seconds, glob all `*.new.md` files in `design/`.
+2. For each `<feature>.new.md` found: run `business_analyst.py --design <file>`.
+3. On completion, rename `<feature>.new.md` → `<feature>.processed.md` (overwrites any previous processed version for that feature).
+4. Sleep and repeat until `pipeline_complete` is written.
 
-This means a designer can refine and re-save a design document at any time and the BA will automatically regenerate the stories for it.
+If the designer revises a design and issues `write` again, it saves as `<feature>.new.md`. The BA finds it on the next poll and processes it, naturally overwriting the old `<feature>.processed.md`. No mtime tracking, no intermediate state files.
 
 ---
 
@@ -116,8 +125,7 @@ If `workspace/` already contains files (beyond the skeleton `CLAUDE.md`), the in
 Coding Agents **never stop on their own** — they poll indefinitely for eligible work. The agent loop:
 
 1. Wait for `pi.done` sentinel (Project Initialiser has finished).
-2. Wait for at least one `STORY-*.md` file to appear in `stories/`.
-3. Enter the main work loop:
+2. Enter the main work loop:
    - If `pipeline_complete` exists → exit cleanly.
    - If `HALT` exists → wait for it to be removed (Story Reviewer is working), then resume.
    - Attempt to claim and implement the next eligible story.
