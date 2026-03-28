@@ -614,8 +614,72 @@ def convert(markdown_text: str, base_dir: Path) -> ParseResult:
 
 
 def build_toc(headings: list[Heading]) -> str:
-    """Build an HTML table-of-contents from a list of headings."""
-    raise NotImplementedError
+    """Build an HTML table-of-contents <nav> element from a list of headings.
+
+    Only H1–H3 headings are included. H1 → top-level list items; H2 → one
+    level of nesting; H3 → two levels of nesting. Level jumps (e.g. H1
+    directly followed by H3) are handled gracefully — the output is always
+    well-nested HTML. Returns an empty string when *headings* contains no
+    H1–H3 entries.
+
+    Slugs are taken directly from Heading.slug — not re-generated here.
+
+    Args:
+        headings: Ordered list of Heading objects (H1–H3 from ParseResult).
+
+    Returns:
+        An HTML string for the ToC ``<nav id="toc">`` element, or ``""`` if
+        there are no H1–H3 headings to display.
+    """
+    # Filter to H1–H3 only (ToC scope).
+    toc_headings = [h for h in headings if 1 <= h.level <= 3]
+    if not toc_headings:
+        return ""
+
+    parts: list[str] = []
+    parts.append('<nav id="toc">')
+
+    # Stack tracks the heading levels of currently-open <ul> elements.
+    stack: list[int] = []
+
+    for heading in toc_headings:
+        level = heading.level
+
+        if not stack:
+            # First item: open a <ul> at this level.
+            parts.append("<ul>")
+            stack.append(level)
+        elif level > stack[-1]:
+            # Deeper level: open exactly ONE new <ul>, regardless of jump size.
+            # (H1 → H3 still produces one nested <ul>, keeping HTML valid.)
+            parts.append("<ul>")
+            stack.append(level)
+        elif level < stack[-1]:
+            # Shallower level: close <li>/<ul> pairs until at or below target.
+            while stack and stack[-1] > level:
+                parts.append("</li></ul>")
+                stack.pop()
+            if not stack:
+                # Went past root — open a fresh <ul>.
+                parts.append("<ul>")
+                stack.append(level)
+            else:
+                # Close the previous sibling <li> (same level now).
+                parts.append("</li>")
+        else:
+            # Same level: just close the previous sibling <li>.
+            parts.append("</li>")
+
+        # Open the new list item (left open for potential child <ul>).
+        parts.append(f'<li><a href="#{heading.slug}">{heading.text}</a>')
+
+    # Close all open <li> and <ul> elements.
+    while stack:
+        parts.append("</li></ul>")
+        stack.pop()
+
+    parts.append("</nav>")
+    return "".join(parts)
 
 
 def render_page(result: ParseResult, title: str | None, toc_html: str) -> str:
