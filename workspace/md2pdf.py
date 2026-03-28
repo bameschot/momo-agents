@@ -9,6 +9,7 @@ Requirements: Python 3.11+, stdlib only.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -133,8 +134,34 @@ def export_pdf(html_content: str, output_path: Path) -> None:
 
 
 def check_wkhtmltopdf() -> None:
-    """Verify wkhtmltopdf is available on PATH; exit with an error if not."""
-    raise NotImplementedError
+    """Verify wkhtmltopdf is available on PATH; exit with an error if not.
+
+    If wkhtmltopdf is found, returns None silently.
+    If not found, prints a human-readable installation guide to stderr and exits 1.
+    """
+    if shutil.which("wkhtmltopdf") is not None:
+        return None
+
+    print(
+        "Error: wkhtmltopdf is not installed or not found on PATH.\n"
+        "\n"
+        "md2pdf requires wkhtmltopdf to render HTML to PDF.\n"
+        "A modern release (>= 0.12.x) is required for clickable internal PDF links.\n"
+        "\n"
+        "Installation instructions:\n"
+        "\n"
+        "  macOS:\n"
+        "    brew install wkhtmltopdf\n"
+        "\n"
+        "  Linux (Debian/Ubuntu):\n"
+        "    sudo apt-get install wkhtmltopdf\n"
+        "    For other distros, visit: https://wkhtmltopdf.org/downloads.html\n"
+        "\n"
+        "  Windows:\n"
+        "    Download the installer from: https://wkhtmltopdf.org/downloads.html\n",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +171,7 @@ def check_wkhtmltopdf() -> None:
 
 def main() -> None:
     """Main entry point — stub pipeline (no PDF written yet)."""
+    check_wkhtmltopdf()
     args = parse_args()
     print(f"[md2pdf] Input:  {args.input}")
     print(f"[md2pdf] Output: {args.output}")
