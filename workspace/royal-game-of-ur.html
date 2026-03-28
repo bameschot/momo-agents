@@ -393,6 +393,158 @@
       console.log('✓ Data model assertions passed');
     }
 
+    // ── Rules Engine (Pure Functions) ────────────────────────
+
+    /**
+     * Returns true if pathPos is a rosette position.
+     * Pure: no side-effects, no DOM access.
+     * @param {number} pathPos
+     * @returns {boolean}
+     */
+    function isRosette(pathPos) {
+      return ROSETTE_POSITIONS.includes(pathPos);
+    }
+
+    /**
+     * Returns true if moving to targetPos would capture an opponent's piece.
+     * Captures can only happen in the battle lane (5–12) and not on pos 8 (safe rosette).
+     * Pure: reads only from the state board Map.
+     * @param {number} targetPos
+     * @param {number} currentPlayer
+     * @param {object} state
+     * @returns {boolean}
+     */
+    function wouldCapture(targetPos, currentPlayer, state) {
+      if (targetPos < BATTLE_LANE_RANGE.min || targetPos > BATTLE_LANE_RANGE.max) return false;
+      if (targetPos === SAFE_SQUARE_POSITION) return false;
+      const squareKey = PLAYER_PATH[currentPlayer][targetPos];
+      const occupant = state.board.get(squareKey);
+      return occupant !== undefined && occupant.player !== currentPlayer;
+    }
+
+    /**
+     * Returns all valid moves for the given player given the dice result.
+     * Pure: only reads from state, returns a new array.
+     * @param {number} playerIndex
+     * @param {number} diceResult
+     * @param {object} state
+     * @returns {Array<{pieceId: string, fromPos: number, toPos: number, captures: boolean}>}
+     */
+    function getValidMoves(playerIndex, diceResult, state) {
+      if (diceResult === 0) return [];
+
+      const moves = [];
+      const player = state.players[playerIndex];
+
+      for (const piece of player.pieces) {
+        const fromPos = piece.position;
+        const toPos = fromPos + diceResult;
+
+        // Cannot overshoot past pos 15
+        if (toPos > 15) continue;
+
+        if (toPos === 15) {
+          // Bearing off — always valid when landing exactly on 15
+          moves.push({ pieceId: piece.id, fromPos, toPos: 15, captures: false });
+          continue;
+        }
+
+        // Determine target square on the board
+        const squareKey = PLAYER_PATH[playerIndex][toPos];
+        if (!squareKey) continue; // no valid board square at this position
+
+        const occupant = state.board.get(squareKey);
+
+        // Blocked by a friendly piece
+        if (occupant && occupant.player === playerIndex) continue;
+
+        // Cannot capture on the safe rosette (pos 8)
+        if (toPos === SAFE_SQUARE_POSITION && occupant && occupant.player !== playerIndex) continue;
+
+        moves.push({
+          pieceId: piece.id,
+          fromPos,
+          toPos,
+          captures: wouldCapture(toPos, playerIndex, state),
+        });
+      }
+
+      return moves;
+    }
+
+    /**
+     * Applies a move to the state, returning a NEW state object (does NOT mutate input).
+     * Handles: normal advance, bearing off (toPos === 15), and captures.
+     * @param {{pieceId: string, fromPos: number, toPos: number, captures: boolean}} move
+     * @param {object} state
+     * @returns {object} new game state
+     */
+    function applyMove(move, state) {
+      // Shallow-deep clone sufficient per the implementation hints
+      const newState = {
+        ...state,
+        players: state.players.map(function (p) {
+          return { ...p, pieces: p.pieces.map(function (pc) { return { ...pc }; }) };
+        }),
+        board: new Map(state.board),
+        validMoves: [],
+        selectedPieceId: null,
+      };
+
+      // Find which player owns this piece
+      const playerIndex = newState.players.findIndex(function (p) {
+        return p.pieces.some(function (pc) { return pc.id === move.pieceId; });
+      });
+      const player = newState.players[playerIndex];
+      const piece = player.pieces.find(function (pc) { return pc.id === move.pieceId; });
+
+      // Remove the piece from its current board square (if it was on the board)
+      if (move.fromPos > 0) {
+        const fromKey = PLAYER_PATH[playerIndex][move.fromPos];
+        if (fromKey) newState.board.delete(fromKey);
+      }
+
+      // Handle capture: reset the captured opponent piece to position 0
+      if (move.captures) {
+        const toKey = PLAYER_PATH[playerIndex][move.toPos];
+        const capturedEntry = newState.board.get(toKey);
+        if (capturedEntry) {
+          const opponentPiece = newState.players[capturedEntry.player].pieces.find(
+            function (pc) { return pc.id === capturedEntry.pieceId; }
+          );
+          if (opponentPiece) opponentPiece.position = 0;
+          newState.board.delete(toKey);
+        }
+      }
+
+      // Update the moving piece's position
+      piece.position = move.toPos;
+
+      if (move.toPos === 15) {
+        // Bearing off: increment counter, do not place on board
+        player.borneOff += 1;
+      } else {
+        // Place piece on the destination square
+        const toKey = PLAYER_PATH[playerIndex][move.toPos];
+        if (toKey) {
+          newState.board.set(toKey, { player: playerIndex, pieceId: piece.id });
+        }
+      }
+
+      return newState;
+    }
+
+    /**
+     * Returns true if the given player has borne off all 7 pieces (win condition).
+     * Pure: only reads borneOff counter from state.
+     * @param {number} playerIndex
+     * @param {object} state
+     * @returns {boolean}
+     */
+    function checkWin(playerIndex, state) {
+      return state.players[playerIndex].borneOff === 7;
+    }
+
     // ── Board constants ──────────────────────────────────────
     const ROSETTE_IDS = new Set(['r0c0', 'r0c3', 'r1c3', 'r2c0', 'r2c3']);
     const INACTIVE_IDS = new Set(['r0c4', 'r0c5', 'r2c4', 'r2c5']);
