@@ -255,11 +255,101 @@
     #btn-roll:hover:not(:disabled) {
       opacity: 0.85;
     }
+
+    /* ── Piece Interaction Highlights ────────────────────────── */
+
+    .piece.movable {
+      box-shadow: 0 0 0 3px var(--highlight);
+      cursor: pointer;
+    }
+
+    .piece.selected {
+      box-shadow: 0 0 0 3px var(--rosette), 0 0 8px var(--rosette);
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 4px var(--highlight); outline: 2px solid var(--highlight); }
+      50% { box-shadow: 0 0 14px var(--highlight), 0 0 24px var(--highlight); outline: 2px solid var(--highlight); }
+    }
+
+    .square.valid-move {
+      outline: 2px solid var(--highlight);
+      animation: pulse-glow 1.2s ease-in-out infinite;
+      cursor: pointer;
+    }
+
+    @keyframes pop-out {
+      0%   { transform: scale(1);   opacity: 1; }
+      50%  { transform: scale(1.5); opacity: 0.5; }
+      100% { transform: scale(0);   opacity: 0; }
+    }
+
+    .piece.pop-out {
+      animation: pop-out 300ms ease-out forwards;
+      pointer-events: none;
+    }
+
+    /* Status bar */
+    #status-bar {
+      text-align: center;
+      font-size: 1rem;
+      color: var(--text);
+      padding: 0.5rem;
+      min-height: 2rem;
+    }
+
+    /* Win overlay */
+    #overlay-win {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    #overlay-win.visible {
+      display: flex;
+    }
+
+    #overlay-win h2 {
+      color: var(--text);
+      font-size: 2rem;
+      margin: 0;
+      text-align: center;
+    }
+
+    #btn-play-again {
+      background-color: var(--accent-light);
+      color: var(--bg);
+      border: none;
+      border-radius: 0.5rem;
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+      min-height: 44px;
+      min-width: 120px;
+    }
+
+    #btn-play-again:hover {
+      opacity: 0.85;
+    }
   </style>
 </head>
 <body>
+  <div id="overlay-win" role="dialog" aria-modal="true" aria-labelledby="win-heading">
+    <h2 id="win-heading"></h2>
+    <button id="btn-play-again" aria-label="Play again">Play Again</button>
+  </div>
+
   <main>
-    <div id="status-bar"></div>
+    <div id="status" aria-live="polite"></div>
+    <div id="status-bar" style="display:none"></div>
 
     <div id="tray-shadow">
       <div class="tray-label shadow">Shadow</div>
@@ -548,30 +638,250 @@
     // ── State Machine & Stubs ────────────────────────────────
 
     /**
-     * Stub: update the status bar text content.
-     * Replaced with a richer implementation in STORY-009.
+     * Update the status bar text content.
+     * Uses aria-live="polite" element with id="status".
      * @param {string} msg
      */
     function updateStatus(msg) {
-      const el = document.getElementById('status-bar');
+      const el = document.getElementById('status');
       if (el) el.textContent = msg || '';
     }
 
     /**
-     * Stub: highlight valid move squares and movable pieces.
-     * Replaced with a real implementation in STORY-008.
+     * Helper: find the path position index for a given squareId for a specific player.
+     * Searches PLAYER_PATH[playerIndex] positions 1–14.
+     * @param {string} squareId
+     * @param {number} playerIndex
+     * @returns {number|undefined}
      */
-    function highlightMoves() {
-      // no-op stub
+    function squareIdToPathPos(squareId, playerIndex) {
+      const path = PLAYER_PATH[playerIndex];
+      for (let pos = 1; pos <= 14; pos++) {
+        if (path[pos] === squareId) return pos;
+      }
+      return undefined;
     }
 
     /**
-     * Stub: show the win screen overlay.
-     * Replaced with a real implementation in STORY-010.
-     * @param {number} _playerIndex
+     * Helper: get the piece ID of an opponent occupying the capture square.
+     * Returns null if no capture.
+     * @param {{pieceId: string, fromPos: number, toPos: number, captures: boolean}} move
+     * @param {object} state
+     * @returns {string|null}
      */
-    function showWinScreen(_playerIndex) {
-      // no-op stub
+    function getCapturedPieceId(move, state) {
+      const playerIndex = state.currentPlayer;
+      const toKey = PLAYER_PATH[playerIndex][move.toPos];
+      if (!toKey) return null;
+      const occupant = state.board.get(toKey);
+      return occupant ? occupant.pieceId : null;
+    }
+
+    /**
+     * Remove all highlight classes from pieces and board squares.
+     * Called at the start of each new turn and after a move.
+     */
+    function clearHighlights() {
+      document.querySelectorAll('.piece').forEach(function (el) {
+        el.classList.remove('movable', 'selected', 'valid-move');
+      });
+      document.querySelectorAll('.square').forEach(function (el) {
+        el.classList.remove('valid-move', 'selected');
+      });
+    }
+
+    /**
+     * Highlight valid moves: adds .movable to pieces with at least one legal move
+     * and .valid-move to their destination board squares.
+     */
+    function highlightMoves() {
+      clearHighlights();
+
+      // Collect unique piece IDs that have valid moves
+      const movablePieceIds = new Set(gameState.validMoves.map(function (m) { return m.pieceId; }));
+
+      // Collect destination squareIds (only on-board positions 1–14)
+      const validSquareIds = new Set();
+      gameState.validMoves.forEach(function (move) {
+        if (move.toPos >= 1 && move.toPos <= 14) {
+          const squareId = PLAYER_PATH[gameState.currentPlayer][move.toPos];
+          if (squareId) validSquareIds.add(squareId);
+        }
+      });
+
+      // Apply .movable
+      movablePieceIds.forEach(function (pieceId) {
+        const el = document.querySelector('[data-piece-id="' + pieceId + '"]');
+        if (el) el.classList.add('movable');
+      });
+
+      // Apply .valid-move to board squares
+      validSquareIds.forEach(function (squareId) {
+        const el = document.querySelector('[data-square-id="' + squareId + '"]');
+        if (el) el.classList.add('valid-move');
+      });
+    }
+
+    /**
+     * Select a piece for moving.
+     * Guards: phase must be 'select'; piece must have at least one valid move.
+     * Sets selectedPieceId, marks piece with .selected, re-highlights only
+     * the valid destinations for this specific piece.
+     * @param {string} pieceId
+     */
+    function selectPiece(pieceId) {
+      if (gameState.phase !== 'select') return;
+
+      const pieceMoves = gameState.validMoves.filter(function (m) {
+        return m.pieceId === pieceId;
+      });
+      if (pieceMoves.length === 0) return;
+
+      clearHighlights();
+      gameState.selectedPieceId = pieceId;
+
+      // Mark selected piece
+      const pieceEl = document.querySelector('[data-piece-id="' + pieceId + '"]');
+      if (pieceEl) pieceEl.classList.add('selected');
+
+      // Keep .movable on other pieces that still have moves
+      const movablePieceIds = new Set(gameState.validMoves.map(function (m) { return m.pieceId; }));
+      movablePieceIds.forEach(function (pid) {
+        if (pid !== pieceId) {
+          const el = document.querySelector('[data-piece-id="' + pid + '"]');
+          if (el) el.classList.add('movable');
+        }
+      });
+
+      // Highlight only this piece's valid destination squares
+      pieceMoves.forEach(function (move) {
+        if (move.toPos >= 1 && move.toPos <= 14) {
+          const squareId = PLAYER_PATH[gameState.currentPlayer][move.toPos];
+          if (squareId) {
+            const el = document.querySelector('[data-square-id="' + squareId + '"]');
+            if (el) el.classList.add('valid-move');
+          }
+        }
+      });
+    }
+
+    /**
+     * Execute a move for the selected piece to the given path position.
+     * Guards: selectedPieceId must be set; toPosition must be valid for that piece.
+     * Applies the move, updates DOM, handles capture/rosette/win/turn transitions.
+     * @param {number} toPosition  path position integer (1–15)
+     */
+    function movePiece(toPosition) {
+      if (!gameState.selectedPieceId) return;
+
+      const move = gameState.validMoves.find(function (m) {
+        return m.pieceId === gameState.selectedPieceId && m.toPos === toPosition;
+      });
+      if (!move) return;
+
+      // Capture piece ID before applying move
+      const capturedId = move.captures ? getCapturedPieceId(move, gameState) : null;
+
+      // Record which player made the move (before applyMove may change currentPlayer)
+      const movedByPlayer = gameState.currentPlayer;
+
+      // Apply move and update game state
+      gameState = applyMove(move, gameState);
+      // Preserve current player so win/turn checks reference the correct player
+      gameState.currentPlayer = movedByPlayer;
+
+      // Update DOM
+      renderPieces();
+      clearHighlights();
+
+      // Capture animation: play pop-out on the returned piece
+      if (capturedId) {
+        const capturedEl = document.querySelector('[data-piece-id="' + capturedId + '"]');
+        if (capturedEl) {
+          capturedEl.classList.add('pop-out');
+          capturedEl.addEventListener('animationend', function handler() {
+            capturedEl.classList.remove('pop-out');
+            capturedEl.removeEventListener('animationend', handler);
+          }, { once: true });
+        }
+      }
+
+      // Check win condition
+      if (checkWin(movedByPlayer, gameState)) {
+        gameState.phase = 'won';
+        showWinScreen(movedByPlayer);
+        return;
+      }
+
+      // Rosette: same player rolls again; otherwise hand off
+      if (isRosette(toPosition)) {
+        nextTurn(true);
+      } else {
+        nextTurn(false);
+      }
+    }
+
+    /**
+     * Render all pieces to their current positions in the DOM.
+     * - position 0   → waiting tray
+     * - position 15  → borne-off (hidden; badge updated)
+     * - 1–14         → appended as child of the matching board square
+     */
+    function renderPieces() {
+      // Update borne-off badge counts
+      const borneLight = document.getElementById('borne-light');
+      const borneShadow = document.getElementById('borne-shadow');
+      if (borneLight) borneLight.textContent = String(gameState.players[0].borneOff);
+      if (borneShadow) borneShadow.textContent = String(gameState.players[1].borneOff);
+
+      const trayContainers = [
+        document.getElementById('tray-light-pieces'),
+        document.getElementById('tray-shadow-pieces')
+      ];
+
+      gameState.players.forEach(function (player, playerIndex) {
+        player.pieces.forEach(function (piece) {
+          const el = document.querySelector('[data-piece-id="' + piece.id + '"]');
+          if (!el) return;
+
+          if (piece.position === 0) {
+            // Return to waiting tray
+            const tray = trayContainers[playerIndex];
+            if (tray && el.parentElement !== tray) {
+              el.style.display = '';
+              tray.appendChild(el);
+            } else {
+              el.style.display = '';
+            }
+          } else if (piece.position === 15) {
+            // Borne off: hide element
+            el.style.display = 'none';
+          } else {
+            // On board: child of matching square
+            const squareId = PLAYER_PATH[playerIndex][piece.position];
+            if (squareId) {
+              const squareEl = document.querySelector('[data-square-id="' + squareId + '"]');
+              if (squareEl && el.parentElement !== squareEl) {
+                el.style.display = '';
+                squareEl.appendChild(el);
+              }
+            }
+          }
+        });
+      });
+    }
+
+    /**
+     * Show the win screen overlay.
+     * Replaced with a richer implementation in STORY-010.
+     * @param {number} playerIndex
+     */
+    function showWinScreen(playerIndex) {
+      const label = gameState.players[playerIndex].label;
+      const overlay = document.getElementById('overlay-win');
+      const heading = document.getElementById('win-heading');
+      if (heading) heading.textContent = label + ' wins!';
+      if (overlay) overlay.classList.add('visible');
     }
 
     /**
@@ -620,7 +930,7 @@
 
       // Hide win overlay if present
       const winOverlay = document.getElementById('overlay-win');
-      if (winOverlay) winOverlay.style.display = 'none';
+      if (winOverlay) winOverlay.classList.remove('visible');
 
       // Enable Roll button and update status
       const btn = document.getElementById('btn-roll');
@@ -636,6 +946,79 @@
       // Bind Roll button click handler
       const btn = document.getElementById('btn-roll');
       if (btn) btn.addEventListener('click', rollDice);
+
+      // Bind Play Again button
+      const btnPlayAgain = document.getElementById('btn-play-again');
+      if (btnPlayAgain) {
+        btnPlayAgain.addEventListener('click', function () {
+          const overlay = document.getElementById('overlay-win');
+          if (overlay) overlay.classList.remove('visible');
+          resetGame();
+        });
+      }
+
+      // Board click delegation: clicking a .valid-move square executes a move
+      const boardEl = document.getElementById('board');
+      if (boardEl) {
+        boardEl.addEventListener('click', function (e) {
+          const squareEl = e.target.closest('[data-square-id]');
+          if (!squareEl || !squareEl.classList.contains('valid-move')) return;
+          const squareId = squareEl.getAttribute('data-square-id');
+          const pathPos = squareIdToPathPos(squareId, gameState.currentPlayer);
+          if (pathPos !== undefined) {
+            movePiece(pathPos);
+          }
+        });
+
+        boardEl.addEventListener('touchend', function (e) {
+          const squareEl = e.target.closest('[data-square-id]');
+          if (!squareEl || !squareEl.classList.contains('valid-move')) return;
+          e.preventDefault();
+          const squareId = squareEl.getAttribute('data-square-id');
+          const pathPos = squareIdToPathPos(squareId, gameState.currentPlayer);
+          if (pathPos !== undefined) {
+            movePiece(pathPos);
+          }
+        }, { passive: false });
+      }
+
+      // Piece click/touch delegation: clicking a .movable piece selects it;
+      // clicking the .selected piece again triggers bearing-off if that is the only valid move.
+      document.addEventListener('click', function (e) {
+        const pieceEl = e.target.closest('[data-piece-id]');
+        if (!pieceEl) return;
+        const pieceId = pieceEl.getAttribute('data-piece-id');
+
+        if (pieceEl.classList.contains('selected')) {
+          // If the only valid move for this piece is bearing off (toPos=15), execute it
+          const pieceMoves = gameState.validMoves.filter(function (m) { return m.pieceId === pieceId; });
+          const hasBoardMove = pieceMoves.some(function (m) { return m.toPos < 15; });
+          if (!hasBoardMove && pieceMoves.some(function (m) { return m.toPos === 15; })) {
+            movePiece(15);
+          }
+        } else if (pieceEl.classList.contains('movable')) {
+          selectPiece(pieceId);
+        }
+      });
+
+      document.addEventListener('touchend', function (e) {
+        const pieceEl = e.target.closest('[data-piece-id]');
+        if (!pieceEl) return;
+        const pieceId = pieceEl.getAttribute('data-piece-id');
+
+        if (pieceEl.classList.contains('selected')) {
+          const pieceMoves = gameState.validMoves.filter(function (m) { return m.pieceId === pieceId; });
+          const hasBoardMove = pieceMoves.some(function (m) { return m.toPos < 15; });
+          if (!hasBoardMove && pieceMoves.some(function (m) { return m.toPos === 15; })) {
+            e.preventDefault();
+            movePiece(15);
+          }
+        } else if (pieceEl.classList.contains('movable')) {
+          e.preventDefault();
+          selectPiece(pieceId);
+        }
+      }, { passive: false });
+
       // Reset to initial state and render pieces in their trays
       resetGame();
       // Ensure pieces are initialised (resetGame also calls initPieces; safe to call again)
