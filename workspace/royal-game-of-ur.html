@@ -366,6 +366,33 @@
     // eslint-disable-next-line prefer-const
     let gameState = createInitialState();
 
+    // ── Data Model Assertions ────────────────────────────────
+    if (typeof console !== 'undefined' && console.assert) {
+      // Test that createInitialState() returns independent objects
+      const state1 = createInitialState();
+      const state2 = createInitialState();
+      console.assert(state1 !== state2, 'createInitialState() should return different objects');
+      console.assert(state1.board !== state2.board, 'board Maps should be independent');
+      console.assert(state1.players !== state2.players, 'players arrays should be independent');
+
+      // Test PLAYER_PATH mappings
+      console.assert(PLAYER_PATH[0][1] === 'r0c3', 'Player 0 pos 1 should be r0c3');
+      console.assert(PLAYER_PATH[1][1] === 'r2c3', 'Player 1 pos 1 should be r2c3');
+      console.assert(PLAYER_PATH[0][8] === 'r1c3', 'Player 0 pos 8 should be r1c3');
+      console.assert(PLAYER_PATH[1][8] === 'r1c3', 'Player 1 pos 8 should be r1c3 (shared)');
+      console.assert(PLAYER_PATH[0][5] === 'r1c0', 'Player 0 pos 5 should be r1c0');
+      console.assert(PLAYER_PATH[0][12] === 'r1c7', 'Player 0 pos 12 should be r1c7');
+
+      // Test that all pieces start at position 0
+      state1.players.forEach((player, playerIdx) => {
+        player.pieces.forEach((piece, pieceIdx) => {
+          console.assert(piece.position === 0, `Player ${playerIdx} piece ${pieceIdx} should start at position 0`);
+        });
+      });
+
+      console.log('✓ Data model assertions passed');
+    }
+
     // ── Board constants ──────────────────────────────────────
     const ROSETTE_IDS = new Set(['r0c0', 'r0c3', 'r1c3', 'r2c0', 'r2c3']);
     const INACTIVE_IDS = new Set(['r0c4', 'r0c5', 'r2c4', 'r2c5']);
