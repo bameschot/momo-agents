@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Virtual Cat Pet</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ── Reset & base ───────────────────────────────────────────── */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: #0F380F;           /* darkest green — page bg */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: 'Press Start 2P', monospace;
+      color: #9BBC0F;
+    }
+
+    /* ── Outer widget ───────────────────────────────────────────── */
+    #widget {
+      background-color: #306230;           /* UI chrome */
+      border: 3px solid #0F380F;
+      border-radius: 18px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7),
+                  0 2px 4px rgba(0, 0, 0, 0.5);
+      max-width: 360px;
+      width: 100%;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    #header {
+      background-color: #0F380F;
+      border-radius: 8px;
+      text-align: center;
+      padding: 8px 4px;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      color: #9BBC0F;
+    }
+
+    /* ── Screen area ────────────────────────────────────────────── */
+    #screen {
+      background-color: #9BBC0F;           /* lightest green — LCD bg */
+      border-radius: 6px;
+      box-shadow: inset 0 3px 10px rgba(15, 56, 15, 0.55),
+                  inset 0 0 3px rgba(15, 56, 15, 0.35);
+      padding: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 140px;
+    }
+
+    #cat-screen {
+      font-family: monospace;
+      white-space: pre;
+      line-height: 1.2;
+      font-size: 13px;
+      color: #0F380F;                      /* cat art — darkest on light screen */
+      /* Fixed dimensions prevent layout reflow during animation */
+      width: 14ch;
+      min-height: 8lh;
+      overflow: hidden;
+    }
+
+    /* ── Stat bars section ──────────────────────────────────────── */
+    #stats {
+      background-color: #9BBC0F;
+      border-radius: 6px;
+      box-shadow: inset 0 2px 6px rgba(15, 56, 15, 0.35);
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-size: 7px;
+      color: #0F380F;
+    }
+
+    .stat-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-label {
+      width: 62px;
+      flex-shrink: 0;
+    }
+
+    .stat-bar {
+      font-family: monospace;
+      font-size: 11px;
+      letter-spacing: -0.5px;
+      color: #306230;
+    }
+
+    /* ── Age / status line ──────────────────────────────────────── */
+    #info-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 6px;
+      color: #0F380F;
+      padding: 0 2px;
+    }
+
+    /* ── Button row ─────────────────────────────────────────────── */
+    #buttons {
+      display: flex;
+      justify-content: space-around;
+      gap: 8px;
+    }
+
+    button {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 7px;
+      background-color: #306230;           /* button face */
+      color: #9BBC0F;                      /* button text */
+      border: 2px solid #0F380F;
+      border-radius: 8px;
+      padding: 8px 10px;
+      cursor: pointer;
+      flex: 1;
+      transition: filter 0.05s;
+      box-shadow: 0 3px 0 #0F380F;
+    }
+
+    button:hover {
+      filter: brightness(1.15);
+    }
+
+    button:active {
+      transform: translateY(3px);
+      box-shadow: none;
+      filter: brightness(0.9);
+    }
+
+    button:disabled {
+      filter: brightness(0.55);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: 0 3px 0 #0F380F;
+    }
+
+    /* ── Resurrect button (hidden by default) ───────────────────── */
+    #btn-resurrect {
+      display: none;
+      width: 100%;
+      font-size: 7px;
+    }
+
+    /* ── Name-prompt overlay (visible by default) ───────────────── */
+    #name-prompt {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background-color: #0F380F;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+      padding: 24px;
+    }
+
+    #name-prompt h1 {
+      font-size: 10px;
+      color: #9BBC0F;
+      text-align: center;
+      line-height: 1.8;
+    }
+
+    #name-prompt p {
+      font-size: 7px;
+      color: #8BAC0F;
+      text-align: center;
+      line-height: 2;
+    }
+
+    #name-prompt input[type="text"] {
+      font-family: 'Press Start 2P', monospace;
+      font-size: 10px;
+      background-color: #9BBC0F;
+      color: #0F380F;
+      border: 3px solid #306230;
+      border-radius: 6px;
+      padding: 8px 12px;
+      width: 100%;
+      max-width: 260px;
+      text-align: center;
+      outline: none;
+    }
+
+    #name-prompt input[type="text"]:focus {
+      border-color: #9BBC0F;
+    }
+
+    #name-prompt button {
+      font-size: 8px;
+      padding: 10px 20px;
+      width: auto;
+      flex: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Name-prompt overlay (shown on first run) ──────────────── -->
+  <div id="name-prompt">
+    <h1>VIRTUAL<br>CAT PET</h1>
+    <p>What will you name<br>your new cat?</p>
+    <input type="text" id="name-input" maxlength="12" placeholder="e.g. Mochi" />
+    <button id="btn-start">START &gt;</button>
+  </div>
+
+  <!-- ── Main game widget ──────────────────────────────────────── -->
+  <div id="widget">
+
+    <!-- Header: cat name -->
+    <div id="header">
+      <span id="cat-name">— — —</span>
+    </div>
+
+    <!-- LCD screen: cat animation -->
+    <div id="screen">
+      <pre id="cat-screen">
+  /\_____/\
+ (  o   o  )
+ (  =^=  )
+  (--m-m--)
+      </pre>
+    </div>
+
+    <!-- Stat bars -->
+    <div id="stats">
+      <div class="stat-row">
+        <span class="stat-label">&#x1F356; Hunger</span>
+        <span class="stat-bar" id="stat-hunger">██████████</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">&#x2665; Happy</span>
+        <span class="stat-bar" id="stat-happiness">██████████</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">&#x271A; Health</span>
+        <span class="stat-bar" id="stat-health">██████████</span>
+      </div>
+      <!-- Age / status info row -->
+      <div id="info-row">
+        <span id="age-label">Day 0</span>
+        <span id="status-label">idle</span>
+      </div>
+    </div>
+
+    <!-- Action buttons -->
+    <div id="buttons">
+      <button id="btn-feed">Feed</button>
+      <button id="btn-play">Play</button>
+      <button id="btn-care">Care</button>
+    </div>
+
+    <!-- Resurrect button (hidden until death) -->
+    <button id="btn-resurrect">&#x2764; Resurrect</button>
+
+  </div>
+
+</body>
+</html>
