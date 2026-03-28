@@ -619,6 +619,75 @@
   </script>
 
   <script>
+    /* ── DecayEngine ─────────────────────────────────────────────────
+     * Applies time-based stat decay to GameState.
+     * tick(elapsedMs) — apply decay for the given duration in ms.
+     * catchUp()       — apply offline decay since GameState.lastTick.
+     * ────────────────────────────────────────────────────────────── */
+    const DecayEngine = {
+      /** Maximum offline catch-up time (7 days in ms) — UX safety cap. */
+      MAX_CATCHUP_MS: 604_800_000,
+
+      /**
+       * Apply stat decay for `elapsedMs` milliseconds.
+       * Jitter (±20 %) is applied independently to hunger and happiness.
+       * Health only decays when hunger < 20 OR happiness < 20.
+       * Age always increases. All stats are clamped after mutation.
+       * Returns immediately if GameState.isDead.
+       * @param {number} elapsedMs
+       */
+      tick(elapsedMs) {
+        if (GameState.isDead) return;
+
+        // Guard against negative elapsed (clock skew / tampered cookie).
+        const ms = Math.max(0, elapsedMs);
+
+        // ── Hunger: −1 pt per 240 000 ms with jitter ──────────────
+        const hungerJitter    = 0.8 + Math.random() * 0.4; // [0.8, 1.2]
+        const hungerDelta     = (ms / 240_000) * hungerJitter;
+        GameState.hunger      = Math.max(0, Math.min(100, GameState.hunger - hungerDelta));
+
+        // ── Happiness: −1 pt per 360 000 ms with jitter ───────────
+        const happinessJitter = 0.8 + Math.random() * 0.4;
+        const happinessDelta  = (ms / 360_000) * happinessJitter;
+        GameState.happiness   = Math.max(0, Math.min(100, GameState.happiness - happinessDelta));
+
+        // ── Health: −1 pt per 480 000 ms (no jitter), conditional ─
+        if (GameState.hunger < 20 || GameState.happiness < 20) {
+          const healthDelta   = ms / 480_000;
+          GameState.health    = Math.max(0, Math.min(100, GameState.health - healthDelta));
+        }
+
+        // ── Age: +1 day per 3 600 000 ms (no jitter) ──────────────
+        GameState.age         = Math.max(0, GameState.age + ms / 3_600_000);
+
+        // Persist after every live tick.
+        GameState.lastTick = Date.now();
+        GameState.save();
+      },
+
+      /**
+       * Compute the elapsed time since GameState.lastTick and call tick()
+       * to catch up any offline decay. Caps catch-up at MAX_CATCHUP_MS.
+       * Should be called once during page-load initialisation.
+       */
+      catchUp() {
+        const now     = Date.now();
+        let   elapsed = now - GameState.lastTick;
+
+        if (elapsed < 0)                    elapsed = 0;
+        if (elapsed > this.MAX_CATCHUP_MS)  elapsed = this.MAX_CATCHUP_MS;
+
+        this.tick(elapsed);
+        // Ensure lastTick reflects the moment of catch-up, not the
+        // potentially far-past value captured inside tick().
+        GameState.lastTick = Date.now();
+        GameState.save();
+      }
+    };
+  </script>
+
+  <script>
     /* ── ActionHandler ───────────────────────────────────────────────
      * Implements the Feed, Play, and Care player actions.
      * Reads / mutates GameState, then calls GameState.save().
@@ -685,6 +754,49 @@
         document.getElementById('btn-feed').addEventListener('click', () => this.feed());
         document.getElementById('btn-play').addEventListener('click', () => this.play());
         document.getElementById('btn-care').addEventListener('click', () => this.care());
+      }
+    };
+  </script>
+
+  <script>
+    /* ── StateClassifier ─────────────────────────────────────────────
+     * Pure function that maps GameState + ActionHandler transient flags
+     * onto exactly one cat-state string.
+     * Priority order (highest first):
+     *   dead → sick → eating → playing → sleeping → hungry → unhappy → idle
+     * ────────────────────────────────────────────────────────────── */
+    const StateClassifier = {
+      /** Timestamp (ms) until which the cat is sleeping (0 = not sleeping) */
+      sleepUntil: 0,
+
+      /**
+       * Return the current cat state string.
+       * @returns {'dead'|'sick'|'eating'|'playing'|'sleeping'|'hungry'|'unhappy'|'idle'}
+       */
+      classify() {
+        if (GameState.isDead) return 'dead';
+        if (GameState.forceSick || GameState.health < 30) return 'sick';
+
+        const now = Date.now();
+        if (ActionHandler.transientState === 'eating'  && now < ActionHandler.transientUntil) return 'eating';
+        if (ActionHandler.transientState === 'playing' && now < ActionHandler.transientUntil) return 'playing';
+        if (now < this.sleepUntil) return 'sleeping';
+        if (GameState.hunger < 30) return 'hungry';
+        if (GameState.happiness < 30) return 'unhappy';
+        return 'idle';
+      },
+
+      /**
+       * Called once per 10-second game tick.
+       * If the cat is otherwise idle, roll a ~1.67 % chance to trigger a
+       * 30-second sleep event (≈ 10 % / 6 ticks per minute).
+       */
+      tickSleep() {
+        // Only trigger sleep when the cat is currently in the idle state.
+        if (this.classify() !== 'idle') return;
+        if (Math.random() < 0.0167) {
+          this.sleepUntil = Date.now() + 30_000;
+        }
       }
     };
   </script>
