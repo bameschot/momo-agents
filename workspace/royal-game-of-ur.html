@@ -95,6 +95,17 @@
     }
 
     /* Piece styling */
+    @keyframes slide-in {
+      from {
+        opacity: 0.6;
+        transform: scale(0.8);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
     .piece {
       width: 2.75rem;
       height: 2.75rem;
@@ -105,6 +116,7 @@
       transition: box-shadow 0.2s ease;
       min-width: 44px;
       min-height: 44px;
+      animation: slide-in 200ms ease-out;
     }
 
     .piece-light {
@@ -268,24 +280,23 @@
     }
 
     @keyframes pulse-glow {
-      0%, 100% { box-shadow: 0 0 4px var(--highlight); outline: 2px solid var(--highlight); }
-      50% { box-shadow: 0 0 14px var(--highlight), 0 0 24px var(--highlight); outline: 2px solid var(--highlight); }
+      0%, 100% { box-shadow: 0 0 6px var(--highlight); }
+      50% { box-shadow: 0 0 16px var(--highlight); }
     }
 
     .square.valid-move {
       outline: 2px solid var(--highlight);
-      animation: pulse-glow 1.2s ease-in-out infinite;
+      animation: pulse-glow 800ms ease-in-out infinite alternate;
       cursor: pointer;
     }
 
     @keyframes pop-out {
       0%   { transform: scale(1);   opacity: 1; }
-      50%  { transform: scale(1.5); opacity: 0.5; }
-      100% { transform: scale(0);   opacity: 0; }
+      100% { transform: scale(1.4); opacity: 0; }
     }
 
     .piece.pop-out {
-      animation: pop-out 300ms ease-out forwards;
+      animation: pop-out 200ms ease-out forwards;
       pointer-events: none;
     }
 
@@ -369,6 +380,15 @@
 
     #btn-play-again:hover {
       opacity: 0.85;
+    }
+
+    /* Respect user's motion preferences */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
     }
   </style>
 </head>
