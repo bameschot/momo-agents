@@ -1,37 +1,47 @@
-# STORY-010: WkhtmltopdfChecker — Dependency Validator
+# STORY-010: medium UIRenderer — Stat Bars, Labels & Button States
 
 **Index**: 10
+**Complexity**: medium
 **Attempts**: 1
-**Design ref**: design/md-to-pdf-cli.new.md
+**Design ref**: design/virtual-cat-pet.new.md
 **Depends on**: STORY-009
 
 ## Context
-`md2pdf.py` requires the external `wkhtmltopdf` CLI to render HTML to PDF. Before attempting any file I/O or conversion work, the script must verify that `wkhtmltopdf` is on `PATH` and fail fast with a clear, actionable error message when it is not. This story implements `check_wkhtmltopdf()` and integrates the call into `main()`.
+Every game tick the player needs to see up-to-date stat bars, age, status text, and buttons that accurately reflect cooldowns and availability. This story implements the DOM-update layer that reads `GameState` and renders it into all non-animation UI elements.
 
 ## Acceptance Criteria
-- [ ] `check_wkhtmltopdf()` uses `shutil.which("wkhtmltopdf")` to detect the binary.
-- [ ] If **found**: returns `None` silently.
-- [ ] If **not found**: prints a multi-line human-readable message to `stderr` that includes:
-  - What is missing and why it is required.
-  - Install instruction for **macOS**: `brew install wkhtmltopdf`
-  - Install instruction for **Linux**: `sudo apt-get install wkhtmltopdf` and a note to visit https://wkhtmltopdf.org/downloads.html for other distros.
-  - Install instruction for **Windows**: download installer from https://wkhtmltopdf.org/downloads.html
-  - A note that a modern release (≥ 0.12.x) is required for clickable internal PDF links.
-- [ ] After printing the error, exits immediately with code `1`.
-- [ ] `main()` calls `check_wkhtmltopdf()` as the very first action (before reading the input file or parsing the Markdown).
-- [ ] No version parsing or version enforcement is performed — presence check only.
+- [ ] `UIRenderer.render()` is a function that updates the following DOM elements on every call:
+  - **Cat name** in the header (`id="cat-name"` or equivalent) — set to `GameState.name`.
+  - **Stat bars**: Each of `#stat-hunger`, `#stat-happiness`, `#stat-health` is rendered as a `█`-character bar where filled blocks = `Math.round(value / 10)` out of 10 (e.g., 70 → `███████░░░`).
+  - **Age label** (`#age-label`) — displays `"Day N"` where N = `Math.floor(GameState.age)`.
+  - **Status label** (`#status-label`) — displays the current state string from `StateClassifier.classify()`.
+  - **Feed button** (`#btn-feed`): disabled and shows cooldown countdown (`"00:XX"`) if cooldown not expired; otherwise enabled with label `"Feed"`.
+  - **Play button** (`#btn-play`): disabled if on cooldown or `GameState.forceSick`; shows countdown if on cooldown; label `"Play"`.
+  - **Care button** (`#btn-care`): disabled if on cooldown; also disabled if neither `GameState.forceSick` nor `GameState.health < 40`; shows countdown if on cooldown; label `"Care"`.
+- [ ] Cooldown countdown format: seconds remaining, zero-padded to 2 digits, prefixed with `"00:"` (e.g., `"00:47"`).
+- [ ] When `GameState.isDead`:
+  - Hide `#btn-feed`, `#btn-play`, `#btn-care`.
+  - Show `#btn-resurrect`.
+- [ ] When NOT dead: show action buttons, hide `#btn-resurrect`.
+- [ ] `UIRenderer.render()` is safe to call at any time, including before game start (it should be a no-op or handle missing state gracefully).
 
 ## Implementation Hints
-- `import shutil` is stdlib; `shutil.which("wkhtmltopdf")` returns `None` if not found.
-- Use `sys.stderr.write(...)` or `print(..., file=sys.stderr)` for the error output.
-- Use `sys.exit(1)` to terminate.
-- The function signature from the design is `def check_wkhtmltopdf() -> None`.
-- In unit tests, patch `shutil.which` using `unittest.mock.patch` to avoid a real binary dependency.
+- Stat bar string: `'█'.repeat(filled) + '░'.repeat(10 - filled)` where `filled = Math.round(GameState.hunger / 10)`.
+- Cooldown remaining in ms: `remaining = GameState.cooldowns.feed - Date.now()`. If `remaining <= 0` the button is available.
+- Countdown seconds: `Math.ceil(remaining / 1000)` formatted with `String(secs).padStart(2, '0')`.
+- Disabling a button: set `.disabled = true` and add a CSS class like `.on-cooldown` for the greyed-out visual.
+- Separate the "structurally unavailable" disable (dead, sick blocks play, etc.) from the cooldown disable — they can co-exist in the same render call.
 
 ## Test Requirements
-- **Found**: mock `shutil.which` to return a fake path string → assert function returns `None` and nothing is printed to `stderr`.
-- **Not found**: mock `shutil.which` to return `None` → assert `SystemExit` with code `1` is raised, and the captured `stderr` output contains the strings `"wkhtmltopdf"`, `"brew"`, `"apt-get"`, and `"wkhtmltopdf.org"`.
-- Verify `main()` calls `check_wkhtmltopdf()` before any file read (use mock ordering or check that `SystemExit` is raised even when the input file does not exist).
+- `GameState.hunger = 70` → `#stat-hunger` textContent is `"███████░░░"`.
+- `GameState.hunger = 0` → bar is `"░░░░░░░░░░"`.
+- `GameState.hunger = 100` → bar is `"██████████"`.
+- `GameState.cooldowns.feed = Date.now() + 90_000` → `#btn-feed` is disabled and shows approximately `"00:90"` (decreasing).
+- `GameState.isDead = true` → action buttons hidden, resurrect button visible.
+- `GameState.isDead = false` → action buttons visible, resurrect button hidden.
+- `GameState.forceSick = true` → `#btn-play` is disabled.
+- `GameState.health = 80`, `forceSick = false` → `#btn-care` is disabled (condition not met).
+- `GameState.health = 35` → `#btn-care` is enabled (health < 40 condition met).
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

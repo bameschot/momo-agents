@@ -1,44 +1,48 @@
-# STORY-011: MarkdownParser — Block-Level Parsing
+# STORY-011: medium Game Loop, Death & Resurrection
 
 **Index**: 11
+**Complexity**: medium
 **Attempts**: 1
-**Design ref**: design/md-to-pdf-cli.new.md
+**Design ref**: design/virtual-cat-pet.new.md
 **Depends on**: STORY-010
 
 ## Context
-This story implements Phase 1 (block-level parsing) of the `convert()` function in `md2pdf.py`. It produces the structural HTML skeleton — headings, code blocks, blockquotes, lists, tables, horizontal rules, and paragraphs — and populates the `ParseResult.headings` list. Inline formatting (bold, italic, links, images) is left as plain text pass-through for now; Phase 2 (STORY-012) will apply inline transforms.
+All the subsystems built in the previous stories must be orchestrated into a cohesive game loop. This final story wires everything together: starts the decay tick, calls the UI renderer, handles the death transition, and implements the resurrection flow (including the post-resurrection name prompt).
 
 ## Acceptance Criteria
-- [ ] `convert(markdown_text: str, base_dir: Path) -> ParseResult` is implemented (Phase 1 complete, Phase 2 is a pass-through returning the line text unchanged).
-- [ ] **ATX headings** (`#` through `######`) — rendered as `<h1>`–`<h6>` with a slug-based `id` attribute; H1–H3 headings are collected into `ParseResult.headings` with correct `level`, `text` (plain text, no HTML), and `slug`.
-- [ ] **Fenced code blocks** (` ``` ` … ` ``` `) — content is HTML-escaped and wrapped in `<pre><code>` (optional language class on `<code>` from the opening fence).
-- [ ] **Blockquotes** (`>` prefix) — rendered as `<blockquote><p>…</p></blockquote>`; consecutive `>` lines are merged into one blockquote.
-- [ ] **Unordered lists** (`-` / `*` / `+` prefixes) with nesting (2- or 4-space indent) — rendered as nested `<ul><li>` structures.
-- [ ] **Ordered lists** (digit + `.`) with nesting — rendered as nested `<ol><li>` structures.
-- [ ] **Tables** (GitHub-flavoured pipe syntax) — rendered as `<table>` with `<thead>` and `<tbody>`; alignment markers (`:--`, `--:`, `:-:`) are honoured via `style="text-align:…"`.
-- [ ] **Horizontal rules** (`---`, `***`, `___`) — rendered as `<hr>`.
-- [ ] **Paragraphs** — any non-blank lines not matched by the above are wrapped in `<p>…</p>`; blank lines separate blocks.
-- [ ] `ParseResult.title` is set to the plain text of the first H1, or `None` if no H1 exists.
-- [ ] Raw `<`, `>`, `&` inside paragraph/heading text and table cells are HTML-escaped at this stage (except inside fenced code blocks).
+- [ ] `Game.start()` is called after GameState is initialised (either from cookie or from name-prompt submission). It:
+  1. Calls `DecayEngine.catchUp()` to apply any offline decay.
+  2. Calls `UIRenderer.render()` immediately for a correct initial render.
+  3. Starts `AnimationRenderer.start()`.
+  4. Starts a `setInterval` at 10 000 ms (10 seconds) that on each tick:
+     a. Calls `DecayEngine.tick(10_000)`.
+     b. Calls `NeglectChecker.evaluate()`.
+     c. Checks death condition: if `GameState.health <= 0` and not already dead, sets `GameState.isDead = true`.
+     d. Calls `StateClassifier.tickSleep()`.
+     e. Updates `GameState.lastTick = Date.now()`.
+     f. Calls `GameState.save()`.
+     g. Calls `UIRenderer.render()`.
+- [ ] `UIRenderer.render()` is also called on each 250 ms animation tick so cooldown countdowns update smoothly (it is lightweight enough to call at 4 FPS).
+- [ ] **Death flow**: when `isDead` becomes true, `UIRenderer.render()` hides action buttons and shows the `#btn-resurrect` button and the `dead` cat animation.
+- [ ] **Resurrection flow** (`#btn-resurrect` click):
+  - Shows the `#name-prompt` overlay (with a label indicating the cat died, optional message "Your cat has died. Give your new cat a name:").
+  - The overlay's submit handler: validates a non-empty name, resets `GameState` to fresh defaults with the new name, calls `CookieManager.save()`, hides the overlay, and continues the existing game loop (no page reload required).
+  - The old cat's death state is fully replaced by the new fresh state.
+- [ ] `Game.stop()` clears the game-loop interval and calls `AnimationRenderer.stop()` (used for testing / cleanup).
 
 ## Implementation Hints
-- Process the Markdown line-by-line, using a state machine or accumulator pattern (same approach as `md2html.py`).
-- Slug generation: lower-case the heading text, replace spaces and non-alphanumeric characters with hyphens, strip leading/trailing hyphens. Duplicate slug deduplication (appending `-2`, `-3`, …) is part of STORY-013 (TocBuilder) for ToC links; add the `id` attribute at this stage using a simple seen-slugs counter.
-- Fenced code blocks must suppress all other block-level processing while inside the fence.
-- Keep a `_slug_counts: dict[str, int]` to track seen slugs and append numeric suffixes for duplicates.
+- A single `setInterval` handle should be stored in a module variable so `Game.stop()` can cancel it cleanly.
+- Resurrection reuses the same `Game.start()` flow but since the interval is already running, only reset GameState and let the next tick pick up the fresh state. Alternatively, stop and restart the interval — either approach is acceptable.
+- `UIRenderer.render()` called at 4 FPS for countdown updates is fine; it only touches the DOM when values have changed (or always — the overhead is negligible for this app).
+- Post-resurrection name prompt can reuse the same `#name-prompt` element from STORY-001 / STORY-003. Update its heading text to communicate death context.
 
 ## Test Requirements
-- Unit-test each block type in isolation using `convert(text, Path("."))`:
-  - Headings: H1–H6 produce correct tags; H1 text is captured as `ParseResult.title`; H1–H3 appear in `headings`; H4–H6 do not appear in `headings`.
-  - Fenced code block: content is HTML-escaped; outer `<` / `>` in content become `&lt;`/`&gt;`.
-  - Blockquote: consecutive lines merged; rendered as `<blockquote>`.
-  - Unordered list: two levels of nesting produce `<ul><li>…<ul><li>…`.
-  - Ordered list: same nesting check with `<ol>`.
-  - Table: `<thead>`, `<tbody>`, and alignment styles present.
-  - Horizontal rule: `<hr>` produced.
-  - Paragraph: plain text wrapped in `<p>`.
-  - Duplicate H2 slugs: first gets `id="foo"`, second gets `id="foo-2"`.
-- No inline formatting is expected in this story's tests (bold, links, etc. may appear as raw text).
+- On page load with a valid cookie, `Game.start()` runs without errors; stats update after 10 s intervals.
+- Manually set `GameState.health = 1`, wait one tick → `isDead` becomes true, resurrect button appears, action buttons hidden.
+- Click resurrect → name prompt appears with a "cat died" message.
+- Submit new name "Nova" → game resets with `GameState.name === "Nova"`, fresh stats, `isDead === false`, resurrect button hidden, action buttons visible.
+- Reload page after resurrection → "Nova" cookie is present with full fresh state.
+- `Game.stop()` halts all intervals; no further console output or DOM changes from the game loop.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

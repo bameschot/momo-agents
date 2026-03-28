@@ -54,7 +54,12 @@ async def run(design_path: Path, stories_dir: Path, model: str) -> None:
         f"Next story number to use: {next_index:03d} (zero-padded three digits)\n\n"
         "Read the design document in full. Decompose it into an ordered set of discrete, "
         "implementable stories and write each one to the stories directory as STORY-NNN.md. "
-        "Follow the story file format defined in your role exactly. "
+        "Follow the story file format defined in your role exactly.\n\n"
+        "Complexity rules (mandatory):\n"
+        "- Assign every story a complexity of easy, medium, or hard.\n"
+        "- Include the complexity label in both the heading and the **Complexity** field.\n"
+        "- Strongly prefer easy and medium stories. Split any hard story into smaller pieces "
+        "unless doing so would make the resulting stories incoherent or non-implementable on their own.\n\n"
         "Do not leave open questions — resolve ambiguities from the design before writing."
     )
 
