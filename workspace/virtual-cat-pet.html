@@ -277,5 +277,51 @@
 
   </div>
 
+
+  <script>
+    /* ── CookieManager ───────────────────────────────────────────────
+     * Pure utility for persisting game state via the `vcat_state` cookie.
+     * No DOM access, no game-logic knowledge.
+     * ────────────────────────────────────────────────────────────── */
+    const CookieManager = {
+      COOKIE_NAME: 'vcat_state',
+
+      /**
+       * Serialise stateObj to URI-encoded JSON and write it as a cookie
+       * that expires 365 days from now.
+       * @param {object} stateObj
+       */
+      save(stateObj) {
+        const expires = new Date();
+        expires.setFullYear(expires.getFullYear() + 1);
+        document.cookie = `${this.COOKIE_NAME}=${encodeURIComponent(JSON.stringify(stateObj))}; expires=${expires.toUTCString()}; path=/`;
+      },
+
+      /**
+       * Read and parse the `vcat_state` cookie.
+       * @returns {object|null} parsed state object, or null if absent / corrupt
+       */
+      load() {
+        const prefix = `${this.COOKIE_NAME}=`;
+        const entry = document.cookie
+          .split('; ')
+          .find(c => c.startsWith(prefix));
+        if (!entry) return null;
+        try {
+          return JSON.parse(decodeURIComponent(entry.slice(prefix.length)));
+        } catch (_) {
+          return null;
+        }
+      },
+
+      /**
+       * Delete the `vcat_state` cookie by back-dating its expiry.
+       */
+      clear() {
+        document.cookie = `${this.COOKIE_NAME}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/`;
+      }
+    };
+  </script>
+
 </body>
 </html>
