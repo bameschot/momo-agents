@@ -602,6 +602,8 @@
         if (nameEl) nameEl.textContent = this.name;
         // Wire action buttons (ActionHandler defined in the next <script> block).
         if (typeof ActionHandler !== 'undefined') ActionHandler.init();
+        // Start the animation loop (AnimationRenderer defined later).
+        if (typeof AnimationRenderer !== 'undefined') AnimationRenderer.start();
         // Game loop will be wired here in subsequent stories.
       },
 
@@ -796,6 +798,64 @@
         if (this.classify() !== 'idle') return;
         if (Math.random() < 0.0167) {
           this.sleepUntil = Date.now() + 30_000;
+        }
+      }
+    };
+  </script>
+
+  <script>
+    /* ── AnimationRenderer ───────────────────────────────────────────
+     * Drives the cat ASCII animation at ~4 FPS (250 ms interval).
+     * Uses StateClassifier.classify() and CAT_FRAMES to update
+     * the #cat-screen <pre> element each tick.
+     * ────────────────────────────────────────────────────────────── */
+    const AnimationRenderer = {
+      /** The setInterval handle (null when stopped) */
+      _intervalId:  null,
+      /** Currently displayed frame index (0 or 1) */
+      _frameIdx:    0,
+      /** Last state returned by StateClassifier.classify() */
+      _prevState:   null,
+
+      /**
+       * Start the 4-FPS animation loop.
+       * Safe to call even if already running (idempotent).
+       */
+      start() {
+        if (this._intervalId !== null) return; // already running
+        this._intervalId = setInterval(() => this._tick(), 250);
+      },
+
+      /**
+       * Stop the animation loop and freeze the display.
+       */
+      stop() {
+        if (this._intervalId !== null) {
+          clearInterval(this._intervalId);
+          this._intervalId = null;
+        }
+      },
+
+      /**
+       * Single animation tick — called every 250 ms.
+       * Determines the current state, resets frame on transition,
+       * then writes the appropriate frame to #cat-screen.
+       */
+      _tick() {
+        const state = StateClassifier.classify();
+
+        // Reset to frame 0 on any state transition.
+        if (state !== this._prevState) {
+          this._frameIdx = 0;
+          this._prevState = state;
+        } else {
+          // Toggle between frame 0 and frame 1.
+          this._frameIdx = this._frameIdx === 0 ? 1 : 0;
+        }
+
+        const el = document.getElementById('cat-screen');
+        if (el && CAT_FRAMES[state]) {
+          el.textContent = CAT_FRAMES[state][this._frameIdx];
         }
       }
     };
