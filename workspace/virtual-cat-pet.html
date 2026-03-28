@@ -509,5 +509,112 @@
     };
   </script>
 
+  <script>
+    /* ── GameState ────────────────────────────────────────────────────
+     * In-memory game state. Always initialise via GameState.init().
+     * Persist any mutation with GameState.save().
+     * ────────────────────────────────────────────────────────────── */
+    const GameState = {
+      /* ── State fields (defaults shown) ── */
+      name:         '',
+      hunger:       80,
+      happiness:    80,
+      health:       100,
+      age:          0,
+      lastTick:     0,
+      neglectSince: null,
+      isDead:       false,
+      forceSick:    false,
+      cooldowns:    { feed: 0, play: 0, care: 0 },
+
+      /* ── Fresh-start defaults ── */
+      _defaults() {
+        return {
+          hunger:       80,
+          happiness:    80,
+          health:       100,
+          age:          0,
+          lastTick:     Date.now(),
+          neglectSince: null,
+          isDead:       false,
+          forceSick:    false,
+          cooldowns:    { feed: 0, play: 0, care: 0 }
+        };
+      },
+
+      /**
+       * Initialise state from cookie or show the name-prompt overlay.
+       * Called once on DOMContentLoaded.
+       */
+      init() {
+        const loaded = CookieManager.load();
+        const overlay = document.getElementById('name-prompt');
+
+        if (loaded && typeof loaded === 'object') {
+          // Restore from cookie, back-filling any missing fields.
+          const merged = Object.assign({}, this._defaults(), loaded);
+          // lastTick must be preserved exactly as loaded (for offline catch-up).
+          if (loaded.lastTick !== undefined) merged.lastTick = loaded.lastTick;
+          Object.assign(this, merged);
+          overlay.style.display = 'none';
+          this._startGame();
+        } else {
+          // No valid cookie — show the name prompt.
+          overlay.style.display = '';
+          this._bindNamePrompt(overlay);
+        }
+      },
+
+      /**
+       * Wire up the name-prompt submit button (once).
+       * @param {HTMLElement} overlay
+       */
+      _bindNamePrompt(overlay) {
+        const input  = document.getElementById('name-input');
+        const button = document.getElementById('btn-start');
+
+        const onSubmit = () => {
+          const trimmed = input.value.trim();
+          if (!trimmed) return; // reject blank — keep overlay visible
+          // Populate fresh state.
+          Object.assign(this, this._defaults(), { name: trimmed });
+          CookieManager.save(this);
+          overlay.style.display = 'none';
+          // Remove handler to prevent double-init.
+          button.removeEventListener('click', onSubmit);
+          this._startGame();
+        };
+
+        button.addEventListener('click', onSubmit);
+        // Also allow pressing Enter in the input field.
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter') onSubmit();
+        });
+      },
+
+      /**
+       * Kick off the game loop. Called after state is ready.
+       * (Actual loop logic lives in later stories; this is the hook.)
+       */
+      _startGame() {
+        // Update cat name in the header immediately.
+        const nameEl = document.getElementById('cat-name');
+        if (nameEl) nameEl.textContent = this.name;
+        // Game loop will be wired here in subsequent stories.
+      },
+
+      /**
+       * Convenience method — persists the current in-memory state.
+       * All components call this after mutating state.
+       */
+      save() {
+        CookieManager.save(this);
+      }
+    };
+
+    /* Auto-initialise once the DOM is ready. */
+    document.addEventListener('DOMContentLoaded', () => GameState.init());
+  </script>
+
 </body>
 </html>

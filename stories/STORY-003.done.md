@@ -1,35 +1,35 @@
-# STORY-003: Image Embedder
+# STORY-003: medium GameState Initialisation & First-Run Name Prompt
 
 **Index**: 3
+**Complexity**: medium
 **Attempts**: 1
-**Design ref**: design/md-to-html-cli.md
-**Depends on**: STORY-001
+**Design ref**: design/virtual-cat-pet.new.md
+**Depends on**: STORY-002
 
 ## Context
-Implements `embed_image()`, which converts a local image `src` path into a Base64 data URI so the generated HTML is fully self-contained. This component is independent of both the block and inline parsers and can be developed and tested in isolation. The inline parser (STORY-004) will call it when processing image tags.
+On every page load the game must either restore an existing cat from the cookie or walk the user through naming a brand-new one. This story wires together CookieManager, the in-memory `GameState` object, and the `#name-prompt` overlay UI so that a valid, named GameState is always available before any game logic runs.
 
 ## Acceptance Criteria
-- [ ] `embed_image(src: str, base_dir: Path) -> str` is implemented.
-- [ ] **Local files**: path is resolved relative to `base_dir`. File bytes are read, MIME type is determined from extension, and a `data:<mime>;base64,<data>` string is returned.
-- [ ] Supported MIME types: `.png` → `image/png`, `.jpg` / `.jpeg` → `image/jpeg`, `.gif` → `image/gif`, `.webp` → `image/webp`, `.svg` → `image/svg+xml`.
-- [ ] **HTTP/HTTPS URLs**: returned unchanged (no network request made).
-- [ ] **Missing local file**: a warning is printed to `stderr` (format: `Warning: image not found: <path>`), and the original `src` string is returned unchanged.
-- [ ] **Unknown extension**: treated as a missing/unembeddable file — print a warning to `stderr` and return the original `src`.
-- [ ] The function must not raise exceptions under any supported input condition.
+- [ ] A `GameState` object is defined with all required fields: `name`, `hunger`, `happiness`, `health`, `age`, `lastTick`, `neglectSince`, `isDead`, `forceSick`, `cooldowns` (`feed`, `play`, `care`).
+- [ ] `GameState.init()` attempts `CookieManager.load()`. If it returns a valid object, the in-memory state is populated from it and the `#name-prompt` overlay is hidden.
+- [ ] If `CookieManager.load()` returns `null`, the `#name-prompt` overlay remains visible and the game does not start until the user submits a name.
+- [ ] Fresh-state defaults are: `hunger: 80`, `happiness: 80`, `health: 100`, `age: 0`, `lastTick: Date.now()`, `neglectSince: null`, `isDead: false`, `forceSick: false`, `cooldowns: { feed: 0, play: 0, care: 0 }`.
+- [ ] The name prompt form validates that the entered name is non-empty (trimmed). It rejects blank submissions and keeps the overlay visible.
+- [ ] On valid name submission, `GameState` is populated with fresh defaults plus the entered name; `CookieManager.save()` is called immediately; the overlay is hidden; the game loop begins.
+- [ ] `GameState.save()` is a convenience method that calls `CookieManager.save(GameState)` — all components use this to persist any change.
 
 ## Implementation Hints
-- Use `base64.b64encode(bytes).decode('ascii')` from the stdlib `base64` module.
-- Detect HTTP/HTTPS by checking if `src.startswith(('http://', 'https://'))`.
-- Resolve the path with `(base_dir / src).resolve()` and check `.exists()` before reading.
-- Use a dict for the extension→MIME mapping so adding new types later is trivial.
-- Keep the function pure/side-effect-free aside from the `stderr` warning print.
+- The `#name-prompt` overlay (from STORY-001) needs an `<input type="text">` and a `<button>` (or form with `submit` event) inside it.
+- A loaded cookie may be missing newer fields (schema drift) — use `Object.assign({}, defaults, loaded)` to safely merge and back-fill missing fields.
+- `lastTick` from the cookie must be preserved exactly as-is; the DecayEngine (STORY-005) will use it to calculate offline catch-up time.
+- Prevent double-initialisation: once the game starts, the submit handler should be removed or guarded.
 
 ## Test Requirements
-- Test with a real `.png` or `.jpg` fixture file: verify return value starts with `data:image/png;base64,` (or appropriate MIME).
-- Test with an HTTP URL: verify the URL is returned unchanged.
-- Test with a nonexistent local path: verify warning is printed to `stderr` and original `src` is returned.
-- Test with an unsupported extension (e.g. `.bmp`): verify warning is printed and original `src` is returned.
-- All tests must pass without network access.
+- Clear all cookies, reload the page → `#name-prompt` overlay is visible, game screen is not interactive.
+- Submit an empty name → overlay stays visible, no state is created.
+- Submit "Mochi" → overlay disappears, `GameState.name === "Mochi"`, cookie `vcat_state` is set.
+- Reload the page → overlay does not appear (existing cookie loaded), cat name is "Mochi".
+- Manually corrupt the cookie, reload → name prompt appears again (null-load fallback).
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->
