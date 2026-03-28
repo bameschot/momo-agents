@@ -299,25 +299,56 @@
     }
 
     /* Win overlay */
-    #overlay-win {
+    #win-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(0, 0, 0, 0.75);
       z-index: 100;
       align-items: center;
       justify-content: center;
-      flex-direction: column;
-      gap: 1.5rem;
     }
 
-    #overlay-win.visible {
+    @keyframes fade-in {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    #win-overlay.visible {
       display: flex;
+      animation: fade-in 400ms ease-out;
     }
 
-    #overlay-win h2 {
-      color: var(--text);
+    #win-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      padding: 2rem;
+      background-color: var(--surface);
+      border-radius: 0.75rem;
+      max-width: 90vw;
+    }
+
+    .win-motif {
+      width: 3rem;
+      height: 3rem;
+    }
+
+    #win-message {
       font-size: 2rem;
+      font-weight: 700;
+      margin: 0;
+      text-align: center;
+    }
+
+    #win-subline {
+      font-size: 0.875rem;
+      color: var(--text-muted);
       margin: 0;
       text-align: center;
     }
@@ -342,9 +373,13 @@
   </style>
 </head>
 <body>
-  <div id="overlay-win" role="dialog" aria-modal="true" aria-labelledby="win-heading">
-    <h2 id="win-heading"></h2>
-    <button id="btn-play-again" aria-label="Play again">Play Again</button>
+  <div id="win-overlay" role="dialog" aria-modal="true" aria-labelledby="win-message">
+    <div id="win-card">
+      <svg class="win-motif" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g fill="var(--rosette)" transform="translate(12 12)"><ellipse ry="4.5" rx="2.2" cy="-5" transform="rotate(0)"/><ellipse ry="4.5" rx="2.2" cy="-5" transform="rotate(60)"/><ellipse ry="4.5" rx="2.2" cy="-5" transform="rotate(120)"/><ellipse ry="4.5" rx="2.2" cy="-5" transform="rotate(180)"/><ellipse ry="4.5" rx="2.2" cy="-5" transform="rotate(240)"/><ellipse ry="4.5" rx="2.2" cy="-5" transform="rotate(300)"/><circle r="3"/></g></svg>
+      <h2 id="win-message"></h2>
+      <p id="win-subline">All pieces borne off — victory!</p>
+      <button id="btn-play-again" aria-label="Play again">Play Again</button>
+    </div>
   </div>
 
   <main>
@@ -906,15 +941,29 @@
 
     /**
      * Show the win screen overlay.
-     * Replaced with a richer implementation in STORY-010.
-     * @param {number} playerIndex
+     * Displays a full-screen overlay with the winner announcement, decorative motif,
+     * and a "Play Again" button to reset the game.
+     * @param {number} playerIndex - 0 (Light) or 1 (Shadow)
      */
     function showWinScreen(playerIndex) {
       const label = gameState.players[playerIndex].label;
-      const overlay = document.getElementById('overlay-win');
-      const heading = document.getElementById('win-heading');
-      if (heading) heading.textContent = label + ' wins!';
-      if (overlay) overlay.classList.add('visible');
+      const winMessage = document.getElementById('win-message');
+      const winOverlay = document.getElementById('win-overlay');
+
+      if (winMessage) {
+        winMessage.textContent = label + ' wins!';
+        // Apply player-specific color
+        const color = playerIndex === 0 ? 'var(--accent-light)' : 'var(--accent-shadow)';
+        winMessage.style.color = color;
+      }
+
+      if (winOverlay) {
+        winOverlay.classList.add('visible');
+      }
+
+      // Disable the Roll button while win screen is showing
+      const btn = document.getElementById('btn-roll');
+      if (btn) btn.disabled = true;
     }
 
     /**
@@ -954,6 +1003,8 @@
     function resetGame() {
       gameState = createInitialState();
       initPieces();
+      clearHighlights();
+      renderPieces();
 
       // Reset borne-off counters
       const borneLight = document.getElementById('borne-light');
@@ -962,7 +1013,7 @@
       if (borneShadow) borneShadow.textContent = '0';
 
       // Hide win overlay if present
-      const winOverlay = document.getElementById('overlay-win');
+      const winOverlay = document.getElementById('win-overlay');
       if (winOverlay) winOverlay.classList.remove('visible');
 
       // Enable Roll button and update status
@@ -985,7 +1036,7 @@
       const btnPlayAgain = document.getElementById('btn-play-again');
       if (btnPlayAgain) {
         btnPlayAgain.addEventListener('click', function () {
-          const overlay = document.getElementById('overlay-win');
+          const overlay = document.getElementById('win-overlay');
           if (overlay) overlay.classList.remove('visible');
           resetGame();
         });
