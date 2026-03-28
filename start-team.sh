@@ -188,7 +188,7 @@ _workspace_initialized() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Setup
 # ─────────────────────────────────────────────────────────────────────────────
-mkdir -p "$SENTINEL_DIR"
+mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens"
 rm -f "$SENTINEL_DIR"/*.done "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -260,7 +260,8 @@ echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
 "$PYTHON" "${SCRIPT_DIR}/python-agents/designer.py" \
     --model "${MODEL_DESIGNER}" \
-    --design-dir "${SCRIPT_DIR}/design"
+    --design-dir "${SCRIPT_DIR}/design" \
+    --token-log "${SENTINEL_DIR}/tokens/designer.jsonl"
 touch "${SENTINEL_DIR}/designer.done"
 echo ""
 echo "[Designer Agent complete]"
@@ -305,7 +306,8 @@ while true; do
         "$PYTHON" "${SCRIPT_DIR}/python-agents/business_analyst.py" \
             --design "$design_file" \
             --stories-dir "${STORIES_DIR}" \
-            --model "${MODEL_BA}"
+            --model "${MODEL_BA}" \
+            --token-log "${SENTINEL_DIR}/tokens/ba.jsonl"
 
         # Mark as processed — overwrites any previous .processed.md for the same feature
         mv "$design_file" "$processed"
@@ -372,7 +374,8 @@ echo ""
 "$PYTHON" "${SCRIPT_DIR}/python-agents/project_initialiser.py" \
     --design "${design_file}" \
     --workspace-dir "${WORKSPACE_DIR}" \
-    --model "${MODEL_PI}"
+    --model "${MODEL_PI}" \
+    --token-log "${SENTINEL_DIR}/tokens/pi.jsonl"
 echo ""
 echo "[Project Initialiser Agent complete]"
 WRAPPER
@@ -411,7 +414,8 @@ while true; do
     "${PYTHON}" "${SCRIPT_DIR}/python-agents/junior_coding_agent.py" \
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-        --model "${MODEL_JUNIOR}"
+        --model "${MODEL_JUNIOR}" \
+        --token-log "${SENTINEL_DIR}/tokens/junior_${AGENT_ID}.jsonl"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -489,7 +493,8 @@ while true; do
     "${PYTHON}" "${SCRIPT_DIR}/python-agents/senior_coding_agent.py" \
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-        --model "${MODEL_SENIOR}"
+        --model "${MODEL_SENIOR}" \
+        --token-log "${SENTINEL_DIR}/tokens/senior_${AGENT_ID}.jsonl"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -577,7 +582,8 @@ while true; do
     echo ""
     "${PYTHON}" "${SCRIPT_DIR}/python-agents/story_reviewer.py" \
         --stories-dir "${STORIES_DIR}" \
-        --model "${MODEL_REVIEWER}"
+        --model "${MODEL_REVIEWER}" \
+        --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl"
     echo ""
     echo "[Story Reviewer] Session complete — resuming watch."
     echo ""
@@ -650,25 +656,74 @@ _count_pending_stories() {
     echo "$count"
 }
 
+_token_summary() {
+    # Print per-agent token totals from JSONL log files.
+    # Requires Python (already resolved above as $PYTHON).
+    local tokens_dir="$SENTINEL_DIR/tokens"
+    [ -d "$tokens_dir" ] || return 0
+    shopt -s nullglob
+    local logs=("$tokens_dir"/*.jsonl)
+    shopt -u nullglob
+    [ "${#logs[@]}" -eq 0 ] && return 0
+
+    "$PYTHON" - "$tokens_dir" <<'PYEOF'
+import sys, json, os, glob
+
+tokens_dir = sys.argv[1]
+totals = {}
+for path in sorted(glob.glob(os.path.join(tokens_dir, "*.jsonl"))):
+    agent = os.path.basename(path).replace(".jsonl", "")
+    inp = out = cache_r = cache_w = 0
+    try:
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    inp     += rec.get("input_tokens", 0)
+                    out     += rec.get("output_tokens", 0)
+                    cache_r += rec.get("cache_read_tokens", 0)
+                    cache_w += rec.get("cache_write_tokens", 0)
+                except json.JSONDecodeError:
+                    pass
+    except OSError:
+        pass
+    totals[agent] = (inp, out, cache_r, cache_w)
+
+if not totals:
+    sys.exit(0)
+
+print("  Tokens:")
+for agent, (inp, out, cache_r, cache_w) in totals.items():
+    cache_note = f"  cache r={cache_r:,} w={cache_w:,}" if cache_r or cache_w else ""
+    print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}")
+PYEOF
+}
+
 _teardown() {
     echo ""
     echo "Shutting down team..."
     touch "$SENTINEL_DIR/pipeline_complete"   # signals all agents to exit
     pkill -f "watchdog.sh" 2>/dev/null || true
     sleep 2
-    rm -rf "$SENTINEL_DIR"
     echo ""
     echo "╔══════════════════════════════════════════════════╗"
     echo "║               Team shut down  👋                ║"
     echo "╚══════════════════════════════════════════════════╝"
     echo ""
     bash "$SCRIPT_DIR/status.sh"
+    echo ""
+    _token_summary
+    rm -rf "$SENTINEL_DIR"
     exit 0
 }
 
 trap '_teardown' INT TERM
 
 LAST_STATUS=""
+TOKEN_TICK=0
 while true; do
     pending="$(_count_pending_stories)"
     working=$(find "$STORIES_DIR" -maxdepth 1 -name "STORY-*.working.md"  2>/dev/null | wc -l | tr -d ' ')
@@ -678,8 +733,20 @@ while true; do
 
     STATUS="pending=${pending}  working=${working}  done=${done_n}  failed=${failed}${halt_flag}"
     if [ "$STATUS" != "$LAST_STATUS" ]; then
-        echo "  $(date '+%H:%M:%S')  $STATUS"
+        echo ""
+        echo "  $(date '+%H:%M:%S')  stories: $STATUS"
+        _token_summary
         LAST_STATUS="$STATUS"
+        TOKEN_TICK=0
+    fi
+
+    # Also refresh token summary every ~60 s even when story counts haven't changed
+    TOKEN_TICK=$(( TOKEN_TICK + 1 ))
+    if [ "$TOKEN_TICK" -ge 6 ]; then
+        echo ""
+        echo "  $(date '+%H:%M:%S')  stories: $STATUS"
+        _token_summary
+        TOKEN_TICK=0
     fi
 
     sleep 10

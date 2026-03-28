@@ -11,6 +11,8 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
+from token_logger import log_usage
+
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
 
@@ -28,6 +30,11 @@ def _parse_args() -> argparse.Namespace:
         "--model",
         default=DEFAULT_MODEL,
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
+    )
+    parser.add_argument(
+        "--token-log",
+        default="",
+        help="Path to JSONL file for token usage logging (optional)",
     )
     return parser.parse_args()
 
@@ -54,9 +61,10 @@ def _initial_prompt(design_dir: Path) -> str:
     )
 
 
-async def _stream_response(client: ClaudeSDKClient) -> str | None:
-    """Stream and print the agent's response. Returns stop_reason."""
+async def _stream_response(client: ClaudeSDKClient) -> tuple[str | None, dict | None]:
+    """Stream and print the agent's response. Returns (stop_reason, usage)."""
     stop_reason = None
+    usage = None
     async for message in client.receive_response():
         if isinstance(message, AssistantMessage):
             for block in message.content:
@@ -64,10 +72,11 @@ async def _stream_response(client: ClaudeSDKClient) -> str | None:
                     print(block.text, end="", flush=True)
         elif isinstance(message, ResultMessage):
             stop_reason = message.stop_reason
-    return stop_reason
+            usage = message.usage
+    return stop_reason, usage
 
 
-async def run(design_dir: Path, model: str) -> None:
+async def run(design_dir: Path, model: str, token_log: Path | None) -> None:
     design_dir.mkdir(parents=True, exist_ok=True)
 
     options = ClaudeAgentOptions(
@@ -82,7 +91,8 @@ async def run(design_dir: Path, model: str) -> None:
     async with ClaudeSDKClient(options=options) as client:
         # Initial greeting turn
         await client.query(_initial_prompt(design_dir))
-        await _stream_response(client)
+        _, usage = await _stream_response(client)
+        log_usage(token_log, "designer", usage)
         print()  # newline after agent response
 
         # Conversation loop — user drives each turn
@@ -101,7 +111,8 @@ async def run(design_dir: Path, model: str) -> None:
                 break
 
             await client.query(user_input)
-            stop_reason = await _stream_response(client)
+            stop_reason, usage = await _stream_response(client)
+            log_usage(token_log, "designer", usage)
             print()
 
             # If agent wrote the design doc and finished naturally, offer to exit
@@ -115,4 +126,5 @@ if __name__ == "__main__":
     design_dir = Path(args.design_dir)
     if not design_dir.is_absolute():
         design_dir = PROJECT_ROOT / design_dir
-    anyio.run(run, design_dir, args.model)
+    token_log = Path(args.token_log) if args.token_log else None
+    anyio.run(run, design_dir, args.model, token_log)

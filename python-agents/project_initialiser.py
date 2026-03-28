@@ -6,6 +6,8 @@ from pathlib import Path
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
 
+from token_logger import log_usage
+
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
 
@@ -29,6 +31,11 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_MODEL,
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
     )
+    parser.add_argument(
+        "--token-log",
+        default="",
+        help="Path to JSONL file for token usage logging (optional)",
+    )
     return parser.parse_args()
 
 
@@ -36,7 +43,7 @@ def _system_prompt() -> str:
     return (ROLES_DIR / "project-initialiser.md").read_text()
 
 
-async def run(design_path: Path, workspace_dir: Path, model: str) -> None:
+async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -70,6 +77,7 @@ async def run(design_path: Path, workspace_dir: Path, model: str) -> None:
                 if isinstance(block, TextBlock):
                     print(block.text, end="", flush=True)
         elif isinstance(message, ResultMessage):
+            log_usage(token_log, "pi", message.usage)
             print(
                 f"\n\n[Project Initialiser Agent finished — stop reason: {message.stop_reason}]"
             )
@@ -83,4 +91,5 @@ if __name__ == "__main__":
     workspace_dir = Path(args.workspace_dir)
     if not workspace_dir.is_absolute():
         workspace_dir = PROJECT_ROOT / workspace_dir
-    anyio.run(run, design_path, workspace_dir, args.model)
+    token_log = Path(args.token_log) if args.token_log else None
+    anyio.run(run, design_path, workspace_dir, args.model, token_log)
