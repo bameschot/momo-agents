@@ -21,7 +21,195 @@ from pathlib import Path
 # Theme Assets — inlined CSS (to be filled by STORY-014)
 # ---------------------------------------------------------------------------
 
-STYLES: str = ""
+STYLES: str = """
+/* ── Reset & Custom Properties ─────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #ffffff;
+  --text:         #1a1a1a;
+  --muted:        #555555;
+  --link:         #0066cc;
+  --border:       #d0d0d0;
+  --code-bg:      #f5f5f5;
+  --code-text:    #333333;
+  --pre-bg:       #f8f8f8;
+  --table-head:   #f0f0f0;
+  --table-alt:    #fafafa;
+  --bq-border:    #0066cc;
+  --bq-bg:        #f0f4ff;
+  --hr-color:     #cccccc;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+html { font-size: 16px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.6;
+  padding: 1rem;
+}
+
+.page-wrapper {
+  display: flex;
+  flex-direction: row;
+  gap: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+article {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 860px;
+}
+
+/* ── Table of Contents Sidebar ──────────────────────────────────────────── */
+#toc {
+  flex: 0 0 220px;
+  width: 220px;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+#toc a {
+  color: var(--muted);
+  text-decoration: none;
+  display: block;
+  padding: 0.15rem 0;
+}
+
+#toc a:hover { color: var(--link); }
+
+#toc ul { list-style: none; padding-left: 0; }
+#toc ul ul { padding-left: 1rem; }
+
+/* ── Typography ─────────────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.5rem 0 0.5rem;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.25rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+h5 { font-size: 1rem; }
+h6 { font-size: 0.9rem; color: var(--muted); }
+
+p { margin: 0.75rem 0; }
+
+a { color: var(--link); }
+
+/* ── Inline Code ────────────────────────────────────────────────────────── */
+code {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+
+/* ── Code Blocks ────────────────────────────────────────────────────────── */
+pre {
+  background: var(--pre-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  page-break-inside: avoid;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--code-text);
+  border-radius: 0;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+  page-break-inside: avoid;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+}
+
+th { background: var(--table-head); font-weight: 600; }
+
+tr:nth-child(even) td { background: var(--table-alt); }
+
+/* ── Blockquotes ────────────────────────────────────────────────────────── */
+blockquote {
+  border-left: 4px solid var(--bq-border);
+  background: var(--bq-bg);
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  color: var(--muted);
+  border-radius: 0 4px 4px 0;
+}
+
+blockquote p { margin: 0; }
+
+/* ── Horizontal Rule ────────────────────────────────────────────────────── */
+hr {
+  border: none;
+  border-top: 2px solid var(--hr-color);
+  margin: 2rem 0;
+}
+
+/* ── Lists ──────────────────────────────────────────────────────────────── */
+ul, ol { padding-left: 1.75rem; margin: 0.5rem 0; }
+li { margin: 0.25rem 0; }
+
+/* ── Images ─────────────────────────────────────────────────────────────── */
+img { max-width: 100%; height: auto; border-radius: 4px; }
+
+/* ── Print / PDF ────────────────────────────────────────────────────────── */
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .page-wrapper {
+    display: flex;
+    flex-direction: row;
+    gap: 1.5rem;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  a {
+    color: #0066cc;
+    text-decoration: none;
+  }
+
+  pre, table {
+    page-break-inside: avoid;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+}
+"""
 
 # ---------------------------------------------------------------------------
 # Data Models
@@ -683,8 +871,50 @@ def build_toc(headings: list[Heading]) -> str:
 
 
 def render_page(result: ParseResult, title: str | None, toc_html: str) -> str:
-    """Render the full HTML page from a ParseResult."""
-    raise NotImplementedError
+    """Assemble and return a complete HTML5 document string for PDF rendering.
+
+    Combines *result.body_html*, *toc_html*, the page *title*, and the
+    ``STYLES`` module constant into a valid HTML5 document. The document is
+    self-contained (no external stylesheets or scripts) and suitable for
+    passing to ``wkhtmltopdf``.
+
+    Args:
+        result:   ParseResult with converted body HTML.
+        title:    The resolved page title string (HTML-escaped in output).
+        toc_html: Pre-rendered ToC ``<nav id="toc">`` HTML, or ``""`` to
+                  suppress the sidebar entirely.
+
+    Returns:
+        A complete HTML5 document as a string.
+    """
+    safe_title = html.escape(title or "")
+
+    # ── <head> ────────────────────────────────────────────────────────────
+    head = (
+        f"<head>"
+        f"<meta charset=\"UTF-8\">"
+        f"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+        f"<title>{safe_title}</title>"
+        f"<style>{STYLES}</style>"
+        f"</head>"
+    )
+
+    # ── ToC sidebar (conditional) ──────────────────────────────────────────
+    sidebar = f"<aside id=\"toc-sidebar\">{toc_html}</aside>" if toc_html else ""
+
+    # ── <body> ────────────────────────────────────────────────────────────
+    body = (
+        f"<body>"
+        f"<main>"
+        f"<div class=\"page-wrapper\">"
+        f"<article>{result.body_html}</article>"
+        f"{sidebar}"
+        f"</div>"
+        f"</main>"
+        f"</body>"
+    )
+
+    return f"<!DOCTYPE html><html lang=\"en\">{head}{body}</html>"
 
 
 def export_pdf(html_content: str, output_path: Path) -> None:
