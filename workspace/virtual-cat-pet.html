@@ -686,6 +686,41 @@
   </script>
 
   <script>
+    /* ── NeglectChecker ──────────────────────────────────────────────
+     * Called after every DecayEngine.tick().
+     * Tracks how long the cat has been in a critically low state and
+     * triggers forceSick after 120 continuous minutes of neglect.
+     * ────────────────────────────────────────────────────────────── */
+    const NeglectChecker = {
+      /**
+       * Evaluate neglect conditions against the current GameState.
+       * Mutates GameState.neglectSince and GameState.forceSick.
+       * Does nothing if GameState.isDead.
+       */
+      evaluate() {
+        if (GameState.isDead) return;
+
+        const neglected = GameState.hunger < 20 || GameState.happiness < 20;
+
+        if (neglected) {
+          // Start neglect timer if not already running.
+          if (GameState.neglectSince === null) {
+            GameState.neglectSince = Date.now();
+          }
+          // Check if 120 minutes of neglect have elapsed.
+          if (Date.now() - GameState.neglectSince >= 7_200_000) {
+            GameState.forceSick = true;
+          }
+        } else {
+          // Both stats recovered — reset neglect timer.
+          // NOTE: forceSick is NOT cleared here; only the Care action clears it.
+          GameState.neglectSince = null;
+        }
+      }
+    };
+  </script>
+
+  <script>
     /* ── ActionHandler ───────────────────────────────────────────────
      * Implements the Feed, Play, and Care player actions.
      * Reads / mutates GameState, then calls GameState.save().
