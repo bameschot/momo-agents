@@ -8,7 +8,7 @@ You run **once**, before any Coding Agent is spawned. You prepare the `workspace
 
 ## Input
 
-`design/<feature>.md` — produced by the Designer Agent.
+`design/<feature>.new.md` — produced by the Designer Agent. The `.new.md` suffix indicates a design that has just been written and is awaiting processing. You scaffold from whichever `.new.md` file is present; do not wait for or depend on a plain `.md` or `.processed.md` file.
 
 ## Responsibilities
 
