@@ -167,6 +167,94 @@
       display: block;
       pointer-events: none;
     }
+
+    /* ── Dice Area ───────────────────────────────────────────── */
+
+    #dice-area {
+      background-color: var(--surface);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin: 0.5rem 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .dice-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 0.75rem;
+    }
+
+    .die {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .die svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .die[data-value="0"] .die-face {
+      fill: var(--surface-alt);
+      stroke: var(--text-muted);
+      stroke-width: 2;
+    }
+
+    .die[data-value="1"] .die-face {
+      fill: var(--accent-light);
+      stroke: var(--accent-light);
+      stroke-width: 1;
+    }
+
+    @keyframes spin-tumble {
+      0%   { transform: rotate(0deg) scale(1); }
+      40%  { transform: rotate(360deg) scale(0.6); }
+      100% { transform: rotate(720deg) scale(1); }
+    }
+
+    .die.rolling {
+      animation: spin-tumble 600ms ease-out forwards;
+    }
+
+    #dice-sum {
+      font-size: 1rem;
+      color: var(--text);
+      min-height: 1.5rem;
+      text-align: center;
+    }
+
+    #btn-roll {
+      background-color: var(--accent-light);
+      color: var(--bg);
+      border: none;
+      border-radius: 0.5rem;
+      padding: 0.75rem 2rem;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      touch-action: manipulation;
+      min-height: 44px;
+      min-width: 120px;
+      transition: opacity 0.2s ease;
+    }
+
+    #btn-roll:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    #btn-roll:hover:not(:disabled) {
+      opacity: 0.85;
+    }
   </style>
 </head>
 <body>
@@ -197,6 +285,87 @@
   </main>
 
   <script>
+    // ── Game Data Model ──────────────────────────────────────
+    // PLAYER_PATH maps path positions (1-14) to board square IDs for each player
+    const PLAYER_PATH = [
+      // Player 0 (Light): pos 1-4 (home), pos 5-12 (battle lane), pos 13-14 (end zone)
+      [
+        undefined,  // pos 0: off-board (waiting)
+        'r0c3', 'r0c2', 'r0c1', 'r0c0',  // pos 1-4: home lane
+        'r1c0', 'r1c1', 'r1c2', 'r1c3', 'r1c4', 'r1c5', 'r1c6', 'r1c7',  // pos 5-12: battle lane
+        'r0c7', 'r0c6',  // pos 13-14: end zone
+        undefined  // pos 15: borne off (not a square)
+      ],
+      // Player 1 (Shadow): pos 1-4 (home), pos 5-12 (battle lane), pos 13-14 (end zone)
+      [
+        undefined,  // pos 0: off-board (waiting)
+        'r2c3', 'r2c2', 'r2c1', 'r2c0',  // pos 1-4: home lane
+        'r1c0', 'r1c1', 'r1c2', 'r1c3', 'r1c4', 'r1c5', 'r1c6', 'r1c7',  // pos 5-12: battle lane
+        'r2c7', 'r2c6',  // pos 13-14: end zone
+        undefined  // pos 15: borne off (not a square)
+      ]
+    ];
+
+    // Rosette positions (path indices) — same for both players
+    const ROSETTE_POSITIONS = [1, 4, 8];
+
+    // Safe square position where captures are not allowed
+    const SAFE_SQUARE_POSITION = 8;
+
+    // Battle lane range where captures can occur
+    const BATTLE_LANE_RANGE = { min: 5, max: 12 };
+
+    /**
+     * Factory function to create initial game state.
+     * Returns a fresh GameState object with all pieces in starting positions.
+     * Pure function — no side effects, no DOM access.
+     */
+    function createInitialState() {
+      return {
+        board: new Map(),  // squareId → { player: 0|1, pieceId: string }
+        players: [
+          {
+            id: 0,
+            label: 'Light',
+            pieces: [
+              { id: 'L0', position: 0 },
+              { id: 'L1', position: 0 },
+              { id: 'L2', position: 0 },
+              { id: 'L3', position: 0 },
+              { id: 'L4', position: 0 },
+              { id: 'L5', position: 0 },
+              { id: 'L6', position: 0 }
+            ],
+            borneOff: 0
+          },
+          {
+            id: 1,
+            label: 'Shadow',
+            pieces: [
+              { id: 'S0', position: 0 },
+              { id: 'S1', position: 0 },
+              { id: 'S2', position: 0 },
+              { id: 'S3', position: 0 },
+              { id: 'S4', position: 0 },
+              { id: 'S5', position: 0 },
+              { id: 'S6', position: 0 }
+            ],
+            borneOff: 0
+          }
+        ],
+        currentPlayer: 0,
+        phase: 'roll',
+        diceValues: [0, 0, 0, 0],
+        diceResult: 0,
+        validMoves: [],
+        selectedPieceId: null
+      };
+    }
+
+    // Module-level game state
+    // eslint-disable-next-line prefer-const
+    let gameState = createInitialState();
+
     // ── Board constants ──────────────────────────────────────
     const ROSETTE_IDS = new Set(['r0c0', 'r0c3', 'r1c3', 'r2c0', 'r2c3']);
     const INACTIVE_IDS = new Set(['r0c4', 'r0c5', 'r2c4', 'r2c5']);
@@ -267,10 +436,84 @@
       }
     }
 
+    /**
+     * Build the dice area: 4 die elements, a sum display, and a Roll button.
+     * Die state is driven by `data-value` attribute (0=dark, 1=light).
+     */
+    function buildDiceArea() {
+      const diceAreaEl = document.getElementById('dice-area');
+
+      // Row of 4 dice
+      const diceRow = document.createElement('div');
+      diceRow.className = 'dice-row';
+      for (let i = 0; i < 4; i++) {
+        const die = document.createElement('div');
+        die.className = 'die';
+        die.dataset.value = '0';
+        die.innerHTML =
+          '<svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+          '<polygon class="die-face" points="20,2 38,20 20,38 2,20"/>' +
+          '</svg>';
+        diceRow.appendChild(die);
+      }
+      diceAreaEl.appendChild(diceRow);
+
+      // Sum display
+      const sumEl = document.createElement('div');
+      sumEl.id = 'dice-sum';
+      sumEl.textContent = '—';
+      diceAreaEl.appendChild(sumEl);
+
+      // Roll button
+      const btnEl = document.createElement('button');
+      btnEl.id = 'btn-roll';
+      btnEl.textContent = 'Roll';
+      btnEl.setAttribute('aria-label', 'Roll the dice');
+      btnEl.addEventListener('click', rollDice);
+      diceAreaEl.appendChild(btnEl);
+    }
+
+    /**
+     * Roll all 4 dice: randomise values, animate, then update display.
+     * Debounced: button is disabled during the 600 ms animation.
+     */
+    function rollDice() {
+      const btn = document.getElementById('btn-roll');
+      if (!btn || btn.disabled) return;
+
+      // Generate 4 independent binary results
+      const values = [0, 1, 2, 3].map(function () {
+        return Math.random() < 0.5 ? 0 : 1;
+      });
+      gameState.diceValues = values;
+      gameState.diceResult = values.reduce(function (sum, v) {
+        return sum + v;
+      }, 0);
+
+      // Disable button and trigger animation
+      btn.disabled = true;
+      const dice = document.querySelectorAll('.die');
+      dice.forEach(function (die) {
+        die.classList.add('rolling');
+      });
+
+      // After animation completes: update visuals and re-enable button
+      setTimeout(function () {
+        dice.forEach(function (die, i) {
+          die.classList.remove('rolling');
+          die.dataset.value = String(gameState.diceValues[i]);
+        });
+        const sumEl = document.getElementById('dice-sum');
+        if (sumEl) sumEl.textContent = 'Rolled: ' + gameState.diceResult;
+        btn.disabled = false;
+      }, 600);
+    }
+
     // Bootstrap: build board and pieces on page load
     document.addEventListener('DOMContentLoaded', function () {
       buildBoard();
       initPieces();
+      buildDiceArea();
     });
   </script>
 </body>
