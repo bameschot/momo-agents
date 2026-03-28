@@ -861,5 +861,119 @@
     };
   </script>
 
+  <script>
+    /* ── UIRenderer ──────────────────────────────────────────────────
+     * Reads GameState (and StateClassifier) and updates all non-animation
+     * DOM elements: stat bars, age/status labels, button states.
+     * Call UIRenderer.render() on every game tick.
+     * ────────────────────────────────────────────────────────────── */
+    const UIRenderer = {
+      /**
+       * Render one frame of UI state into the DOM.
+       * Safe to call before game start — returns early if GameState has
+       * no name yet (uninitialised).
+       */
+      render() {
+        // Guard: don't render until state is populated.
+        if (!GameState || !GameState.name) return;
+
+        const now = Date.now();
+
+        /* ── Cat name ────────────────────────────────────────────── */
+        this._setText('cat-name', GameState.name);
+
+        /* ── Stat bars ───────────────────────────────────────────── */
+        this._setBar('stat-hunger',    GameState.hunger);
+        this._setBar('stat-happiness', GameState.happiness);
+        this._setBar('stat-health',    GameState.health);
+
+        /* ── Age / status ────────────────────────────────────────── */
+        this._setText('age-label',    `Day ${Math.floor(GameState.age)}`);
+        this._setText('status-label', StateClassifier.classify());
+
+        /* ── Dead / alive visibility ─────────────────────────────── */
+        const buttons    = ['btn-feed', 'btn-play', 'btn-care'];
+        const resurrect  = document.getElementById('btn-resurrect');
+
+        if (GameState.isDead) {
+          buttons.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+          });
+          if (resurrect) resurrect.style.display = '';
+          return; // nothing more to render when dead
+        }
+
+        // Ensure action buttons are visible and resurrect is hidden.
+        buttons.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.style.display = '';
+        });
+        if (resurrect) resurrect.style.display = 'none';
+
+        /* ── Feed button ─────────────────────────────────────────── */
+        this._renderButton('btn-feed', GameState.cooldowns.feed, now, false);
+
+        /* ── Play button ─────────────────────────────────────────── */
+        this._renderButton('btn-play', GameState.cooldowns.play, now, GameState.forceSick);
+
+        /* ── Care button ─────────────────────────────────────────── */
+        const careBlocked = !GameState.forceSick && GameState.health >= 40;
+        this._renderButton('btn-care', GameState.cooldowns.care, now, careBlocked);
+      },
+
+      /* ── Helpers ────────────────────────────────────────────────── */
+
+      /**
+       * Set an element's textContent by id (no-op if missing).
+       */
+      _setText(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+      },
+
+      /**
+       * Render a stat bar as filled (█) / empty (░) blocks (10 total).
+       * @param {string} id   Element id
+       * @param {number} value Stat value 0–100
+       */
+      _setBar(id, value) {
+        const filled = Math.round(Math.max(0, Math.min(100, value)) / 10);
+        const bar    = '█'.repeat(filled) + '░'.repeat(10 - filled);
+        this._setText(id, bar);
+      },
+
+      /**
+       * Render a single action button.
+       * @param {string}  id           Element id
+       * @param {number}  cooldownEnd  Timestamp when cooldown expires
+       * @param {number}  now          Current timestamp
+       * @param {boolean} extraBlock   Additional reason to disable (sick, care condition, etc.)
+       */
+      _renderButton(id, cooldownEnd, now, extraBlock) {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        const baseLabel = { 'btn-feed': 'Feed', 'btn-play': 'Play', 'btn-care': 'Care' }[id] || '';
+        const remaining = cooldownEnd - now;
+
+        if (remaining > 0) {
+          // On cooldown — show countdown, disable.
+          const secs = Math.ceil(remaining / 1000);
+          el.textContent = `00:${String(secs).padStart(2, '0')}`;
+          el.disabled = true;
+        } else if (extraBlock) {
+          // Structurally unavailable (not on cooldown, but still blocked).
+          el.textContent = baseLabel;
+          el.disabled = true;
+        } else {
+          // Available.
+          el.textContent = baseLabel;
+          el.disabled = false;
+        }
+      }
+    };
+  </script>
+
 </body>
 </html>
