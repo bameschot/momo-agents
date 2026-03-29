@@ -391,9 +391,46 @@ def bundle_workspace(args: argparse.Namespace, project_root: Path, output_dir: P
 def unbundle(args: argparse.Namespace, project_root: Path) -> None:
     """Extract a zip file into the workspace.
 
-    Stub implementation; will be fully implemented in STORY-013.
+    Validates the zip path, detects conflicting top-level folders, prompts the
+    user for confirmation if conflicts exist, and extracts all entries into
+    *project_root*.
     """
-    raise NotImplementedError
+    if not args.zip:
+        sys.stderr.write("Error: --zip <path> is required for --unbundle\n")
+        sys.exit(1)
+
+    zip_path = Path(args.zip)
+    if not zip_path.exists() or not zipfile.is_zipfile(zip_path):
+        sys.stderr.write(f"Error: '{zip_path}' is not a valid zip file\n")
+        sys.exit(1)
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        names = zf.namelist()
+
+        # Detect conflicting top-level folders
+        top_level: set[str] = set()
+        for name in names:
+            top = Path(name).parts[0]
+            top_level.add(top)
+
+        conflicts: list[str] = []
+        for top in sorted(top_level):
+            candidate = project_root / top
+            if candidate.is_dir() and any(candidate.iterdir()):
+                conflicts.append(top)
+
+        if conflicts:
+            print("The following folders have existing content and will be overwritten:")
+            for folder in conflicts:
+                print(f"  - {folder}/")
+            answer = input("Overwrite? [y/N]: ")
+            if answer.strip().lower() != "y":
+                print("Aborted.")
+                sys.exit(0)
+
+        zf.extractall(project_root)
+
+    print(f"Extracted {len(names)} files to {project_root}")
 
 
 def main(argv: list[str] | None = None) -> None:
