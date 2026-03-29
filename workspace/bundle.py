@@ -296,7 +296,35 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Language(s) whose exclusion patterns to apply (default: all languages combined).",
     )
-    return parser.parse_args(argv)
+
+    # Add mutually exclusive group for --bundle and --unbundle
+    mode_group = parser.add_mutually_exclusive_group(required=False)
+    mode_group.add_argument(
+        "--bundle",
+        action="store_true",
+        help="Bundle mode: create a zip file from the project.",
+    )
+    mode_group.add_argument(
+        "--unbundle",
+        action="store_true",
+        help="Unbundle mode: extract a zip file.",
+    )
+
+    # Add --zip argument
+    parser.add_argument(
+        "--zip",
+        metavar="ZIP_PATH",
+        default=None,
+        help="Path to the zip file to extract (required for --unbundle).",
+    )
+
+    args = parser.parse_args(argv)
+
+    # Validate that one of --bundle or --unbundle is required
+    if not args.bundle and not args.unbundle:
+        parser.error("one of --bundle or --unbundle is required")
+
+    return args
 
 
 def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:

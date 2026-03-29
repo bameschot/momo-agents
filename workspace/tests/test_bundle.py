@@ -262,7 +262,7 @@ class TestCreateBundle:
         output_dir = tmp_path / "nonexistent" / "nested"
         assert not output_dir.exists()
 
-        main(["--output", str(output_dir), str(root)])
+        main(["--bundle", "--output", str(output_dir), str(root)])
 
         assert output_dir.exists()
         assert any(f.suffix == ".zip" for f in output_dir.iterdir())
@@ -314,7 +314,7 @@ class TestMainCLI:
         design_file.write_text("# test\n")
         try:
             output_dir = tmp_path / "out"
-            monkeypatch.setattr(sys, "argv", ["bundle.py", "--output", str(output_dir)])
+            monkeypatch.setattr(sys, "argv", ["bundle.py", "--bundle", "--output", str(output_dir)])
             main()
             assert output_dir.exists()
             zips = list(output_dir.glob("*.zip"))
@@ -327,7 +327,7 @@ class TestMainCLI:
         root = self._setup_project(tmp_path, "my-spec.md")
         output_dir = tmp_path / "out"
         output_dir.mkdir()
-        main([str(root), "--output", str(output_dir)])
+        main(["--bundle", str(root), "--output", str(output_dir)])
         zips = list(output_dir.glob("*.zip"))
         assert len(zips) == 1
         assert zips[0].stem == "my-spec"
@@ -336,13 +336,13 @@ class TestMainCLI:
         root = self._setup_project(tmp_path, "bundle-spec.new.md")
         output_dir = tmp_path / "custom_out"
         output_dir.mkdir()
-        main([str(root), "--output", str(output_dir)])
+        main(["--bundle", str(root), "--output", str(output_dir)])
         assert (output_dir / "bundle-spec.zip").exists()
 
     def test_exits_on_missing_project_root(self, tmp_path: Path) -> None:
         nonexistent = tmp_path / "does_not_exist"
         with pytest.raises(SystemExit) as exc_info:
-            main([str(nonexistent)])
+            main(["--bundle", str(nonexistent)])
         assert exc_info.value.code != 0
 
     def test_exits_on_empty_design_dir(self, tmp_path: Path) -> None:
@@ -351,7 +351,7 @@ class TestMainCLI:
         (root / "design").mkdir()
         # No .md files in design/
         with pytest.raises(SystemExit) as exc_info:
-            main([str(root)])
+            main(["--bundle", str(root)])
         assert exc_info.value.code != 0
 
 
@@ -719,7 +719,7 @@ class TestMainLanguageCLI:
     ) -> None:
         root = self._setup_project(tmp_path)
         output_dir = tmp_path / "out"
-        main([str(root), "--language", "python", "--output", str(output_dir)])
+        main(["--bundle", str(root), "--language", "python", "--output", str(output_dir)])
         captured = capsys.readouterr()
         assert "python" in captured.out
 
@@ -728,7 +728,7 @@ class TestMainLanguageCLI:
     ) -> None:
         root = self._setup_project(tmp_path)
         output_dir = tmp_path / "out"
-        main([str(root), "--language", "py", "ts", "--output", str(output_dir)])
+        main(["--bundle", str(root), "--language", "py", "ts", "--output", str(output_dir)])
         captured = capsys.readouterr()
         assert "python" in captured.out
         assert "typescript" in captured.out
@@ -738,7 +738,7 @@ class TestMainLanguageCLI:
     ) -> None:
         root = self._setup_project(tmp_path)
         output_dir = tmp_path / "out"
-        main([str(root), "--output", str(output_dir)])
+        main(["--bundle", str(root), "--output", str(output_dir)])
         captured = capsys.readouterr()
         assert "all" in captured.out
 
@@ -746,7 +746,7 @@ class TestMainLanguageCLI:
         root = self._setup_project(tmp_path)
         output_dir = tmp_path / "out"
         with pytest.raises(SystemExit) as exc_info:
-            main([str(root), "--language", "unknownlang", "--output", str(output_dir)])
+            main(["--bundle", str(root), "--language", "unknownlang", "--output", str(output_dir)])
         assert exc_info.value.code != 0
 
     def test_language_upper_case_resolves_correctly(
@@ -754,6 +754,6 @@ class TestMainLanguageCLI:
     ) -> None:
         root = self._setup_project(tmp_path)
         output_dir = tmp_path / "out"
-        main([str(root), "--language", "PYTHON", "--output", str(output_dir)])
+        main(["--bundle", str(root), "--language", "PYTHON", "--output", str(output_dir)])
         captured = capsys.readouterr()
         assert "python" in captured.out
