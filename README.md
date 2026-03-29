@@ -7,12 +7,19 @@ A multi-agent coding pipeline powered by the Claude Agent SDK. A team of special
 ## Pipeline overview
 
 ```
-  You ──► Designer ──► Business Analyst ──► Project Initialiser
+  You ──► Designer ──► Project Initialiser
                               │
-                      Story Orchestrator
-                       (marks stories ready
-                        when deps are met)
+                    writes workspace/CLAUDE.md
                               │
+               ┌──────────────┴──────────────────────┐
+               ▼                                     ▼
+     Business Analyst                       Story Orchestrator
+    (waits for CLAUDE.md,                  (marks stories ready
+     then decomposes design)                when deps are met)
+               │                                     │
+               └──────────────┬──────────────────────┘
+                              ▼
+             (waits for workspace/CLAUDE.md)
                ┌──────────────┴──────────────┐
                ▼                             ▼
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
@@ -27,11 +34,11 @@ A multi-agent coding pipeline powered by the Claude Agent SDK. A team of special
 | Agent | Role |
 |---|---|
 | **Designer** | Interactive Q&A session with you. Produces `design/<feature>.new.md`. |
-| **Business Analyst** | Watches `design/` for `*.new.md` files and decomposes each into `stories/STORY-NNN.md` files, each with a **Complexity** field (easy / medium / hard). |
-| **Project Initialiser** | Reads the design and scaffolds `workspace/` — directory layout, config files, dependency manifests, and `workspace/CLAUDE.md` with build/test/lint commands. |
+| **Business Analyst** | Waits for `workspace/CLAUDE.md`, then watches `design/` for `*.new.md` files and decomposes each into `stories/STORY-NNN.md` files with a **Complexity** field (easy / medium / hard). |
+| **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `workspace/CLAUDE.md` with build/test/lint commands. All other agents gate on this file. |
 | **Story Orchestrator** | Watches `stories/` for new `STORY-NNN.md` files, parses their complexity and dependencies, and renames them to `STORY-NNN.[complexity].ready.md` when all dependencies are complete. |
-| **Junior Coding Agent** | Claims and implements `easy` stories (`STORY-NNN.easy.ready.md`). Defaults to `claude-haiku`. Multiple instances run in parallel. |
-| **Senior Coding Agent** | Claims and implements `medium` and `hard` stories. Defaults to `claude-sonnet`. Multiple instances run in parallel. |
+| **Junior Coding Agent** | Waits for `workspace/CLAUDE.md`, then claims and implements `easy` stories. Defaults to `claude-haiku`. Multiple instances run in parallel. |
+| **Senior Coding Agent** | Waits for `workspace/CLAUDE.md`, then claims and implements `medium` and `hard` stories. Defaults to `claude-sonnet`. Multiple instances run in parallel. |
 | **Story Reviewer** | Wakes when a `HALT` file appears (a story failed). Triages the failure with you and rewrites the story so the orchestrator can re-evaluate and coding can resume. |
 | **Watchdog** | Background process that resets any stale `.working.md` story (idle > 10 min) back to `.ready.md`, recovering from crashed agents. |
 

@@ -55,10 +55,10 @@ momo-agents/
 |---|---|---|---|
 | **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `design/` |
 | **Business Analyst** | Watches `design/` for `*.new.md` files; decomposes each into stories with a `**Complexity**` field; renames to `*.processed.md` | `design/*.new.md` | `stories/STORY-NNN.md` |
-| **Project Initialiser** | Scaffolds `workspace/` once when it is empty | `design/` | `workspace/` |
+| **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `workspace/CLAUDE.md`; all other agents gate on this file | `design/` | `workspace/` |
 | **Story Orchestrator** | Watches `stories/` for bare `STORY-NNN.md` files; parses complexity and dependencies; renames to `STORY-NNN.[complexity].ready.md` when deps are met | `stories/STORY-NNN.md`, `stories/*.done.md` | `stories/` |
-| **Junior Coding Agent** (×N) | Claims and implements `easy` stories; polls indefinitely for new work | `stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
-| **Senior Coding Agent** (×N) | Claims and implements `medium` and `hard` stories; polls indefinitely | `stories/*.medium.ready.md`, `stories/*.hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Junior Coding Agent** (×N) | Waits for `workspace/CLAUDE.md`, then claims and implements `easy` stories; polls indefinitely for new work | `stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Senior Coding Agent** (×N) | Waits for `workspace/CLAUDE.md`, then claims and implements `medium` and `hard` stories; polls indefinitely | `stories/*.medium.ready.md`, `stories/*.hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
 | **Story Reviewer** | Triages failed stories with user guidance; rewrites and resets them to unprocessed | `stories/*.failed.md` | `stories/` |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled | `stories/` | `stories/` |
 
@@ -112,11 +112,11 @@ Each story written by the BA includes a `**Complexity**: easy | medium | hard` f
 
 ## Project Initialiser Agent
 
-Runs once automatically when the workspace is empty:
+Runs once automatically when the workspace is empty. Its primary output — `workspace/CLAUDE.md` — acts as the **start gate** for the Business Analyst and all Coding Agents: none of them begin work until this file exists.
 
-1. Reads the design document for technology stack and project structure.
-2. Creates `workspace/CLAUDE.md` with build, test, and lint commands.
-3. Scaffolds the initial directory layout, config files, and empty entry points.
+1. Reads the design document and determines the correct tech-stack scaffolding (language, runtime, frameworks, tooling).
+2. Creates `workspace/CLAUDE.md` with precise, runnable build, test, and lint commands for the identified stack.
+3. Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.
 4. Does **not** implement any story logic.
 
 If `workspace/` already contains files beyond the skeleton `CLAUDE.md`, the initialiser skips immediately.
@@ -320,7 +320,7 @@ All agent coordination is via atomic filesystem operations — no database, no m
 
 ## `start-team.sh` — Usage Guide
 
-`start-team.sh` launches all agents **simultaneously**, each in its own named terminal window. Agents self-coordinate via the filesystem. The Business Analyst and all Coding Agents poll for `workspace/CLAUDE.md` before doing any work, ensuring the Project Initialiser always scaffolds the workspace first.
+`start-team.sh` launches all agents **simultaneously**, each in its own named terminal window. The pipeline has one hard sequencing constraint: the **Business Analyst** and all **Coding Agents** poll for `workspace/CLAUDE.md` and will not start work until the **Project Initialiser** has written that file. Everything else is coordinated via atomic filesystem operations — no agent waits for another to finish before starting.
 
 ### Syntax
 
