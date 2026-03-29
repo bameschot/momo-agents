@@ -266,16 +266,23 @@ li { margin: 0.25rem 0; }
 
 /* ── Images ─────────────────────────────────────────────────────────────── */
 img { max-width: 100%; height: auto; border-radius: 4px; }
-</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a><ul><li><a href="#story-lifecycle">Story lifecycle</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#check-pipeline-status">Check pipeline status</a></li><li><a href="#shut-down-the-team">Shut down the team</a></li></ul></li><li><a href="#clearing-the-workspace">Clearing the workspace</a><ul><li><a href="#reset-stories-only-keep-generated-code">Reset stories only (keep generated code)</a></li><li><a href="#full-reset--wipe-everything-generated">Full reset — wipe everything generated</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
+</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
 <p>A multi-agent coding pipeline powered by the Claude Agent SDK. A team of specialised agents collaborate over the filesystem to take a feature idea from concept through to working, tested code — without human intervention between steps.</p>
 <hr>
 <h2 id="pipeline-overview">Pipeline overview</h2>
-<pre><code>  You ──► Designer ──► Business Analyst ──► Project Initialiser
+<pre><code>  You ──► Designer ──► Project Initialiser
                               │
-                      Story Orchestrator
-                       (marks stories ready
-                        when deps are met)
+                    writes workspace/CLAUDE.md
                               │
+               ┌──────────────┴──────────────────────┐
+               ▼                                     ▼
+     Business Analyst                       Story Orchestrator
+    (waits for CLAUDE.md,                  (marks stories ready
+     then decomposes design)                when deps are met)
+               │                                     │
+               └──────────────┬──────────────────────┘
+                              ▼
+             (waits for workspace/CLAUDE.md)
                ┌──────────────┴──────────────┐
                ▼                             ▼
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
@@ -285,29 +292,141 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
                                      (on failure)
                                            ▼
                                     Story Reviewer ──► You</code></pre>
-<table><thead><tr><th>Agent</th><th>Role</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Interactive Q&amp;A session with you. Produces <code>design/&lt;feature&gt;.new.md</code>.</td></tr><tr><td><strong>Business Analyst</strong></td><td>Watches <code>design/</code> for <code>*.new.md</code> files and decomposes each into <code>stories/STORY-NNN.md</code> files, each with a <strong>Complexity</strong> field (easy / medium / hard).</td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design and scaffolds <code>workspace/</code> — directory layout, config files, dependency manifests, and <code>workspace/CLAUDE.md</code> with build/test/lint commands.</td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Watches <code>stories/</code> for new <code>STORY-NNN.md</code> files, parses their complexity and dependencies, and renames them to <code>STORY-NNN.[complexity].ready.md</code> when all dependencies are complete.</td></tr><tr><td><strong>Junior Coding Agent</strong></td><td>Claims and implements <code>easy</code> stories (<code>STORY-NNN.easy.ready.md</code>). Defaults to <code>claude-haiku</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Senior Coding Agent</strong></td><td>Claims and implements <code>medium</code> and <code>hard</code> stories. Defaults to <code>claude-sonnet</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes when a <code>HALT</code> file appears (a story failed). Triages the failure with you and rewrites the story so the orchestrator can re-evaluate and coding can resume.</td></tr><tr><td><strong>Watchdog</strong></td><td>Background process that resets any stale <code>.working.md</code> story (idle &gt; 10 min) back to <code>.ready.md</code>, recovering from crashed agents.</td></tr></tbody></table>
-<h3 id="story-lifecycle">Story lifecycle</h3>
-<p>Stories move through states encoded in their filename. The filename carries both the <strong>complexity</strong> and the <strong>state</strong>:</p>
-<pre><code>STORY-NNN.md              ← written by BA (unprocessed)
+<p>The pipeline has one hard sequencing constraint: the <strong>Project Initialiser</strong> runs first and writes <code>workspace/CLAUDE.md</code>. The <strong>Business Analyst</strong> and all <strong>Coding Agents</strong> poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.</p>
+<table><thead><tr><th>Agent</th><th>Role</th><th>Reads from</th><th>Writes to</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Multi-turn interactive Q&amp;A with user; writes design on <code>write</code> command</td><td>User input (terminal)</td><td><code>design/</code></td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design, determines the correct tech-stack scaffolding, and writes <code>workspace/CLAUDE.md</code>; all other agents gate on this file</td><td><code>design/</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Business Analyst</strong></td><td>Waits for <code>workspace/CLAUDE.md</code>, then watches <code>design/</code> for <code>*.new.md</code> files and decomposes each into story files with a <strong>Complexity</strong> field</td><td><code>design/*.new.md</code>, <code>workspace/CLAUDE.md</code></td><td><code>stories/STORY-NNN.md</code></td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Plain Python utility (no LLM); watches <code>stories/</code> for bare <code>STORY-NNN.md</code> files, parses complexity and deps, renames to <code>STORY-NNN.[complexity].ready.md</code> when deps are met</td><td><code>stories/STORY-NNN.md</code>, <code>stories/*.done.md</code></td><td><code>stories/</code></td></tr><tr><td><strong>Junior Coding Agent</strong> (×N)</td><td>Waits for <code>workspace/CLAUDE.md</code>, then claims and implements <code>easy</code> stories; polls indefinitely for new work</td><td><code>stories/*.easy.ready.md</code>, <code>workspace/CLAUDE.md</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Senior Coding Agent</strong> (×N)</td><td>Waits for <code>workspace/CLAUDE.md</code>, then claims and implements <code>medium</code> and <code>hard</code> stories; polls indefinitely</td><td><code>stories/*.medium/hard.ready.md</code>, <code>workspace/CLAUDE.md</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes on <code>HALT</code>; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate</td><td><code>stories/*.failed.md</code></td><td><code>stories/</code></td></tr><tr><td><strong>Watchdog</strong></td><td>Resets stale <code>.working.md</code> files whose agent has died or stalled (idle &gt; 10 min) back to <code>.ready.md</code></td><td><code>stories/</code></td><td><code>stories/</code></td></tr></tbody></table>
+<p>Each LLM agent reads its system prompt from the corresponding file in <code>roles/</code> at startup. <code>story_orchestrator.py</code> makes no LLM calls.</p>
+<hr>
+<h2 id="repository-layout">Repository layout</h2>
+<pre><code>momo-agents/
+├── scripts/                   ← Python agent and utility implementations
+│   ├── designer_agent.py
+│   ├── business_analyst_agent.py
+│   ├── project_initialiser_agent.py
+│   ├── story_orchestrator.py      ← non-LLM utility; marks stories ready
+│   ├── junior_coding_agent.py     ← claims easy stories
+│   ├── senior_coding_agent.py     ← claims medium/hard stories
+│   ├── story_reviewer_agent.py
+│   └── token_logger.py            ← shared JSONL token-usage logger
+├── roles/                     ← system prompt files (one per LLM agent)
+│   ├── designer.md
+│   ├── business-analyst.md
+│   ├── project-initialiser.md
+│   ├── junior-coding-agent.md
+│   ├── senior-coding-agent.md
+│   └── story-reviewer.md
+├── design/                    ← Designer Agent outputs
+│   ├── &lt;feature&gt;.new.md       ← written by Designer; queued for BA
+│   └── &lt;feature&gt;.processed.md ← renamed by BA after stories are generated
+├── stories/                   ← story files; complexity + state encoded in filename
+│   ├── STORY-001.md                      ← unprocessed (written by BA)
+│   ├── STORY-002.easy.ready.md           ← deps met; ready for Junior Agent
+│   ├── STORY-003.medium.working.md       ← claimed by a Senior Agent
+│   ├── STORY-004.easy.done.md            ← complete
+│   ├── STORY-005.hard.failed.md          ← failed; awaiting review
+│   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
+│   └── HALT                              ← sentinel: all Coding Agents must stop
+├── workspace/                 ← generated source code
+│   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
+│   ├── src/
+│   └── tests/
+├── start-team.sh              ← launches all agents simultaneously
+├── reset-team.sh              ← wipes all artefacts; resets to clean state
+├── status.sh                  ← live story-state summary
+└── watchdog.sh                ← resets stale .working.md files after 10 min</code></pre>
+<hr>
+<h2 id="agent-details">Agent details</h2>
+<h3 id="designer">Designer</h3>
+<p>The Designer runs as a genuine multi-turn conversation backed by <code>ClaudeSDKClient</code>. A single SDK session persists for the entire conversation, preserving full context across turns.</p>
+<ol><li>Agent greets the user and asks what they want to build.</li><li>Asks clarifying questions — technology stack, constraints, integrations, non-functional requirements — until it has a complete picture.</li><li>Does <strong>not</strong> write anything to disk until the user types <strong><code>write</code></strong>.</li><li>On <code>write</code>: produces a thorough design document and saves it to <code>design/&lt;feature-name&gt;.new.md</code>, immediately queuing it for the Business Analyst.</li><li>If a <code>.processed.md</code> version already exists, writing a new <code>.new.md</code> re-queues the design and the BA regenerates stories.</li><li>The session continues — the user can keep refining and issue <code>write</code> again at any time.</li><li>Type <code>exit</code>, <code>quit</code>, or press <strong>Ctrl+C</strong> to end the session.</li></ol>
+<hr>
+<h3 id="project-initialiser">Project Initialiser</h3>
+<p>Runs once automatically when the workspace is empty. Its primary output — <code>workspace/CLAUDE.md</code> — is the <strong>start gate</strong> for the Business Analyst and all Coding Agents.</p>
+<ol><li>Reads the design document and determines the correct tech-stack scaffolding (language, runtime, frameworks, tooling).</li><li>Creates <code>workspace/CLAUDE.md</code> with precise, runnable build, test, and lint commands for the identified stack.</li><li>Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.</li><li>Does <strong>not</strong> implement any story logic.</li></ol>
+<p>If <code>workspace/</code> already contains files beyond the skeleton <code>CLAUDE.md</code>, the initialiser skips immediately.</p>
+<hr>
+<h3 id="business-analyst">Business Analyst</h3>
+<p>The BA agent uses design file <strong>state encoded in the filename</strong> — no mtime tracking, no external state store.</p>
+<p><strong>Startup gate</strong>: polls every 10 seconds until <code>workspace/CLAUDE.md</code> exists. This ensures stories are always written with full knowledge of the tech stack.</p>
+<p><strong>Watch loop</strong>:</p>
+<ol><li>Wait for <code>workspace/CLAUDE.md</code> to exist.</li><li>Every 5 seconds, glob all <code>*.new.md</code> files in <code>design/</code>.</li><li>For each <code>&lt;feature&gt;.new.md</code> found: decompose it into <code>stories/STORY-NNN.md</code> files.</li><li>On completion, rename <code>&lt;feature&gt;.new.md</code> → <code>&lt;feature&gt;.processed.md</code>.</li><li>Sleep and repeat until <code>pipeline_complete</code> is written.</li></ol>
+<p>Each story includes a <code>**Complexity**: easy | medium | hard</code> field and a <code>**Depends on**</code> field. Stories are written as bare <code>STORY-NNN.md</code> files; the Story Orchestrator assigns the <code>.ready</code> state.</p>
+<table><thead><tr><th>Filename</th><th>State</th><th>Meaning</th></tr></thead><tbody><tr><td><code>design/&lt;feature&gt;.new.md</code></td><td><strong>new</strong></td><td>Queued for BA; not yet processed</td></tr><tr><td><code>design/&lt;feature&gt;.processed.md</code></td><td><strong>processed</strong></td><td>Stories have been generated for this version</td></tr></tbody></table>
+<hr>
+<h3 id="story-orchestrator">Story Orchestrator</h3>
+<p>A <strong>plain Python utility</strong> (no LLM calls) that continuously watches <code>stories/</code> and manages the unprocessed → ready transition.</p>
+<ul><li>Scans for bare <code>STORY-NNN.md</code> files written by the BA.</li><li>Parses <code>**Complexity**</code> and <code>**Depends on**</code> fields from each file.</li><li>Checks whether all listed dependencies have a corresponding <code>.done.md</code> file.</li><li>If all deps are done (or there are no deps): renames <code>STORY-NNN.md</code> → <code>STORY-NNN.[complexity].ready.md</code>.</li><li>If deps are unmet: logs the blocked story and re-checks on the next poll.</li></ul>
+<p>Decoupling dependency resolution from the coding agents keeps the agents simple and enables automatic unblocking — when a story finishes, the orchestrator immediately marks any dependent stories as ready without any agent needing to be aware.</p>
+<p>Default poll interval: 5 seconds (configurable via <code>--poll-interval</code>).</p>
+<hr>
+<h3 id="coding-agents">Coding Agents</h3>
+<p>Two tiers handle stories by complexity:</p>
+<table><thead><tr><th>Agent</th><th>Handles</th><th>Default model</th></tr></thead><tbody><tr><td><strong>Junior Coding Agent</strong></td><td><code>easy</code> stories</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><strong>Senior Coding Agent</strong></td><td><code>medium</code> and <code>hard</code> stories</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table>
+<p>Both follow the same structure.</p>
+<p><strong>Startup sequence</strong> (once, before the loop):</p>
+<ol><li>Poll every 60 s until <code>workspace/CLAUDE.md</code> exists.</li><li>Read <code>workspace/CLAUDE.md</code> once and retain build/test/lint instructions for the entire session — never re-read during the loop.</li><li>Based on the tech stack described in <code>workspace/CLAUDE.md</code>, identify generated/vendored/tooling folders to avoid reading (dependency caches, build output, virtual environments, compiler artefacts, tool caches).</li></ol>
+<p><strong>Coding loop</strong>:</p>
+<ol><li>Check for <code>stories/HALT</code> — exit immediately if it exists.</li><li>Scan for <code>.ready.md</code> stories of the correct complexity tier.</li><li>Sort by story number (ascending); pick the lowest-numbered candidate.</li><li>Atomically claim: rename <code>STORY-NNN.[complexity].ready.md</code> → <code>STORY-NNN.[complexity].working.md</code>. POSIX <code>rename(2)</code> is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.</li><li>Implement acceptance criteria in <code>workspace/</code>.</li><li>Run tests and linter using retained instructions.</li><li>Check for <code>HALT</code> again before committing. If found, revert changes, rename back to <code>.ready.md</code>, exit.</li><li><strong>On success</strong>: rename to <code>.done.md</code>, commit workspace changes, loop back to step 1.</li><li><strong>On failure</strong>: create <code>stories/HALT</code>, rename to <code>.failed.md</code>, discard uncommitted changes, exit. No retries.</li></ol>
+<hr>
+<h3 id="story-reviewer">Story Reviewer</h3>
+<ol><li>Watches for <code>stories/HALT</code> in a continuous loop.</li><li>Atomically claims <code>STORY-NNN.[complexity].failed.md</code> → <code>STORY-NNN.[complexity].reviewing.md</code>.</li><li>Reads the full story including any appended failure notes.</li><li>Presents the user with the original goal, acceptance criteria, and a summary of what failed.</li><li>Asks the user how to proceed (new approach, relaxed constraints, split the story, etc.).</li><li>Rewrites the file with a clean, updated story; preserves <code>**Index**</code> and <code>**Depends on**</code>.</li><li>Renames to bare <code>STORY-NNN.md</code> — returns it to the unprocessed queue so the orchestrator re-evaluates.</li><li>Deletes <code>stories/HALT</code> once all <code>.failed.md</code> stories are resolved.</li><li>Returns to watching for the next HALT.</li></ol>
+<hr>
+<h3 id="watchdog">Watchdog</h3>
+<p>Runs continuously alongside the Coding Agents. Every 60 seconds it scans <code>stories/</code> for <code>.working.md</code> files older than <strong>10 minutes</strong> and resets them to <code>.ready.md</code>:</p>
+<pre><code>STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].ready.md</code></pre>
+<p>The complexity segment is preserved so the story can be immediately re-claimed without going through the orchestrator again.</p>
+<hr>
+<h2 id="stories">Stories</h2>
+<h3 id="file-format">File format</h3>
+<pre><code class="language-markdown"># STORY-NNN: [easy|medium|hard] &lt;Short Title&gt;
+
+**Index**: N                        ← priority order; lower = worked first
+**Complexity**: easy | medium | hard ← assigned by BA; used by orchestrator and agents
+**Design ref**: design/&lt;feature&gt;.md
+**Depends on**: STORY-NNN | none
+
+## Context
+## Acceptance Criteria
+## Implementation Hints
+## Test Requirements
+
+---
+&lt;!-- Coding Agent appends timestamped failure notes below this line --&gt;</code></pre>
+<h3 id="states">States</h3>
+<p>Complexity and state are encoded directly in the filename — no database or external state store.</p>
+<table><thead><tr><th>Filename pattern</th><th>State</th><th>Written by</th><th>Who acts next</th></tr></thead><tbody><tr><td><code>STORY-NNN.md</code></td><td><strong>Unprocessed</strong></td><td>Business Analyst</td><td>Story Orchestrator</td></tr><tr><td><code>STORY-NNN.[c].ready.md</code></td><td><strong>Ready</strong></td><td>Story Orchestrator</td><td>Coding Agent (matching complexity)</td></tr><tr><td><code>STORY-NNN.[c].working.md</code></td><td><strong>In progress</strong></td><td>Coding Agent</td><td>— (owned by one agent)</td></tr><tr><td><code>STORY-NNN.[c].done.md</code></td><td><strong>Complete</strong></td><td>Coding Agent</td><td>Nobody</td></tr><tr><td><code>STORY-NNN.[c].failed.md</code></td><td><strong>Failed</strong></td><td>Coding Agent</td><td>Story Reviewer</td></tr><tr><td><code>STORY-NNN.[c].reviewing.md</code></td><td><strong>Under review</strong></td><td>Story Reviewer</td><td>— (owned by reviewer)</td></tr><tr><td><code>HALT</code> <em>(sentinel)</em></td><td><strong>System paused</strong></td><td>Coding Agent</td><td>Triggers stop + revert in all Coding Agents</td></tr></tbody></table>
+<p><code>[c]</code> = <code>easy</code>, <code>medium</code>, or <code>hard</code>.</p>
+<h3 id="lifecycle">Lifecycle</h3>
+<pre><code>BA writes STORY-NNN.md  (bare, unprocessed)
       │
-  Story Orchestrator checks deps
-      │
+      │  Story Orchestrator polls:
+      │    - parses **Complexity** and **Depends on**
+      │    - checks all deps have .done.md
       ▼
-STORY-NNN.[complexity].ready.md     ← deps met; ready to claim
+STORY-NNN.[complexity].ready.md    ← deps met; complexity confirmed
       │
-  Coding Agent atomically claims
-      │
+      │  Coding Agent atomically claims (rename):
       ▼
-STORY-NNN.[complexity].working.md   ← owned by one agent
+STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
       │
-  ┌───┴────────────────────┐
-success                 failure
-  │                         │
-  ▼                    create HALT + rename to .failed.md
-STORY-NNN.[complexity].done.md       │
-(commit workspace)          Story Reviewer triages with you
-                            rewrites story → bare STORY-NNN.md
-                            Story Orchestrator re-evaluates</code></pre>
+   ┌──┴────────────────────────┐
+success                     failure (no retry)
+   │                            │
+   ▼                            ▼
+STORY-NNN.[complexity].done.md   create stories/HALT
+(commit workspace)               rename to .failed.md
+                                 coding agent exits
+                                              │
+                                   Story Reviewer claims:
+                                   .failed.md → .reviewing.md
+                                   rewrites story with user guidance
+                                   renames → bare STORY-NNN.md
+                                   deletes HALT when all .failed.md resolved
+                                              │
+                                   Story Orchestrator re-evaluates bare .md
+                                   → marks .ready.md again</code></pre>
+<h3 id="parallel-coordination">Parallel coordination</h3>
+<p>All coordination is via atomic filesystem operations — no database, no message queue, no shared memory.</p>
+<table><thead><tr><th>Operation</th><th>Mechanism</th></tr></thead><tbody><tr><td>Mark story ready</td><td>Story Orchestrator renames <code>STORY-NNN.md</code> → <code>STORY-NNN.[c].ready.md</code> after dep check</td></tr><tr><td>Claim a story</td><td>Coding Agent renames <code>STORY-NNN.[c].ready.md</code> → <code>STORY-NNN.[c].working.md</code> — POSIX atomic</td></tr><tr><td>Complexity routing</td><td>Junior agents glob <code>*.easy.ready.md</code>; Senior agents glob <code>*.medium.ready.md</code> + <code>*.hard.ready.md</code></td></tr><tr><td>Halt detection</td><td>Check for <code>stories/HALT</code> before and after implementation; exit immediately if found</td></tr><tr><td>Workspace revert</td><td>Discard uncommitted changes on HALT detection</td></tr><tr><td>Pipeline shutdown</td><td><code>pipeline_complete</code> sentinel written by <code>start-team.sh</code> on Ctrl+C</td></tr><tr><td>Stale agent recovery</td><td>Watchdog resets <code>.[c].working.md</code> files idle &gt; 10 minutes → <code>.[c].ready.md</code></td></tr></tbody></table>
 <hr>
 <h2 id="setup">Setup</h2>
 <h3 id="prerequisites">Prerequisites</h3>
@@ -330,9 +449,10 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
 <h2 id="running-the-pipeline">Running the pipeline</h2>
 <h3 id="start-the-full-team">Start the full team</h3>
 <pre><code class="language-bash">./start-team.sh &lt;feature-name&gt; [options]</code></pre>
-<p>This opens every agent simultaneously, each in its own terminal window, and then monitors the pipeline in the current terminal until you press <strong>Ctrl+C</strong>.</p>
-<p><strong>Options:</strong></p>
+<p>Opens every agent simultaneously in its own named terminal window and monitors the pipeline in the current terminal until you press <strong>Ctrl+C</strong>.</p>
 <table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--junior-agents N</code></td><td>Number of parallel Junior Coding Agents (easy stories)</td><td><code>2</code></td></tr><tr><td><code>--senior-agents N</code></td><td>Number of parallel Senior Coding Agents (medium/hard stories)</td><td><code>1</code></td></tr><tr><td><code>--model-designer M</code></td><td>Claude model for the Designer</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-ba M</code></td><td>Claude model for the Business Analyst</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-pi M</code></td><td>Claude model for the Project Initialiser</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-junior M</code></td><td>Claude model for Junior Coding Agents</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-senior M</code></td><td>Claude model for Senior Coding Agents</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-reviewer M</code></td><td>Claude model for the Story Reviewer</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table>
+<p><strong>Agent windows opened:</strong></p>
+<table><thead><tr><th>Window</th><th>Agent</th><th>Notes</th></tr></thead><tbody><tr><td><code>🎨 Designer Agent</code></td><td>Interactive design session</td><td>Type requirements; <code>write</code> saves the design</td></tr><tr><td><code>🏗️ Project Initialiser</code></td><td>Workspace scaffolder</td><td>Runs once; skips if workspace already populated</td></tr><tr><td><code>📋 Business Analyst</code></td><td>Design watcher</td><td>Polls <code>design/</code> every 5 s; waits for <code>workspace/CLAUDE.md</code></td></tr><tr><td><code>🎯 Story Orchestrator</code></td><td>Readiness manager</td><td>Continuously marks stories ready as deps complete</td></tr><tr><td><code>🐕 Watchdog</code></td><td>Stale story reset</td><td>Resets stories idle &gt; 10 min back to <code>.ready.md</code></td></tr><tr><td><code>🔍 Story Reviewer</code></td><td>Failed-story triage</td><td>Wakes on HALT; interactive with you</td></tr><tr><td><code>🟢 Junior Coding Agent N</code></td><td>Easy story implementation</td><td>Waits for <code>workspace/CLAUDE.md</code>; polls for <code>*.easy.ready.md</code></td></tr><tr><td><code>🔵 Senior Coding Agent N</code></td><td>Medium/hard story implementation</td><td>Waits for <code>workspace/CLAUDE.md</code>; polls for <code>*.medium/hard.ready.md</code></td></tr></tbody></table>
 <p><strong>Examples:</strong></p>
 <pre><code class="language-bash"># Default — 2 junior agents, 1 senior agent
 ./start-team.sh my-feature
@@ -345,9 +465,9 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
 
 # --flag=value form also works
 ./start-team.sh my-feature --junior-agents=3 --model-junior=claude-sonnet-4-6</code></pre>
-<h3 id="check-pipeline-status">Check pipeline status</h3>
+<h3 id="monitor-progress">Monitor progress</h3>
 <pre><code class="language-bash">./status.sh</code></pre>
-<p>Prints a snapshot of how many stories are in each state:</p>
+<p>Prints a live snapshot of how many stories are in each state:</p>
 <pre><code>  unprocessed    2   STORY-001.md  STORY-004.md
   ready          1   STORY-002.easy.ready.md
   working        1   STORY-003.medium.working.md
@@ -355,23 +475,27 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
   failed         0
   reviewing      0
   HALT           no</code></pre>
-<h3 id="shut-down-the-team">Shut down the team</h3>
-<p>Press <strong>Ctrl+C</strong> in the terminal where <code>start-team.sh</code> is running. This:</p>
-<ol><li>Writes <code>.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process.</li><li>Prints a final token-usage summary and <code>./status.sh</code> snapshot.</li><li>Removes the <code>.sentinels/</code> directory.</li></ol>
-<hr>
-<h2 id="clearing-the-workspace">Clearing the workspace</h2>
-<h3 id="reset-stories-only-keep-generated-code">Reset stories only (keep generated code)</h3>
+<h3 id="shut-down">Shut down</h3>
+<p>Press <strong>Ctrl+C</strong> in the <code>start-team.sh</code> terminal. This:</p>
+<ol><li>Writes <code>.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process.</li><li>Prints a final per-agent token-usage summary and <code>status.sh</code> snapshot.</li><li>Removes the <code>.sentinels/</code> directory.</li></ol>
+<h3 id="reset">Reset</h3>
+<p><strong>Reset stories only</strong> (keep generated code):</p>
 <pre><code class="language-bash">rm -f stories/STORY-*.md stories/HALT</code></pre>
-<h3 id="full-reset--wipe-everything-generated">Full reset — wipe everything generated</h3>
-<pre><code class="language-bash">./reset-team.sh
-# or skip the confirmation prompt:
-./reset-team.sh --yes</code></pre>
-<p>After a full reset, re-running <code>./start-team.sh &lt;feature-name&gt;</code> will go through the complete pipeline from scratch.</p>
+<p><strong>Full reset</strong> — wipe everything generated:</p>
+<pre><code class="language-bash">./reset-team.sh        # interactive — asks for confirmation
+./reset-team.sh --yes  # non-interactive</code></pre>
+<table><thead><tr><th>Path</th><th>What gets deleted</th></tr></thead><tbody><tr><td><code>stories/</code></td><td>All <code>STORY-*</code> files in every state and the <code>HALT</code> sentinel</td></tr><tr><td><code>design/</code></td><td>All <code>*.md</code> design documents</td></tr><tr><td><code>.sentinels/</code></td><td>Entire directory</td></tr><tr><td><code>workspace/</code></td><td>All generated source code, tests, <code>CLAUDE.md</code>, and build artefacts</td></tr></tbody></table>
+<p>After a full reset, re-running <code>./start-team.sh &lt;feature-name&gt;</code> goes through the complete pipeline from scratch.</p>
 <hr>
 <h2 id="running-agents-individually">Running agents individually</h2>
 <p>Each agent can also be invoked directly:</p>
 <pre><code class="language-bash"># Designer (interactive)
 python scripts/designer_agent.py --model claude-sonnet-4-6
+
+# Project Initialiser
+python scripts/project_initialiser_agent.py \
+  --design design/my-feature.new.md \
+  --model claude-sonnet-4-6
 
 # Business Analyst (waits for workspace/CLAUDE.md before starting)
 python scripts/business_analyst_agent.py \
@@ -379,19 +503,14 @@ python scripts/business_analyst_agent.py \
   --workspace-dir workspace \
   --model claude-sonnet-4-6
 
-# Project Initialiser
-python scripts/project_initialiser_agent.py \
-  --design design/my-feature.new.md \
-  --model claude-sonnet-4-6
-
-# Story Orchestrator (marks stories ready as deps are met)
+# Story Orchestrator
 python scripts/story_orchestrator.py
 
-# Junior Coding Agent (easy stories)
+# Junior Coding Agent (easy stories; waits for workspace/CLAUDE.md)
 python scripts/junior_coding_agent.py \
   --model claude-haiku-4-5-20251001
 
-# Senior Coding Agent (medium/hard stories)
+# Senior Coding Agent (medium/hard stories; waits for workspace/CLAUDE.md)
 python scripts/senior_coding_agent.py \
   --model claude-sonnet-4-6
 
@@ -409,7 +528,7 @@ ruff format .
 mypy scripts/
 
 # Tests
-pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a><ul><li><a href="#story-lifecycle">Story lifecycle</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#check-pipeline-status">Check pipeline status</a></li><li><a href="#shut-down-the-team">Shut down the team</a></li></ul></li><li><a href="#clearing-the-workspace">Clearing the workspace</a><ul><li><a href="#reset-stories-only-keep-generated-code">Reset stories only (keep generated code)</a></li><li><a href="#full-reset--wipe-everything-generated">Full reset — wipe everything generated</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
+pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
 (function () {
   'use strict';
 
