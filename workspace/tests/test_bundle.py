@@ -20,6 +20,7 @@ from bundle import (  # noqa: E402
     build_exclusion_rules,
     create_zip,
     main,
+    resolve_languages,
     resolve_zip_name,
     should_exclude,
 )
@@ -352,3 +353,407 @@ class TestMainCLI:
         with pytest.raises(SystemExit) as exc_info:
             main([str(root)])
         assert exc_info.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# resolve_languages
+# ---------------------------------------------------------------------------
+
+
+class TestResolveLanguages:
+    """Tests for resolve_languages()."""
+
+    def test_canonical_name_passes_through(self) -> None:
+        assert resolve_languages(["python"]) == ["python"]
+
+    def test_alias_py(self) -> None:
+        assert resolve_languages(["py"]) == ["python"]
+
+    def test_alias_ts(self) -> None:
+        assert resolve_languages(["ts"]) == ["typescript"]
+
+    def test_alias_golang(self) -> None:
+        assert resolve_languages(["golang"]) == ["go"]
+
+    def test_alias_csharp_symbol(self) -> None:
+        assert resolve_languages(["c#"]) == ["csharp"]
+
+    def test_alias_cpp_symbol(self) -> None:
+        assert resolve_languages(["c++"]) == ["cpp"]
+
+    def test_case_insensitive_python(self) -> None:
+        assert resolve_languages(["Python"]) == ["python"]
+        assert resolve_languages(["PYTHON"]) == ["python"]
+        assert resolve_languages(["pYtHoN"]) == ["python"]
+
+    def test_deduplication_py_and_python(self) -> None:
+        result = resolve_languages(["py", "python"])
+        assert result == ["python"]
+        assert len(result) == 1
+
+    def test_multiple_distinct_languages(self) -> None:
+        result = resolve_languages(["py", "ts"])
+        assert result == ["python", "typescript"]
+
+    def test_unknown_alias_exits_nonzero(self, capsys: pytest.CaptureFixture) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            resolve_languages(["unknownlang"])
+        assert exc_info.value.code != 0
+        captured = capsys.readouterr()
+        assert "unknownlang" in captured.err
+
+
+# ---------------------------------------------------------------------------
+# build_exclusion_rules
+# ---------------------------------------------------------------------------
+
+
+class TestBuildExclusionRules:
+    """Tests for build_exclusion_rules()."""
+
+    def test_none_includes_universal_and_all_languages(self) -> None:
+        rules = build_exclusion_rules(None)
+        assert ".git" in rules.dir_names
+        assert ".venv" in rules.dir_names
+        assert "node_modules" in rules.dir_names
+        assert "target" in rules.dir_names
+
+    def test_python_contains_git_and_venv_not_node_modules(self) -> None:
+        rules = build_exclusion_rules(["python"])
+        assert ".git" in rules.dir_names
+        assert ".venv" in rules.dir_names
+        assert "node_modules" not in rules.dir_names
+
+    def test_javascript_contains_node_modules_not_venv(self) -> None:
+        rules = build_exclusion_rules(["javascript"])
+        assert "node_modules" in rules.dir_names
+        assert ".venv" not in rules.dir_names
+
+    def test_javascript_and_typescript_same_dir_names_as_javascript(self) -> None:
+        rules_js = build_exclusion_rules(["javascript"])
+        rules_jsts = build_exclusion_rules(["javascript", "typescript"])
+        assert rules_jsts.dir_names == rules_js.dir_names
+
+    def test_rust_contains_only_target_and_git(self) -> None:
+        rules = build_exclusion_rules(["rust"])
+        assert ".git" in rules.dir_names
+        assert "target" in rules.dir_names
+        # Should only have .git + target, no other dirs
+        assert rules.dir_names == frozenset({".git", "target"})
+        assert rules.dir_globs == ()
+        assert rules.file_suffixes == frozenset()
+        assert rules.rel_paths == ()
+
+
+# ---------------------------------------------------------------------------
+# should_exclude with explicit language rules
+# ---------------------------------------------------------------------------
+
+
+def _make_root(tmp_path: Path) -> Path:
+    root = tmp_path / "proj"
+    root.mkdir()
+    return root
+
+
+def _make_file(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("")
+    return path
+
+
+class TestShouldExcludeLanguageRules:
+    """Tests for should_exclude() with per-language ExclusionRules."""
+
+    # --- Python ---
+
+    def test_python_excludes_venv(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["python"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / ".venv" / "lib" / "python3.11" / "site.py")
+        assert should_exclude(f, root, rules) is True
+
+    def test_python_excludes_pycache_at_any_depth(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["python"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "pkg" / "__pycache__" / "mod.cpython-311.pyc")
+        assert should_exclude(f, root, rules) is True
+
+    def test_python_excludes_pyc_files(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["python"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "module.pyc")
+        assert should_exclude(f, root, rules) is True
+
+    def test_python_excludes_pytest_cache(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["python"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / ".pytest_cache" / "v" / "cache" / "lastfailed")
+        assert should_exclude(f, root, rules) is True
+
+    def test_python_excludes_egg_info_via_glob(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["python"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "dist.egg-info" / "PKG-INFO")
+        assert should_exclude(f, root, rules) is True
+
+    # --- JavaScript / TypeScript ---
+
+    def test_js_excludes_node_modules_at_any_depth(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["javascript"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "app" / "node_modules" / "lodash" / "index.js")
+        assert should_exclude(f, root, rules) is True
+
+    def test_js_excludes_next(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["javascript"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / ".next" / "cache" / "webpack" / "client.js")
+        assert should_exclude(f, root, rules) is True
+
+    def test_js_does_not_exclude_pycache(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["javascript"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "__pycache__" / "mod.pyc")
+        assert should_exclude(f, root, rules) is False
+
+    def test_ts_excludes_node_modules(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["typescript"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "node_modules" / "react" / "index.js")
+        assert should_exclude(f, root, rules) is True
+
+    # --- Rust ---
+
+    def test_rust_excludes_target(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["rust"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "target" / "debug" / "myapp")
+        assert should_exclude(f, root, rules) is True
+
+    def test_rust_does_not_exclude_node_modules(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["rust"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "node_modules" / "pkg" / "index.js")
+        assert should_exclude(f, root, rules) is False
+
+    def test_rust_does_not_exclude_pycache(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["rust"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "__pycache__" / "mod.pyc")
+        assert should_exclude(f, root, rules) is False
+
+    # --- Ruby ---
+
+    def test_ruby_excludes_vendor_bundle(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["ruby"])
+        root = _make_root(tmp_path)
+        vb = _make_file(root / "vendor" / "bundle" / "gem.rb")
+        assert should_exclude(vb, root, rules) is True
+
+    def test_ruby_does_not_exclude_vendor_other(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["ruby"])
+        root = _make_root(tmp_path)
+        vo = _make_file(root / "vendor" / "other" / "lib.rb")
+        assert should_exclude(vo, root, rules) is False
+
+    # --- PHP ---
+
+    def test_php_excludes_var_cache(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["php"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "var" / "cache" / "prod" / "Container.php")
+        assert should_exclude(f, root, rules) is True
+
+    def test_php_excludes_var_log(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["php"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "var" / "log" / "dev.log")
+        assert should_exclude(f, root, rules) is True
+
+    def test_php_does_not_exclude_bare_var(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["php"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "var" / "config.php")
+        assert should_exclude(f, root, rules) is False
+
+    # --- C / C++ ---
+
+    def test_cpp_excludes_cmake_build_dir_via_glob(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["cpp"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "cmake-build-debug" / "CMakeFiles" / "main.cpp.o")
+        assert should_exclude(f, root, rules) is True
+
+    def test_c_excludes_cmake_build_dir_via_glob(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["c"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "cmake-build-release" / "libfoo.a")
+        assert should_exclude(f, root, rules) is True
+
+    def test_cpp_excludes_object_files(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["cpp"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "src" / "main.o")
+        assert should_exclude(f, root, rules) is True
+
+    def test_cpp_excludes_dll_files(self, tmp_path: Path) -> None:
+        rules = build_exclusion_rules(["cpp"])
+        root = _make_root(tmp_path)
+        f = _make_file(root / "lib" / "mylib.dll")
+        assert should_exclude(f, root, rules) is True
+
+    # --- Universal ---
+
+    def test_git_always_excluded_for_any_language(self, tmp_path: Path) -> None:
+        for lang in ["python", "javascript", "rust", "ruby", "php", "cpp"]:
+            rules = build_exclusion_rules([lang])
+            lang_dir = tmp_path / lang
+            lang_dir.mkdir(parents=True, exist_ok=True)
+            root = lang_dir / "proj"
+            root.mkdir()
+            f = _make_file(root / ".git" / "HEAD")
+            assert should_exclude(f, root, rules) is True, f".git not excluded for {lang}"
+
+    def test_normal_source_file_not_excluded_any_single_language(
+        self, tmp_path: Path
+    ) -> None:
+        for lang in ["python", "javascript", "rust", "ruby", "php", "cpp"]:
+            rules = build_exclusion_rules([lang])
+            lang_dir = tmp_path / lang
+            lang_dir.mkdir(parents=True, exist_ok=True)
+            root = lang_dir / "proj"
+            root.mkdir()
+            f = _make_file(root / "src" / "main.py")
+            assert should_exclude(f, root, rules) is False, f"src/main.py excluded for {lang}"
+
+
+# ---------------------------------------------------------------------------
+# create_zip with language-specific rules
+# ---------------------------------------------------------------------------
+
+
+class TestCreateZipLanguageRules:
+    """Tests for create_zip() with language-specific ExclusionRules."""
+
+    def _make_mixed_project(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Create a project with both Python and JS artifacts present."""
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "spec.md").write_text("# spec\n")
+        (root / "src" / "main.py").parent.mkdir(parents=True)
+        (root / "src" / "main.py").write_text("print('hello')\n")
+        # Python artifacts
+        (root / "__pycache__").mkdir()
+        (root / "__pycache__" / "main.cpython-311.pyc").write_text("")
+        (root / "src" / "__pycache__").mkdir()
+        (root / "src" / "__pycache__" / "main.pyc").write_text("")
+        # JS artifacts
+        (root / "node_modules" / "lodash").mkdir(parents=True)
+        (root / "node_modules" / "lodash" / "index.js").write_text("module.exports = {};\n")
+        zip_path = tmp_path / "output.zip"
+        return root, zip_path
+
+    def test_python_rules_exclude_pycache_and_pyc(self, tmp_path: Path) -> None:
+        root, zip_path = self._make_mixed_project(tmp_path)
+        rules = build_exclusion_rules(["python"])
+        create_zip(root, zip_path, rules)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+        # No __pycache__ entries
+        for name in names:
+            assert "__pycache__" not in name.split("/"), f"__pycache__ found: {name}"
+            assert not name.endswith(".pyc"), f".pyc found: {name}"
+
+    def test_python_rules_keep_node_modules(self, tmp_path: Path) -> None:
+        root, zip_path = self._make_mixed_project(tmp_path)
+        rules = build_exclusion_rules(["python"])
+        create_zip(root, zip_path, rules)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+        # node_modules should be present
+        assert any("node_modules" in name for name in names), (
+            "node_modules not found with python rules"
+        )
+
+    def test_js_rules_exclude_node_modules(self, tmp_path: Path) -> None:
+        root, zip_path = self._make_mixed_project(tmp_path)
+        rules = build_exclusion_rules(["javascript"])
+        create_zip(root, zip_path, rules)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+        for name in names:
+            assert "node_modules" not in name.split("/"), f"node_modules found: {name}"
+
+    def test_js_rules_keep_pycache(self, tmp_path: Path) -> None:
+        root, zip_path = self._make_mixed_project(tmp_path)
+        rules = build_exclusion_rules(["javascript"])
+        create_zip(root, zip_path, rules)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+        # __pycache__ should be present (JS rules don't exclude it)
+        assert any("__pycache__" in name for name in names), (
+            "__pycache__ not found with js rules"
+        )
+
+
+# ---------------------------------------------------------------------------
+# CLI integration: --language flag
+# ---------------------------------------------------------------------------
+
+
+class TestMainLanguageCLI:
+    """End-to-end CLI tests for --language flag."""
+
+    def _setup_project(self, tmp_path: Path) -> Path:
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "feature.md").write_text("# design\n")
+        (root / "hello.txt").write_text("hello\n")
+        return root
+
+    def test_language_python_confirmation_includes_python(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = self._setup_project(tmp_path)
+        output_dir = tmp_path / "out"
+        main([str(root), "--language", "python", "--output", str(output_dir)])
+        captured = capsys.readouterr()
+        assert "python" in captured.out
+
+    def test_language_py_ts_confirmation_includes_python_and_typescript(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = self._setup_project(tmp_path)
+        output_dir = tmp_path / "out"
+        main([str(root), "--language", "py", "ts", "--output", str(output_dir)])
+        captured = capsys.readouterr()
+        assert "python" in captured.out
+        assert "typescript" in captured.out
+
+    def test_no_language_confirmation_includes_all(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = self._setup_project(tmp_path)
+        output_dir = tmp_path / "out"
+        main([str(root), "--output", str(output_dir)])
+        captured = capsys.readouterr()
+        assert "all" in captured.out
+
+    def test_unknown_language_exits_nonzero(self, tmp_path: Path) -> None:
+        root = self._setup_project(tmp_path)
+        output_dir = tmp_path / "out"
+        with pytest.raises(SystemExit) as exc_info:
+            main([str(root), "--language", "unknownlang", "--output", str(output_dir)])
+        assert exc_info.value.code != 0
+
+    def test_language_upper_case_resolves_correctly(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = self._setup_project(tmp_path)
+        output_dir = tmp_path / "out"
+        main([str(root), "--language", "PYTHON", "--output", str(output_dir)])
+        captured = capsys.readouterr()
+        assert "python" in captured.out
