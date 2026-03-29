@@ -22,10 +22,39 @@ EXCLUDED_FILES = {".env"}
 EXCLUDED_SUFFIXES = {".pyc"}
 
 
-def is_excluded(path: Path, root: Path) -> bool:
-    """Return True if *path* should be omitted from the zip archive."""
-    # TODO: implement exclusion logic
-    raise NotImplementedError
+def should_exclude(path: Path, project_root: Path) -> bool:
+    """Return True if *path* should be omitted from the zip archive.
+
+    Excludes:
+    - Any path containing .git, __pycache__, or node_modules at any depth
+    - Files named exactly .env
+    - Files with .pyc extension
+    """
+    # Compute relative path
+    try:
+        rel = path.relative_to(project_root)
+    except ValueError:
+        # Path is not relative to project_root; exclude it to be safe
+        return True
+
+    parts = rel.parts
+
+    # Check for excluded directories at any depth
+    if EXCLUDED_DIRS & set(parts):
+        return True
+
+    # Check file-level exclusions (only the final component)
+    filename = path.name
+
+    # Exclude files named exactly .env
+    if filename == ".env":
+        return True
+
+    # Exclude files with .pyc extension
+    if filename.endswith(".pyc"):
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------
