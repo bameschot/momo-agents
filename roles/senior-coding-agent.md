@@ -17,6 +17,7 @@ You only work with stories where `[complexity]` is `medium` or `hard`.
 ## Startup sequence
 
 1. Read `workspace/CLAUDE.md` once and retain its build, test, and lint instructions for the entire session.
+2. Based on the tech stack described in `workspace/CLAUDE.md`, determine which folders in `workspace/` are generated, vendored, or tooling artefacts (e.g. dependency caches, build output, virtual environments, compiler artefacts, tool caches). Avoid reading from any of those folders for the rest of the session.
 
 ## Coding loop
 
@@ -63,3 +64,4 @@ When `stories/HALT` is detected at any checkpoint:
 - Do not commit until a story is successfully completed.
 - Do not read or modify other agents' `.working.md` files.
 - Do not delete or modify `stories/HALT` — that is the Story Reviewer's responsibility.
+- Never read from folders identified on startup as generated, vendored, or tooling artefacts for the active tech stack.

@@ -1,7 +1,7 @@
 """bundle.py — packages the project workspace into a named zip file.
 
 Usage:
-    python bundle.py [project_root] [--output <output_dir>]
+    python bundle-workspace.py [project_root] [--output <output_dir>]
 
 The zip file is named after the most recently modified design document found in
 <project_root>/design/, with all extensions stripped (e.g. my-feature.new.md → my-feature.zip).
@@ -19,7 +19,7 @@ from pathlib import Path
 # Exclusion rules
 # ---------------------------------------------------------------------------
 
-EXCLUDED_DIRS = {".git", "__pycache__", "node_modules"}
+EXCLUDED_DIRS = {".git", ".venv", "__pycache__", "node_modules"}
 EXCLUDED_FILES = {".env"}
 EXCLUDED_SUFFIXES = {".pyc"}
 
@@ -28,7 +28,7 @@ def should_exclude(path: Path, project_root: Path) -> bool:
     """Return True if *path* should be omitted from the zip archive.
 
     Excludes:
-    - Any path containing .git, __pycache__, or node_modules at any depth
+    - Any path containing .git, .venv, __pycache__, or node_modules at any depth
     - Files named exactly .env
     - Files with .pyc extension
     """
