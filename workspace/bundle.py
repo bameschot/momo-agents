@@ -10,7 +10,9 @@ The zip file is named after the most recently modified design document found in
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import zipfile
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -89,13 +91,31 @@ def resolve_zip_name(project_root: Path) -> str:
     return stem
 
 
-def create_bundle(project_root: Path, output_dir: Path, zip_name: str) -> Path:
+def create_zip(project_root: Path, zip_path: Path) -> int:
     """Walk *project_root* recursively, apply exclusions, and write a zip archive.
 
-    Returns the Path of the created zip file.
+    Files are stored with paths relative to *project_root*.
+    *zip_path* is overwritten if it already exists.
+
+    Returns the count of files written to the zip.
     """
-    # TODO: implement
-    raise NotImplementedError
+    file_count = 0
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for dirpath, dirs, files in os.walk(project_root):
+            current_dir = Path(dirpath)
+            # Prune excluded directories in-place so os.walk won't descend into them
+            dirs[:] = [
+                d for d in dirs
+                if not should_exclude(current_dir / d, project_root)
+            ]
+            for filename in files:
+                file_path = current_dir / filename
+                if should_exclude(file_path, project_root):
+                    continue
+                arcname = str(file_path.relative_to(project_root))
+                zf.write(file_path, arcname=arcname)
+                file_count += 1
+    return file_count
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +185,9 @@ def main(argv: list[str] | None = None) -> None:
     zip_name = resolve_zip_name(project_root)
     zip_path = output_dir / f"{zip_name}.zip"
 
-    # TODO: create bundle via create_bundle()
-
-    print(f"Zip path will be: {zip_path}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    count = create_zip(project_root, zip_path)
+    print(f"Created {zip_path} ({count} files)")
 
 
 if __name__ == "__main__":
