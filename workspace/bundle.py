@@ -340,15 +340,14 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     project_root, output_dir = resolve_paths(args)
     canonical_langs = resolve_languages(args.language) if args.language is not None else None
-    if canonical_langs is not None:
-        print(f"Languages: {', '.join(canonical_langs)}")
     zip_name = resolve_zip_name(project_root)
     zip_path = output_dir / f"{zip_name}.zip"
 
     output_dir.mkdir(parents=True, exist_ok=True)
     rules = build_exclusion_rules(canonical_langs)
     count = create_zip(project_root, zip_path, rules)
-    print(f"Created {zip_path} ({count} files)")
+    lang_label = ", ".join(canonical_langs) if canonical_langs is not None else "all"
+    print(f"Created {zip_path}  [languages: {lang_label}]  ({count} files)")
 
 
 if __name__ == "__main__":
