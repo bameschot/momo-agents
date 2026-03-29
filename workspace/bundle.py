@@ -38,8 +38,26 @@ def resolve_zip_name(project_root: Path) -> str:
 
     Raises SystemExit with a clear message when no .md files are found.
     """
-    # TODO: implement
-    raise NotImplementedError
+    design_dir = project_root / "design"
+
+    # Find all .md files in design directory
+    md_files = list(design_dir.glob("*.md"))
+
+    if not md_files:
+        sys.stderr.write(
+            f"Error: No .md files found in {design_dir}\n"
+        )
+        sys.exit(1)
+
+    # Get the file with the most recent modification time
+    latest_file = max(md_files, key=lambda p: p.stat().st_mtime)
+
+    # Strip all extensions from the filename
+    stem = latest_file.name
+    while Path(stem).suffix:
+        stem = Path(stem).stem
+
+    return stem
 
 
 def create_bundle(project_root: Path, output_dir: Path, zip_name: str) -> Path:
@@ -115,13 +133,12 @@ def main(argv: list[str] | None = None) -> None:
     """Entry point."""
     args = parse_args(argv)
     project_root, output_dir = resolve_paths(args)
+    zip_name = resolve_zip_name(project_root)
+    zip_path = output_dir / f"{zip_name}.zip"
 
-    # TODO: resolve zip_name via resolve_zip_name()
     # TODO: create bundle via create_bundle()
 
-    print(
-        f"Bundle script ready: project_root={project_root}, output_dir={output_dir}"
-    )
+    print(f"Zip path will be: {zip_path}")
 
 
 if __name__ == "__main__":
