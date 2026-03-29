@@ -10,10 +10,12 @@ The zip file is named after the most recently modified design document found in
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import os
 import sys
 import zipfile
 from pathlib import Path
+from typing import NamedTuple
 
 # ---------------------------------------------------------------------------
 # Language exclusion data tables
@@ -109,20 +111,50 @@ ALIAS_MAP: dict[str, str] = {
 # Exclusion rules
 # ---------------------------------------------------------------------------
 
-EXCLUDED_DIRS = {".git", ".venv", "__pycache__", "node_modules"}
-EXCLUDED_FILES = {".env"}
-EXCLUDED_SUFFIXES = {".pyc"}
+UNIVERSAL_DIRS: frozenset[str] = frozenset({".git"})
 
 
-def should_exclude(path: Path, project_root: Path) -> bool:
+class ExclusionRules(NamedTuple):
+    dir_names: frozenset[str]
+    dir_globs: tuple[str, ...]
+    file_suffixes: frozenset[str]
+    rel_paths: tuple[str, ...]
+
+
+def build_exclusion_rules(canonical_languages: list[str] | None) -> ExclusionRules:
+    """Build an ExclusionRules instance from a list of canonical language names.
+
+    When *canonical_languages* is None, unions all entries across all languages.
+    Always adds the universal .git directory exclusion.
+    """
+    langs = list(LANGUAGE_EXCLUSIONS.keys()) if canonical_languages is None else canonical_languages
+    dir_names: set[str] = set(UNIVERSAL_DIRS)
+    dir_globs: list[str] = []
+    file_suffixes: set[str] = set()
+    rel_paths: list[str] = []
+    for lang in langs:
+        spec = LANGUAGE_EXCLUSIONS[lang]
+        dir_names.update(spec["dirs"])
+        dir_globs.extend(g for g in spec["dir_globs"] if g not in dir_globs)
+        file_suffixes.update(spec["suffixes"])
+        rel_paths.extend(p for p in spec["rel_paths"] if p not in rel_paths)
+    return ExclusionRules(
+        dir_names=frozenset(dir_names),
+        dir_globs=tuple(dir_globs),
+        file_suffixes=frozenset(file_suffixes),
+        rel_paths=tuple(rel_paths),
+    )
+
+
+def should_exclude(path: Path, project_root: Path, rules: ExclusionRules) -> bool:
     """Return True if *path* should be omitted from the zip archive.
 
-    Excludes:
-    - Any path containing .git, .venv, __pycache__, or node_modules at any depth
-    - Files named exactly .env
-    - Files with .pyc extension
+    Exclusion is determined by the provided *rules*:
+    - A path component in rules.dir_names at any depth → excluded.
+    - A directory-level component matching any pattern in rules.dir_globs → excluded.
+    - A file whose suffix is in rules.file_suffixes → excluded.
+    - A relative path whose string form starts with any entry in rules.rel_paths → excluded.
     """
-    # Compute relative path
     try:
         rel = path.relative_to(project_root)
     except ValueError:
@@ -131,19 +163,23 @@ def should_exclude(path: Path, project_root: Path) -> bool:
 
     parts = rel.parts
 
-    # Check for excluded directories at any depth
-    if EXCLUDED_DIRS & set(parts):
+    # Exact directory-name match at any depth
+    if rules.dir_names & set(parts):
         return True
 
-    # Check file-level exclusions (only the final component)
-    filename = path.name
+    # Glob match on any path component
+    for part in parts:
+        if any(fnmatch.fnmatch(part, pattern) for pattern in rules.dir_globs):
+            return True
 
-    # Exclude files named exactly .env
-    if filename == ".env":
-        return True
+    # Multi-segment path prefix (normalise separators for cross-platform safety)
+    rel_str = "/".join(parts)
+    for rp in rules.rel_paths:
+        if rel_str == rp or rel_str.startswith(rp + "/"):
+            return True
 
-    # Exclude files with .pyc extension
-    if filename.endswith(".pyc"):
+    # File suffix
+    if path.suffix in rules.file_suffixes:
         return True
 
     return False
@@ -205,7 +241,7 @@ def resolve_languages(aliases: list[str]) -> list[str]:
     return canonical
 
 
-def create_zip(project_root: Path, zip_path: Path) -> int:
+def create_zip(project_root: Path, zip_path: Path, rules: ExclusionRules) -> int:
     """Walk *project_root* recursively, apply exclusions, and write a zip archive.
 
     Files are stored with paths relative to *project_root*.
@@ -220,11 +256,11 @@ def create_zip(project_root: Path, zip_path: Path) -> int:
             # Prune excluded directories in-place so os.walk won't descend into them
             dirs[:] = [
                 d for d in dirs
-                if not should_exclude(current_dir / d, project_root)
+                if not should_exclude(current_dir / d, project_root, rules)
             ]
             for filename in files:
                 file_path = current_dir / filename
-                if should_exclude(file_path, project_root):
+                if should_exclude(file_path, project_root, rules):
                     continue
                 arcname = str(file_path.relative_to(project_root))
                 zf.write(file_path, arcname=arcname)
@@ -310,7 +346,8 @@ def main(argv: list[str] | None = None) -> None:
     zip_path = output_dir / f"{zip_name}.zip"
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    count = create_zip(project_root, zip_path)
+    rules = build_exclusion_rules(canonical_langs)
+    count = create_zip(project_root, zip_path, rules)
     print(f"Created {zip_path} ({count} files)")
 
 

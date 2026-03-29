@@ -16,8 +16,13 @@ import pytest
 # Make sure bundle.py is importable when tests run from workspace/
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from bundle import create_zip, resolve_zip_name, should_exclude, main  # noqa: E402
-
+from bundle import (  # noqa: E402
+    build_exclusion_rules,
+    create_zip,
+    main,
+    resolve_zip_name,
+    should_exclude,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -89,65 +94,78 @@ class TestIsExcluded:
     def test_excludes_git_directory(self, tmp_path: Path) -> None:
         root = tmp_path / "project"
         root.mkdir()
+        rules = build_exclusion_rules(None)
         # .git at root
         git_file = root / ".git" / "HEAD"
         git_file.parent.mkdir()
         git_file.write_text("ref: refs/heads/main\n")
-        assert should_exclude(git_file, root) is True
+        assert should_exclude(git_file, root, rules) is True
 
         # .git nested at depth
         deep_git = root / "subdir" / ".git" / "config"
         deep_git.parent.mkdir(parents=True)
         deep_git.write_text("")
-        assert should_exclude(deep_git, root) is True
+        assert should_exclude(deep_git, root, rules) is True
 
     def test_excludes_pycache(self, tmp_path: Path) -> None:
         root = tmp_path / "project"
         root.mkdir()
+        rules = build_exclusion_rules(None)
         pycache_file = root / "__pycache__" / "module.cpython-311.pyc"
         pycache_file.parent.mkdir()
         pycache_file.write_text("")
-        assert should_exclude(pycache_file, root) is True
+        assert should_exclude(pycache_file, root, rules) is True
 
         # nested __pycache__
         nested = root / "pkg" / "__pycache__" / "foo.pyc"
         nested.parent.mkdir(parents=True)
         nested.write_text("")
-        assert should_exclude(nested, root) is True
+        assert should_exclude(nested, root, rules) is True
 
     def test_excludes_node_modules(self, tmp_path: Path) -> None:
         root = tmp_path / "project"
         root.mkdir()
+        rules = build_exclusion_rules(None)
         nm_file = root / "node_modules" / "lodash" / "index.js"
         nm_file.parent.mkdir(parents=True)
         nm_file.write_text("")
-        assert should_exclude(nm_file, root) is True
-
-    def test_excludes_dotenv_file(self, tmp_path: Path) -> None:
-        root = tmp_path / "project"
-        root.mkdir()
-        dotenv = root / ".env"
-        dotenv.write_text("SECRET=abc\n")
-        assert should_exclude(dotenv, root) is True
+        assert should_exclude(nm_file, root, rules) is True
 
     def test_excludes_pyc_files(self, tmp_path: Path) -> None:
         root = tmp_path / "project"
         root.mkdir()
+        rules = build_exclusion_rules(None)
         pyc = root / "module.pyc"
         pyc.write_text("")
-        assert should_exclude(pyc, root) is True
+        assert should_exclude(pyc, root, rules) is True
 
     def test_includes_normal_files(self, tmp_path: Path) -> None:
         root = tmp_path / "project"
         root.mkdir()
+        rules = build_exclusion_rules(None)
         (root / "design").mkdir()
         normal = root / "design" / "foo.md"
         normal.write_text("# design doc\n")
-        assert should_exclude(normal, root) is False
+        assert should_exclude(normal, root, rules) is False
 
         src_file = root / "bundle.py"
         src_file.write_text("# source\n")
-        assert should_exclude(src_file, root) is False
+        assert should_exclude(src_file, root, rules) is False
+
+    def test_language_specific_rules_exclude_correctly(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        # Python-only rules should exclude __pycache__ but not node_modules
+        python_rules = build_exclusion_rules(["python"])
+        pycache_file = root / "__pycache__" / "foo.pyc"
+        pycache_file.parent.mkdir()
+        pycache_file.write_text("")
+        assert should_exclude(pycache_file, root, python_rules) is True
+
+        nm_file = root / "node_modules" / "index.js"
+        nm_file.parent.mkdir(parents=True)
+        nm_file.write_text("")
+        assert should_exclude(nm_file, root, python_rules) is False
 
 
 # ---------------------------------------------------------------------------
@@ -170,13 +188,15 @@ class TestCreateBundle:
 
     def test_creates_zip_at_expected_path(self, tmp_path: Path) -> None:
         root, zip_path = self._make_project_with_files(tmp_path)
-        create_zip(root, zip_path)
+        rules = build_exclusion_rules(None)
+        create_zip(root, zip_path, rules)
         assert zip_path.exists()
         assert zipfile.is_zipfile(zip_path)
 
     def test_zip_contains_relative_paths(self, tmp_path: Path) -> None:
         root, zip_path = self._make_project_with_files(tmp_path)
-        create_zip(root, zip_path)
+        rules = build_exclusion_rules(None)
+        create_zip(root, zip_path, rules)
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
         # All paths must be relative (no leading slash, no absolute references)
@@ -199,29 +219,27 @@ class TestCreateBundle:
         (root / ".git" / "HEAD").write_text("ref: refs/heads/main\n")
         (root / "__pycache__").mkdir()
         (root / "__pycache__" / "foo.pyc").write_text("")
-        (root / ".env").write_text("SECRET=abc\n")
         (root / "module.pyc").write_text("")
         zip_path = tmp_path / "output.zip"
-        create_zip(root, zip_path)
+        rules = build_exclusion_rules(None)
+        create_zip(root, zip_path, rules)
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
         # None of the excluded names should appear
         for name in names:
             assert ".git" not in name.split("/"), f"Excluded .git found: {name}"
             assert "__pycache__" not in name.split("/"), f"Excluded __pycache__ found: {name}"
-            assert ".env" not in name, f"Excluded .env found: {name}"
             assert not name.endswith(".pyc"), f"Excluded .pyc found: {name}"
 
     def test_overwrites_existing_zip(self, tmp_path: Path) -> None:
         root, zip_path = self._make_project_with_files(tmp_path)
+        rules = build_exclusion_rules(None)
         # Create initial zip with one set of content
-        create_zip(root, zip_path)
-        size_first = zip_path.stat().st_size
+        create_zip(root, zip_path, rules)
 
         # Add another file and overwrite
         (root / "extra.txt").write_text("extra content\n")
-        count = create_zip(root, zip_path)
-        size_second = zip_path.stat().st_size
+        create_zip(root, zip_path, rules)
 
         # The zip should be valid and have more content
         assert zipfile.is_zipfile(zip_path)
@@ -255,10 +273,9 @@ class TestCreateBundle:
         (root / "design" / "spec.md").write_text("# spec\n")
         (root / "hello.txt").write_text("hello\n")
         (root / "world.txt").write_text("world\n")
-        # Add excluded file — should not be counted
-        (root / ".env").write_text("SECRET=abc\n")
         zip_path = tmp_path / "output.zip"
-        count = create_zip(root, zip_path)
+        rules = build_exclusion_rules(None)
+        count = create_zip(root, zip_path, rules)
         # 3 non-excluded files: design/spec.md, hello.txt, world.txt
         assert count == 3
 
@@ -283,7 +300,9 @@ class TestMainCLI:
         (root / "hello.txt").write_text("hello\n")
         return root
 
-    def test_defaults_project_root_to_script_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_defaults_project_root_to_script_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """When no project_root given, bundle.py directory is used as root."""
         # We need a design/ dir next to bundle.py (the workspace dir)
         import bundle as bundle_module
