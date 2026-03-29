@@ -19,7 +19,6 @@ One file per story in `stories/`, named `STORY-NNN.md` (zero-padded three digits
 
 **Index**: N
 **Complexity**: easy | medium | hard
-**Attempts**: 0
 **Design ref**: design/<feature>.md
 **Depends on**: STORY-NNN | none
 

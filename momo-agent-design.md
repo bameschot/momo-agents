@@ -186,22 +186,14 @@ STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].done.md
 
 Workspace changes are committed. The agent loops back and looks for another story.
 
-### On failure (attempts < 5)
-
-```
-STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].ready.md
-```
-
-A failure note is appended to the story file and the agent retries. The story goes back to `.ready.md` (not bare `.md`) because the orchestrator has already confirmed it is ready — there is no need to re-evaluate.
-
-### On failure (attempts == 5)
+### On failure
 
 ```
 STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].failed.md
                                          + stories/HALT created
 ```
 
-All coding agents detect `HALT`, revert uncommitted workspace changes, and wait.
+Any implementation failure immediately halts the pipeline. All coding agents detect `HALT`, revert uncommitted workspace changes, rename their `.working.md` back to `.ready.md`, and wait for the Story Reviewer to resolve the failed story.
 
 ### HALT handling
 
@@ -219,7 +211,7 @@ On detecting `stories/HALT`:
 3. Reads the full story file including all accumulated failure notes.
 4. Presents the user with the original goal, acceptance criteria, and a plain-language summary of each failed attempt.
 5. Asks the user how to proceed (new approach, relaxed constraints, split the story, etc.).
-6. Rewrites the entire file with a clean, updated story; resets `**Attempts**: 0`; preserves `**Index**` and `**Depends on**`.
+6. Rewrites the entire file with a clean, updated story; preserves `**Index**` and `**Depends on**`.
 7. Renames `STORY-NNN.[complexity].reviewing.md` → `STORY-NNN.md` (bare, no complexity or state).
    - This returns the story to the **unprocessed** queue. The Story Orchestrator will re-evaluate the rewritten content and re-assign complexity and readiness.
 8. Once all `.failed.md` stories are resolved: deletes `stories/HALT`.
@@ -234,7 +226,6 @@ On detecting `stories/HALT`:
 
 **Index**: N                        ← priority order; lower = worked first
 **Complexity**: easy | medium | hard ← assigned by BA; used by orchestrator and agents
-**Attempts**: 0                     ← incremented by each Coding Agent attempt; max 5
 **Design ref**: design/<feature>.md
 **Depends on**: STORY-NNN | none
 
@@ -263,14 +254,13 @@ STORY-NNN.[complexity].ready.md    ← deps met; complexity confirmed
       │  Coding Agent atomically claims (rename):
       ▼
 STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
-      │                               Attempts incremented in story file
+      │
    ┌──┴────────────────────────┐
 success                     failure
-   │                            │  append failure note
-   ▼                       Attempts < 5?
-STORY-NNN.[complexity].done.md  ├─ yes → rename to .ready.md  (retry)
-(commit workspace)              └─ no  → create stories/HALT
-                                         rename to .failed.md
+   │                            │
+   ▼                            ▼
+STORY-NNN.[complexity].done.md   create stories/HALT
+(commit workspace)               rename to .failed.md
                                               │
                                    All Coding Agents detect HALT:
                                    revert workspace, release to .ready.md, wait
@@ -302,17 +292,6 @@ STORY-NNN.[complexity].done.md  ├─ yes → rename to .ready.md  (retry)
 | `HALT` *(sentinel)* | **System paused** | Coding Agent | Triggers stop + revert in all Coding Agents |
 
 `[c]` = `easy`, `medium`, or `hard`.
-
----
-
-## Retry Policy
-
-| Attempts so far | On next failure |
-|---|---|
-| 1 – 4 | Append failure note; release story back to `.ready.md` |
-| 5 | Append failure note; create `HALT`; mark `.failed.md` |
-
-Each failure note records the attempt number, a UTC timestamp, and a summary of what went wrong.
 
 ---
 

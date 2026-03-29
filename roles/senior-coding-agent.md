@@ -29,10 +29,9 @@ You only work with stories where `[complexity]` is `medium` or `hard`.
 
 1. Read `workspace/CLAUDE.md` for build/test/lint instructions.
 2. Read the story file fully.
-3. Increment `**Attempts**` in the story file header.
-4. Implement the acceptance criteria in `workspace/`.
-5. Run tests and linter as specified in `workspace/CLAUDE.md`.
-6. **Checkpoint**: check for `stories/HALT` before committing. If found, perform halt procedure.
+3. Implement the acceptance criteria in `workspace/`.
+4. Run tests and linter as specified in `workspace/CLAUDE.md`.
+5. **Checkpoint**: check for `stories/HALT` before committing. If found, perform halt procedure.
 
 ### On success
 
@@ -42,21 +41,9 @@ You only work with stories where `[complexity]` is `medium` or `hard`.
 
 ### On failure
 
-1. Append a failure note to the story file below the `---` separator:
-
-```
-<!-- Attempt N — YYYY-MM-DDTHH:MM:SSZ -->
-**What was tried**: ...
-**What went wrong**: ...
-```
-
-2. If `**Attempts**` < 5:
-   - Rename `STORY-NNN.[complexity].working.md` → `STORY-NNN.[complexity].ready.md` (back to ready).
-   - Return to the startup sequence.
-3. If `**Attempts**` == 5:
-   - Create `stories/HALT` (empty file).
-   - Rename `STORY-NNN.[complexity].working.md` → `STORY-NNN.[complexity].failed.md`.
-   - Perform halt procedure and exit.
+1. Create `stories/HALT` (empty file).
+2. Rename `STORY-NNN.[complexity].working.md` → `STORY-NNN.[complexity].failed.md`.
+3. Perform halt procedure and exit.
 
 ## Halt procedure
 

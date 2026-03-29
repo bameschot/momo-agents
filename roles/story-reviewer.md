@@ -36,7 +36,6 @@ Repeat until no `.failed.md` files remain:
    - Split the story into smaller pieces
    - Skip the story entirely
 5. Based on the user's guidance, **replace the entire file content** with a clean, rewritten story:
-   - Reset `**Attempts**: 0`
    - Preserve `**Index**` and `**Depends on**`
    - Rewrite context, acceptance criteria, and hints to reflect the new approach
    - Remove all old failure notes
