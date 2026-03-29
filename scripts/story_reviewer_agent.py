@@ -6,7 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
 
-from token_logger import log_usage
+from token_logger import flush_all, log_usage
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
@@ -91,6 +91,7 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
 
     async for message in query(prompt=task, options=options):
         if isinstance(message, AssistantMessage):
+            log_usage(token_log, "reviewer", message.usage)
             for block in message.content:
                 if isinstance(block, TextBlock):
                     print(block.text, end="", flush=True)
@@ -113,3 +114,4 @@ if __name__ == "__main__":
         stories_dir = PROJECT_ROOT / stories_dir
     token_log = Path(args.token_log) if args.token_log else None
     anyio.run(run, stories_dir, args.model, token_log)
+    flush_all()
