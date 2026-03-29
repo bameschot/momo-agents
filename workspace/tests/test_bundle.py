@@ -20,6 +20,7 @@ from bundle import (  # noqa: E402
     build_exclusion_rules,
     create_zip,
     main,
+    parse_args,
     resolve_languages,
     resolve_zip_name,
     should_exclude,
@@ -353,6 +354,81 @@ class TestMainCLI:
         with pytest.raises(SystemExit) as exc_info:
             main(["--bundle", str(root)])
         assert exc_info.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# parse_args and CLI mode flags
+# ---------------------------------------------------------------------------
+
+
+class TestModeFlags:
+    """Tests for parse_args() and mode-flag validation."""
+
+    def test_bundle_flag(self) -> None:
+        """Test that --bundle flag sets bundle=True and unbundle=False."""
+        args = parse_args(["--bundle"])
+        assert args.bundle is True
+        assert args.unbundle is False
+
+    def test_unbundle_flag_with_zip(self) -> None:
+        """Test that --unbundle with --zip sets the correct flags and path."""
+        args = parse_args(["--unbundle", "--zip", "/tmp/foo.zip"])
+        assert args.unbundle is True
+        assert args.bundle is False
+        assert args.zip == "/tmp/foo.zip"
+
+    def test_mutual_exclusion_raises(self) -> None:
+        """Test that --bundle and --unbundle together raise SystemExit."""
+        with pytest.raises(SystemExit):
+            parse_args(["--bundle", "--unbundle"])
+
+    def test_no_mode_raises(self) -> None:
+        """Test that no mode argument raises SystemExit with non-zero code."""
+        with pytest.raises(SystemExit) as exc_info:
+            parse_args([])
+        assert exc_info.value.code != 0
+
+    def test_unbundle_without_zip_does_not_raise_in_parse(self) -> None:
+        """Test that --unbundle without --zip does not raise in parse_args.
+
+        Zip validation happens at runtime, not during argument parsing.
+        """
+        args = parse_args(["--unbundle"])
+        assert args.unbundle is True
+        assert args.zip is None
+
+    def test_main_bundle_mode_end_to_end(self, tmp_path: Path) -> None:
+        """Test that main() with --bundle mode produces a zip file."""
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "feature.md").write_text("# feature\n")
+        (root / "hello.txt").write_text("hello\n")
+        output_dir = tmp_path / "out"
+        output_dir.mkdir()
+
+        main(["--bundle", str(root), "--output", str(output_dir)])
+
+        # Verify a zip file was created
+        zips = list(output_dir.glob("*.zip"))
+        assert len(zips) == 1
+        assert zips[0].stem == "feature"
+        assert zipfile.is_zipfile(zips[0])
+
+    def test_main_unbundle_bad_zip_path(self, tmp_path: Path, capsys: pytest.CaptureFixture) -> None:
+        """Test that main() with a bad zip path exits non-zero with error on stderr."""
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "feature.md").write_text("# feature\n")
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--unbundle", "--zip", "nosuchfile.zip", str(root)])
+
+        assert exc_info.value.code != 0
+        captured = capsys.readouterr()
+        # Error should mention the missing zip file
+        assert "nosuchfile.zip" in captured.err or "not" in captured.err.lower()
 
 
 # ---------------------------------------------------------------------------
