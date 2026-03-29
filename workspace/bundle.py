@@ -327,16 +327,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
-    """Resolve and validate project_root and output_dir.
+def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path | None]:
+    """Resolve and validate project_root based on mode; optionally resolve output_dir.
 
+    In --bundle mode:
     - project_root defaults to the directory containing this script
     - output_dir defaults to the current working directory
     - Validates that project_root exists and is a directory
     - Creates output_dir if it doesn't exist
-    - Exits with error message if project_root is invalid
+    - Returns (project_root, output_dir)
 
-    Returns a tuple (project_root, output_dir).
+    In --unbundle mode:
+    - project_root defaults to the directory containing this script
+    - Validates that project_root exists and is a directory
+    - Does not resolve or create output_dir
+    - Returns (project_root, None)
+
+    Exits with error message if project_root is invalid.
     """
     # Resolve project_root
     if args.project_root is None:
@@ -351,22 +358,25 @@ def resolve_paths(args: argparse.Namespace) -> tuple[Path, Path]:
         )
         sys.exit(2)
 
-    # Resolve output_dir
-    if args.output is None:
-        output_dir = Path.cwd()
-    else:
-        output_dir = Path(args.output)
+    # In bundle mode, resolve and create output_dir
+    if args.bundle:
+        if args.output is None:
+            output_dir = Path.cwd()
+        else:
+            output_dir = Path(args.output)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return project_root, output_dir
 
-    # Create output_dir if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    return project_root, output_dir
+    # In unbundle mode, don't resolve output_dir
+    return project_root, None
 
 
-def main(argv: list[str] | None = None) -> None:
-    """Entry point."""
-    args = parse_args(argv)
-    project_root, output_dir = resolve_paths(args)
+def bundle_workspace(args: argparse.Namespace, project_root: Path, output_dir: Path) -> None:
+    """Bundle the workspace into a zip file.
+
+    Encapsulates the bundle logic: zip-name resolution, language resolution,
+    exclusion rules, zip creation, and output summary.
+    """
     canonical_langs = resolve_languages(args.language) if args.language is not None else None
     zip_name = resolve_zip_name(project_root)
     zip_path = output_dir / f"{zip_name}.zip"
@@ -376,6 +386,25 @@ def main(argv: list[str] | None = None) -> None:
     count = create_zip(project_root, zip_path, rules)
     lang_label = ", ".join(canonical_langs) if canonical_langs is not None else "all"
     print(f"Created {zip_path}  [languages: {lang_label}]  ({count} files)")
+
+
+def unbundle(args: argparse.Namespace, project_root: Path) -> None:
+    """Extract a zip file into the workspace.
+
+    Stub implementation; will be fully implemented in STORY-013.
+    """
+    raise NotImplementedError
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Entry point."""
+    args = parse_args(argv)
+    project_root, output_dir = resolve_paths(args)
+    if args.bundle:
+        assert output_dir is not None  # In bundle mode, output_dir is always set
+        bundle_workspace(args, project_root, output_dir)
+    else:
+        unbundle(args, project_root)
 
 
 if __name__ == "__main__":
