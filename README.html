@@ -285,7 +285,7 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
                                      (on failure)
                                            ▼
                                     Story Reviewer ──► You</code></pre>
-<table><thead><tr><th>Agent</th><th>Role</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Interactive Q&amp;A session with you. Produces <code>design/&lt;feature&gt;.new.md</code>.</td></tr><tr><td><strong>Business Analyst</strong></td><td>Watches <code>design/</code> for <code>*.new.md</code> files and decomposes each into <code>stories/STORY-NNN.md</code> files, each with a <strong>Complexity</strong> field (easy / medium / hard).</td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design and scaffolds <code>workspace/</code> — directory layout, config files, dependency manifests, and <code>workspace/CLAUDE.md</code> with build/test/lint commands.</td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Watches <code>stories/</code> for new <code>STORY-NNN.md</code> files, parses their complexity and dependencies, and renames them to <code>STORY-NNN.[complexity].ready.md</code> when all dependencies are complete.</td></tr><tr><td><strong>Junior Coding Agent</strong></td><td>Claims and implements <code>easy</code> stories (<code>STORY-NNN.easy.ready.md</code>). Defaults to <code>claude-haiku</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Senior Coding Agent</strong></td><td>Claims and implements <code>medium</code> and <code>hard</code> stories. Defaults to <code>claude-sonnet</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes when a <code>HALT</code> file appears (a story failed 5 times). Triages the failure with you and resets the story so coding can resume.</td></tr><tr><td><strong>Watchdog</strong></td><td>Background process that resets any stale <code>.working.md</code> story (idle &gt; 10 min) back to <code>.ready.md</code>, recovering from crashed agents.</td></tr></tbody></table>
+<table><thead><tr><th>Agent</th><th>Role</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Interactive Q&amp;A session with you. Produces <code>design/&lt;feature&gt;.new.md</code>.</td></tr><tr><td><strong>Business Analyst</strong></td><td>Watches <code>design/</code> for <code>*.new.md</code> files and decomposes each into <code>stories/STORY-NNN.md</code> files, each with a <strong>Complexity</strong> field (easy / medium / hard).</td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design and scaffolds <code>workspace/</code> — directory layout, config files, dependency manifests, and <code>workspace/CLAUDE.md</code> with build/test/lint commands.</td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Watches <code>stories/</code> for new <code>STORY-NNN.md</code> files, parses their complexity and dependencies, and renames them to <code>STORY-NNN.[complexity].ready.md</code> when all dependencies are complete.</td></tr><tr><td><strong>Junior Coding Agent</strong></td><td>Claims and implements <code>easy</code> stories (<code>STORY-NNN.easy.ready.md</code>). Defaults to <code>claude-haiku</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Senior Coding Agent</strong></td><td>Claims and implements <code>medium</code> and <code>hard</code> stories. Defaults to <code>claude-sonnet</code>. Multiple instances run in parallel.</td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes when a <code>HALT</code> file appears (a story failed). Triages the failure with you and rewrites the story so the orchestrator can re-evaluate and coding can resume.</td></tr><tr><td><strong>Watchdog</strong></td><td>Background process that resets any stale <code>.working.md</code> story (idle &gt; 10 min) back to <code>.ready.md</code>, recovering from crashed agents.</td></tr></tbody></table>
 <h3 id="story-lifecycle">Story lifecycle</h3>
 <p>Stories move through states encoded in their filename. The filename carries both the <strong>complexity</strong> and the <strong>state</strong>:</p>
 <pre><code>STORY-NNN.md              ← written by BA (unprocessed)
@@ -301,16 +301,13 @@ STORY-NNN.[complexity].ready.md     ← deps met; ready to claim
 STORY-NNN.[complexity].working.md   ← owned by one agent
       │
   ┌───┴────────────────────┐
-success                 failure (append note)
+success                 failure
   │                         │
-  ▼                    Attempts &lt; 5?
-STORY-NNN.[complexity].done.md  ├─ yes → back to .ready.md
-(commit workspace)              └─ no  → create HALT
-                                         rename to .failed.md
-                                              │
-                                    Story Reviewer triages
-                                    rewrites story → bare STORY-NNN.md
-                                    Story Orchestrator re-evaluates</code></pre>
+  ▼                    create HALT + rename to .failed.md
+STORY-NNN.[complexity].done.md       │
+(commit workspace)          Story Reviewer triages with you
+                            rewrites story → bare STORY-NNN.md
+                            Story Orchestrator re-evaluates</code></pre>
 <hr>
 <h2 id="setup">Setup</h2>
 <h3 id="prerequisites">Prerequisites</h3>
@@ -376,9 +373,10 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
 <pre><code class="language-bash"># Designer (interactive)
 python scripts/designer_agent.py --model claude-sonnet-4-6
 
-# Business Analyst
+# Business Analyst (waits for workspace/CLAUDE.md before starting)
 python scripts/business_analyst_agent.py \
   --design design/my-feature.new.md \
+  --workspace-dir workspace \
   --model claude-sonnet-4-6
 
 # Project Initialiser

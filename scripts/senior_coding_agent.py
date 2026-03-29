@@ -52,6 +52,20 @@ def _unclaimed_ready_stories(stories_dir: Path) -> list[Path]:
     return sorted(medium + hard, key=lambda p: p.name)
 
 
+async def _wait_for_workspace(workspace_dir: Path) -> None:
+    """Block until workspace_dir/CLAUDE.md exists (scaffolding agent has finished)."""
+    claude_md = workspace_dir / "CLAUDE.md"
+    if claude_md.exists():
+        return
+    print(
+        f"[Senior Coding Agent] Waiting for scaffolding to complete "
+        f"({claude_md}) — polling every {POLL_INTERVAL}s..."
+    )
+    while not claude_md.exists():
+        await anyio.sleep(POLL_INTERVAL)
+    print("[Senior Coding Agent] Workspace ready — proceeding.")
+
+
 async def _wait_for_ready_story(stories_dir: Path, pipeline_complete: Path) -> bool:
     """Poll until at least one unclaimed medium/hard.ready story exists. Returns False on HALT/pipeline_complete."""
     halt_file = stories_dir / "HALT"
@@ -83,6 +97,8 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
     pipeline_complete = PROJECT_ROOT / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
+    await _wait_for_workspace(workspace_dir)
+
     if halt_file.exists():
         print("[Senior Coding Agent] HALT file detected on startup — exiting immediately.")
         return
@@ -95,25 +111,27 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
         f"Project root: {PROJECT_ROOT}\n"
         f"Stories directory: {stories_dir}\n"
         f"Workspace directory: {workspace_dir}\n\n"
-        "Begin the coding agent loop now:\n"
-        f"1. Check for {halt_file} — exit immediately if it exists.\n"
-        f"2. Scan {stories_dir} for files matching STORY-NNN.medium.ready.md or "
+        "## Startup (do this once before the loop)\n"
+        f"1. Read {workspace_dir}/CLAUDE.md and retain its build, test, and lint "
+        "instructions for the entire session. Do not re-read it on each story.\n\n"
+        "## Coding loop\n"
+        f"2. Check for {halt_file} — exit immediately if it exists.\n"
+        f"3. Scan {stories_dir} for files matching STORY-NNN.medium.ready.md or "
         "STORY-NNN.hard.ready.md. These have already been validated as ready to implement "
         "by the Story Orchestrator.\n"
-        "3. Sort candidates by story number (ascending). Pick the lowest-numbered one.\n"
-        "4. Atomically claim it by renaming STORY-NNN.[complexity].ready.md → "
+        "4. Sort candidates by story number (ascending). Pick the lowest-numbered one.\n"
+        "5. Atomically claim it by renaming STORY-NNN.[complexity].ready.md → "
         "STORY-NNN.[complexity].working.md (preserving the complexity segment). "
         "If the rename fails (race with another agent), try the next candidate. "
         "If none can be claimed, exit.\n"
-        f"5. Read {workspace_dir}/CLAUDE.md for build, test, and lint instructions.\n"
         "6. Read the story file fully.\n"
         "7. Implement the story's acceptance criteria inside the workspace directory.\n"
-        "8. Run tests and linter as instructed in CLAUDE.md.\n"
+        "8. Run tests and linter using the instructions you retained from CLAUDE.md on startup.\n"
         f"9. Before committing, check for {halt_file} again — if found, perform the "
         "halt procedure (discard uncommitted changes, rename .working.md back to "
         ".ready.md, exit).\n"
         "10. On success: rename STORY-NNN.[complexity].working.md → "
-        "STORY-NNN.[complexity].done.md, commit workspace changes, loop to step 1.\n"
+        "STORY-NNN.[complexity].done.md, commit workspace changes, loop to step 2.\n"
         f"11. On failure: create {halt_file}, rename STORY-NNN.[complexity].working.md → "
         "STORY-NNN.[complexity].failed.md, perform halt procedure, exit."
     )

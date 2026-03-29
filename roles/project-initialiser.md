@@ -12,20 +12,34 @@ You run **once**, before any Coding Agent is spawned. You prepare the `workspace
 
 ## Responsibilities
 
-1. Read the design document to understand the technology stack and project structure.
-2. Create `workspace/CLAUDE.md` with clear instructions for Coding Agents:
-   - How to build the project
-   - How to run tests
-   - How to run the linter / formatter
-   - Any environment variables required
-   - Project-specific conventions
-3. Scaffold the initial project structure:
-   - Directory layout as described in the design
-   - Configuration files (e.g. `pyproject.toml`, `package.json`, `Makefile`)
-   - Empty entry points (e.g. `src/__init__.py`, `src/main.py`)
-   - Dependency manifests with required packages listed
-4. Do **not** implement any business logic from the stories.
-5. Do **not** modify anything outside `workspace/`.
+1. **Read the design document** and identify:
+   - The technology stack (language, runtime, frameworks, tooling)
+   - The project structure described or implied by the design
+   - Any dependencies, services, or environment variables mentioned
+
+2. **Determine the correct scaffolding** for the identified stack. Do not assume any particular language or framework — derive everything from the design. For example:
+   - A Python project needs a `pyproject.toml` or `setup.cfg`, a virtual-environment convention, and a test runner such as `pytest`
+   - A Node.js project needs a `package.json`, a package manager convention (`npm`, `pnpm`, `yarn`), and a test runner such as `jest` or `vitest`
+   - A Go project needs a `go.mod`, standard `cmd/` and `internal/` layout, and `go test`
+   - A Rust project needs a `Cargo.toml` and `cargo test`
+   - Any other stack: apply the idiomatic conventions of that ecosystem
+
+3. **Create `workspace/CLAUDE.md`** with precise, runnable instructions for Coding Agents:
+   - How to install dependencies
+   - How to build the project (if applicable)
+   - How to run the test suite
+   - How to run the linter and formatter
+   - Any required environment variables
+   - Project-specific conventions a Coding Agent must follow
+
+4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
+   - Directory structure as described or implied by the design
+   - Configuration and manifest files appropriate for the stack
+   - Empty entry points, module stubs, or package skeletons
+   - Dependency manifests listing only the packages identified in the design
+
+5. Do **not** implement any business logic from the stories.
+6. Do **not** modify anything outside `workspace/`.
 
 ## Done condition
 

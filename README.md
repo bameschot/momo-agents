@@ -32,7 +32,7 @@ A multi-agent coding pipeline powered by the Claude Agent SDK. A team of special
 | **Story Orchestrator** | Watches `stories/` for new `STORY-NNN.md` files, parses their complexity and dependencies, and renames them to `STORY-NNN.[complexity].ready.md` when all dependencies are complete. |
 | **Junior Coding Agent** | Claims and implements `easy` stories (`STORY-NNN.easy.ready.md`). Defaults to `claude-haiku`. Multiple instances run in parallel. |
 | **Senior Coding Agent** | Claims and implements `medium` and `hard` stories. Defaults to `claude-sonnet`. Multiple instances run in parallel. |
-| **Story Reviewer** | Wakes when a `HALT` file appears (a story failed 5 times). Triages the failure with you and resets the story so coding can resume. |
+| **Story Reviewer** | Wakes when a `HALT` file appears (a story failed). Triages the failure with you and rewrites the story so the orchestrator can re-evaluate and coding can resume. |
 | **Watchdog** | Background process that resets any stale `.working.md` story (idle > 10 min) back to `.ready.md`, recovering from crashed agents. |
 
 ### Story lifecycle
@@ -53,16 +53,13 @@ STORY-NNN.[complexity].ready.md     ← deps met; ready to claim
 STORY-NNN.[complexity].working.md   ← owned by one agent
       │
   ┌───┴────────────────────┐
-success                 failure (append note)
+success                 failure
   │                         │
-  ▼                    Attempts < 5?
-STORY-NNN.[complexity].done.md  ├─ yes → back to .ready.md
-(commit workspace)              └─ no  → create HALT
-                                         rename to .failed.md
-                                              │
-                                    Story Reviewer triages
-                                    rewrites story → bare STORY-NNN.md
-                                    Story Orchestrator re-evaluates
+  ▼                    create HALT + rename to .failed.md
+STORY-NNN.[complexity].done.md       │
+(commit workspace)          Story Reviewer triages with you
+                            rewrites story → bare STORY-NNN.md
+                            Story Orchestrator re-evaluates
 ```
 
 ---
@@ -191,9 +188,10 @@ Each agent can also be invoked directly:
 # Designer (interactive)
 python scripts/designer_agent.py --model claude-sonnet-4-6
 
-# Business Analyst
+# Business Analyst (waits for workspace/CLAUDE.md before starting)
 python scripts/business_analyst_agent.py \
   --design design/my-feature.new.md \
+  --workspace-dir workspace \
   --model claude-sonnet-4-6
 
 # Project Initialiser

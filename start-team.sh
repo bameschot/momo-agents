@@ -306,6 +306,7 @@ while true; do
         "$PYTHON" "${SCRIPT_DIR}/scripts/business_analyst_agent.py" \
             --design "$design_file" \
             --stories-dir "${STORIES_DIR}" \
+            --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_BA}" \
             --token-log "${SENTINEL_DIR}/tokens/ba.jsonl"
 

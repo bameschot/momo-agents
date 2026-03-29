@@ -13,6 +13,8 @@ ROLES_DIR = PROJECT_ROOT / "roles"
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
+POLL_INTERVAL = 10  # seconds between polls while waiting for workspace/CLAUDE.md
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Business Analyst Agent")
@@ -25,6 +27,11 @@ def _parse_args() -> argparse.Namespace:
         "--stories-dir",
         default=str(PROJECT_ROOT / "stories"),
         help="Directory where story files are written (default: <project-root>/stories)",
+    )
+    parser.add_argument(
+        "--workspace-dir",
+        default=str(PROJECT_ROOT / "workspace"),
+        help="Directory containing the workspace (default: <project-root>/workspace)",
     )
     parser.add_argument(
         "--model",
@@ -43,10 +50,26 @@ def _system_prompt() -> str:
     return (ROLES_DIR / "business-analyst.md").read_text()
 
 
-async def run(design_path: Path, stories_dir: Path, model: str, token_log: Path | None) -> None:
+async def _wait_for_workspace(workspace_dir: Path) -> None:
+    """Block until workspace_dir/CLAUDE.md exists (scaffolding agent has finished)."""
+    claude_md = workspace_dir / "CLAUDE.md"
+    if claude_md.exists():
+        return
+    print(
+        f"[Business Analyst Agent] Waiting for scaffolding to complete "
+        f"({claude_md}) — polling every {POLL_INTERVAL}s..."
+    )
+    while not claude_md.exists():
+        await anyio.sleep(POLL_INTERVAL)
+    print("[Business Analyst Agent] Workspace ready — starting story decomposition.")
+
+
+async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
+
+    await _wait_for_workspace(workspace_dir)
 
     stories_dir.mkdir(parents=True, exist_ok=True)
 
@@ -97,5 +120,8 @@ if __name__ == "__main__":
     stories_dir = Path(args.stories_dir)
     if not stories_dir.is_absolute():
         stories_dir = PROJECT_ROOT / stories_dir
+    workspace_dir = Path(args.workspace_dir)
+    if not workspace_dir.is_absolute():
+        workspace_dir = PROJECT_ROOT / workspace_dir
     token_log = Path(args.token_log) if args.token_log else None
-    anyio.run(run, design_path, stories_dir, args.model, token_log)
+    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, token_log)

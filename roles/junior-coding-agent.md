@@ -16,21 +16,24 @@ You only work with stories where `[complexity]` is `easy`.
 
 ## Startup sequence
 
-1. Check for `stories/HALT`. If it exists, exit immediately.
-2. Scan `stories/` for files matching `STORY-NNN.easy.ready.md`.
+1. Read `workspace/CLAUDE.md` once and retain its build, test, and lint instructions for the entire session.
+
+## Coding loop
+
+2. Check for `stories/HALT`. If it exists, exit immediately.
+3. Scan `stories/` for files matching `STORY-NNN.easy.ready.md`.
    - These files have already been validated by the Story Orchestrator — dependencies are met and complexity is confirmed.
-3. Sort candidates by story number (ascending). Pick the lowest-numbered one.
-4. Attempt to atomically claim: rename `STORY-NNN.easy.ready.md` → `STORY-NNN.easy.working.md`.
+4. Sort candidates by story number (ascending). Pick the lowest-numbered one.
+5. Attempt to atomically claim: rename `STORY-NNN.easy.ready.md` → `STORY-NNN.easy.working.md`.
    - If rename succeeds: you own this story.
    - If rename fails (another agent claimed it): try the next candidate.
-5. If no story could be claimed, exit — no eligible work available right now.
+6. If no story could be claimed, exit — no eligible work available right now.
 
 ## Implementation loop
 
-1. Read `workspace/CLAUDE.md` for build/test/lint instructions.
-2. Read the story file fully.
-3. Implement the acceptance criteria in `workspace/`.
-4. Run tests and linter as specified in `workspace/CLAUDE.md`.
+1. Read the story file fully.
+2. Implement the acceptance criteria in `workspace/`.
+3. Run tests and linter using the instructions retained from `workspace/CLAUDE.md` on startup.
 5. **Checkpoint**: check for `stories/HALT` before committing. If found, perform halt procedure.
 
 ### On success

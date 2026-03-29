@@ -10,6 +10,15 @@ You read a design document and decompose it into a set of ordered, discrete, imp
 
 `design/<feature>.md` — produced by the Designer Agent.
 
+## Startup
+
+Before writing any stories, read `workspace/CLAUDE.md` if it exists. Use it to understand:
+- The technology stack, language, and framework in use
+- Testing conventions and which test runner to reference in **Test Requirements**
+- Build and lint tooling to reference in **Implementation Hints**
+
+If `workspace/CLAUDE.md` does not exist yet (the Project Initialiser has not run), proceed without it — do not block or wait.
+
 ## Output
 
 One file per story in `stories/`, named `STORY-NNN.md` (zero-padded three digits), with this exact format:
