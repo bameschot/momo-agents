@@ -833,3 +833,305 @@ class TestMainLanguageCLI:
         main(["--bundle", str(root), "--language", "PYTHON", "--output", str(output_dir)])
         captured = capsys.readouterr()
         assert "python" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# unbundle — helpers
+# ---------------------------------------------------------------------------
+
+
+def make_zip(tmp_path: Path, entries: dict[str, str], name: str = "test.zip") -> Path:
+    """Build a zip archive from a dict of {arcname: content} and return the path."""
+    zip_path = tmp_path / name
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for arcname, content in entries.items():
+            zf.writestr(arcname, content)
+    return zip_path
+
+
+# ---------------------------------------------------------------------------
+# unbundle — missing / invalid zip
+# ---------------------------------------------------------------------------
+
+
+class TestUnbundleInvalidZip:
+    """Tests for unbundle() with missing or invalid zip arguments."""
+
+    def test_nonexistent_zip_exits_nonzero_with_stderr(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--unbundle", "--zip", "/nonexistent_does_not_exist.zip", str(root)])
+        assert exc_info.value.code != 0
+        captured = capsys.readouterr()
+        assert captured.err != ""
+
+    def test_invalid_zip_file_exits_nonzero(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        not_a_zip = tmp_path / "not_a_zip.txt"
+        not_a_zip.write_text("this is just plain text, not a zip")
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--unbundle", "--zip", str(not_a_zip), str(root)])
+        assert exc_info.value.code != 0
+
+    def test_no_zip_flag_exits_nonzero(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--unbundle", str(root)])
+        assert exc_info.value.code != 0
+
+
+# ---------------------------------------------------------------------------
+# unbundle — no-conflict extraction
+# ---------------------------------------------------------------------------
+
+
+class TestUnbundleNoConflict:
+    """Tests for unbundle() when there are no conflicting folders."""
+
+    def test_extracts_without_prompting_user(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        zip_path = make_zip(tmp_path, {"newdir/file.txt": "content"})
+
+        # If input() were called the test would fail because monkeypatch raises
+        def _no_input(prompt: str) -> str:
+            raise AssertionError("input() should not be called when there are no conflicts")
+
+        monkeypatch.setattr("builtins.input", _no_input)
+
+        # Should not raise SystemExit (exit 0 is also fine but extraction should succeed)
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+
+    def test_files_are_present_after_extraction(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        zip_path = make_zip(tmp_path, {
+            "newdir/alpha.txt": "alpha content",
+            "newdir/beta.txt": "beta content",
+        })
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+        assert (root / "newdir" / "alpha.txt").exists()
+        assert (root / "newdir" / "beta.txt").exists()
+
+    def test_summary_line_format(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        entries = {
+            "freshdir/a.txt": "aaa",
+            "freshdir/b.txt": "bbb",
+            "freshdir/c.txt": "ccc",
+        }
+        zip_path = make_zip(tmp_path, entries)
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+        captured = capsys.readouterr()
+        expected_n = len(entries)
+        assert f"Extracted {expected_n} files to {root}" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# unbundle — conflict detection
+# ---------------------------------------------------------------------------
+
+
+class TestUnbundleConflictDetection:
+    """Tests that conflict detection identifies the right folders."""
+
+    def test_prompt_includes_overwrite_text(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "old.md").write_text("old content")
+        zip_path = make_zip(tmp_path, {"design/new.md": "new content"})
+
+        prompts: list[str] = []
+        monkeypatch.setattr("builtins.input", lambda p: prompts.append(p) or "n")
+
+        with pytest.raises(SystemExit):
+            main(["--unbundle", "--zip", str(zip_path), str(root)])
+
+        assert any("Overwrite? [y/N]:" in p for p in prompts)
+
+    def test_conflict_list_shows_folder_with_prefix_and_suffix(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "old.md").write_text("old")
+        zip_path = make_zip(tmp_path, {"design/new.md": "new"})
+
+        monkeypatch.setattr("builtins.input", lambda _: "n")
+
+        with pytest.raises(SystemExit):
+            main(["--unbundle", "--zip", str(zip_path), str(root)])
+
+        captured = capsys.readouterr()
+        assert "  - design/" in captured.out
+
+    def test_empty_folder_not_in_conflict_list(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        # "design" is non-empty → conflict
+        (root / "design").mkdir()
+        (root / "design" / "old.md").write_text("old")
+        # "stories" exists but is empty → NOT a conflict
+        (root / "stories").mkdir()
+        # "newdir" does not exist → NOT a conflict
+        zip_path = make_zip(tmp_path, {
+            "design/new.md": "new",
+            "stories/item.md": "item",
+            "newdir/file.txt": "file",
+        })
+
+        monkeypatch.setattr("builtins.input", lambda _: "n")
+
+        with pytest.raises(SystemExit):
+            main(["--unbundle", "--zip", str(zip_path), str(root)])
+
+        captured = capsys.readouterr()
+        assert "  - design/" in captured.out
+        assert "  - stories/" not in captured.out
+        assert "  - newdir/" not in captured.out
+
+
+# ---------------------------------------------------------------------------
+# unbundle — conflict: user aborts
+# ---------------------------------------------------------------------------
+
+
+class TestUnbundleConflictAbort:
+    """Tests that user can abort overwrite with various non-y inputs."""
+
+    def _setup_conflict(self, tmp_path: Path) -> tuple[Path, Path]:
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "old.md").write_text("original content")
+        zip_path = make_zip(tmp_path, {"design/new.md": "new content"})
+        return root, zip_path
+
+    def _assert_aborted(
+        self,
+        tmp_path: Path,
+        answer: str,
+        capsys: pytest.CaptureFixture,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        root, zip_path = self._setup_conflict(tmp_path)
+        monkeypatch.setattr("builtins.input", lambda _: answer)
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--unbundle", "--zip", str(zip_path), str(root)])
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "Aborted." in captured.out
+        # Original file must still be intact
+        assert (root / "design" / "old.md").read_text() == "original content"
+        # New file should NOT have been extracted
+        assert not (root / "design" / "new.md").exists()
+
+    def test_abort_on_enter(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._assert_aborted(tmp_path, "", capsys, monkeypatch)
+
+    def test_abort_on_lowercase_n(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._assert_aborted(tmp_path, "n", capsys, monkeypatch)
+
+    def test_abort_on_uppercase_n(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._assert_aborted(tmp_path, "N", capsys, monkeypatch)
+
+    def test_abort_on_other_non_y_string(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._assert_aborted(tmp_path, "no", capsys, monkeypatch)
+
+    def test_abort_on_q(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._assert_aborted(tmp_path, "q", capsys, monkeypatch)
+
+
+# ---------------------------------------------------------------------------
+# unbundle — conflict: user confirms overwrite
+# ---------------------------------------------------------------------------
+
+
+class TestUnbundleConflictConfirm:
+    """Tests that user can confirm overwrite with y or Y."""
+
+    def _setup_conflict(self, tmp_path: Path) -> tuple[Path, Path]:
+        root = tmp_path / "project"
+        root.mkdir()
+        (root / "design").mkdir()
+        (root / "design" / "old.md").write_text("original content")
+        zip_path = make_zip(tmp_path, {"design/replaced.md": "replaced content"})
+        return root, zip_path
+
+    def test_confirm_lowercase_y_extracts_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        root, zip_path = self._setup_conflict(tmp_path)
+        monkeypatch.setattr("builtins.input", lambda _: "y")
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+        assert (root / "design" / "replaced.md").exists()
+        captured = capsys.readouterr()
+        assert "Extracted" in captured.out
+
+    def test_confirm_uppercase_y_extracts_files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+    ) -> None:
+        root, zip_path = self._setup_conflict(tmp_path)
+        monkeypatch.setattr("builtins.input", lambda _: "Y")
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+        assert (root / "design" / "replaced.md").exists()
+        captured = capsys.readouterr()
+        assert "Extracted" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# unbundle — extraction correctness
+# ---------------------------------------------------------------------------
+
+
+class TestUnbundleExtractionCorrectness:
+    """Tests that unbundle() extracts contents faithfully."""
+
+    def test_file_contents_match_byte_for_byte(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        original_content = "Hello, World!\nLine two.\n"
+        zip_path = make_zip(tmp_path, {"src/greet.txt": original_content})
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+        extracted = (root / "src" / "greet.txt").read_text()
+        assert extracted == original_content
+
+    def test_nested_directory_structure_recreated(self, tmp_path: Path) -> None:
+        root = tmp_path / "project"
+        root.mkdir()
+        entries = {
+            "design/subdir/deep.md": "deep content",
+            "design/subdir/another.md": "another content",
+            "design/top.md": "top content",
+        }
+        zip_path = make_zip(tmp_path, entries)
+        main(["--unbundle", "--zip", str(zip_path), str(root)])
+        assert (root / "design" / "subdir" / "deep.md").read_text() == "deep content"
+        assert (root / "design" / "subdir" / "another.md").read_text() == "another content"
+        assert (root / "design" / "top.md").read_text() == "top content"
