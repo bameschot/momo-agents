@@ -235,7 +235,9 @@ def build_html(agg: dict, chartjs_src: str) -> str:
 
     The returned string is a complete, self-contained HTML document containing:
       - A summary table (per-agent token counts + cost, plus a grand-total row)
-      - A <div id="chart-container"> placeholder for the chart (added in STORY-007)
+      - A <div id="chart-container"> with a <canvas id="tokenChart">
+      - Interactive controls: toggle button, date pickers, reset button
+      - Embedded Chart.js bundle and chart initialisation
     """
     # Build table rows for each agent (alphabetical order)
     rows = []
@@ -267,6 +269,73 @@ def build_html(agg: dict, chartjs_src: str) -> str:
         f"</tr>"
     )
 
+    # ------------------------------------------------------------------
+    # Build RAW_DATA for Chart.js
+    # ------------------------------------------------------------------
+    all_minutes = sorted({b["minute"] for b in agg["buckets"]})
+    all_agents = sorted(agg["agent_totals"].keys())
+    token_types = [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+    ]
+
+    # Lookup table: (minute, agent) -> bucket dict
+    bucket_lookup = {(b["minute"], b["agent"]): b for b in agg["buckets"]}
+
+    token_series = []
+    for agent in all_agents:
+        for token_type in token_types:
+            data = [
+                bucket_lookup.get((minute, agent), {}).get(token_type, 0)
+                for minute in all_minutes
+            ]
+            token_series.append({"label": f"{agent} \u00b7 {token_type}", "data": data})
+
+    cost_series = []
+    for agent in all_agents:
+        data = [
+            bucket_lookup.get((minute, agent), {}).get("cost_usd", 0)
+            for minute in all_minutes
+        ]
+        cost_series.append({"label": f"{agent} \u00b7 cost_usd", "data": data})
+
+    raw_data = {
+        "labels": all_minutes,
+        "token_series": token_series,
+        "cost_series": cost_series,
+    }
+    raw_data_json = json.dumps(raw_data)
+
+    # ------------------------------------------------------------------
+    # Chart initialisation JS
+    # ------------------------------------------------------------------
+    chart_init_js = """\
+const RAW_DATA = """ + raw_data_json + """;
+
+(function () {
+  var ctx = document.getElementById('tokenChart').getContext('2d');
+  window.chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: RAW_DATA.labels,
+      datasets: RAW_DATA.token_series.map(function(s) {
+        return { label: s.label, data: s.data, fill: false, tension: 0.1 };
+      })
+    },
+    options: {
+      plugins: {
+        title: { display: true, text: 'Token Usage Over Time' }
+      },
+      scales: {
+        y: { title: { display: true, text: 'Tokens' } }
+      }
+    }
+  });
+})();
+"""
+
     html = (
         "<!DOCTYPE html>\n"
         "<html lang=\"en\">\n"
@@ -281,6 +350,8 @@ def build_html(agg: dict, chartjs_src: str) -> str:
         "    th:first-child, td:first-child { text-align: left; }\n"
         "    thead { background-color: #f0f0f0; }\n"
         "    tfoot { font-weight: bold; background-color: #e8e8e8; }\n"
+        "    #chart-container { margin-top: 2rem; }\n"
+        "    #controls { margin-bottom: 1rem; }\n"
         "  </style>\n"
         "</head>\n"
         "<body>\n"
@@ -303,7 +374,19 @@ def build_html(agg: dict, chartjs_src: str) -> str:
         + tfoot_row + "\n"
         "    </tfoot>\n"
         "  </table>\n"
-        "  <div id=\"chart-container\"></div>\n"
+        "  <div id=\"chart-container\">\n"
+        "    <div id=\"controls\">\n"
+        "      <button id=\"toggleBtn\">Switch to Cost USD</button>\n"
+        "      <label>From: <input type=\"datetime-local\" id=\"fromPicker\"></label>\n"
+        "      <label>To: <input type=\"datetime-local\" id=\"toPicker\"></label>\n"
+        "      <button id=\"resetBtn\">Reset</button>\n"
+        "    </div>\n"
+        "    <canvas id=\"tokenChart\"></canvas>\n"
+        "  </div>\n"
+        "<script>" + chartjs_src + "</script>\n"
+        "<script>\n"
+        + chart_init_js +
+        "</script>\n"
         "</body>\n"
         "</html>\n"
     )

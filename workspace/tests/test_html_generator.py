@@ -1,6 +1,8 @@
-"""Tests for build_html() — page skeleton and summary table."""
+"""Tests for build_html() — page skeleton, summary table, and Chart.js embedding."""
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
@@ -118,11 +120,112 @@ def test_build_html_agents_in_alphabetical_order(sample_agg):
     assert ba_pos < designer_pos
 
 
-def test_build_html_chartjs_src_not_used(sample_agg):
-    """chartjs_src is accepted but not embedded in the page yet."""
+def test_build_html_embeds_chartjs_src(sample_agg):
+    """chartjs_src must be embedded verbatim inside a <script> tag."""
     sentinel = "UNIQUE_SENTINEL_STRING_XYZ_987"
     html = build_html(sample_agg, sentinel)
-    assert sentinel not in html
+    assert sentinel in html
+
+
+def test_build_html_has_canvas(sample_agg):
+    """HTML must contain <canvas id="tokenChart"> inside #chart-container."""
+    html = build_html(sample_agg, "")
+    assert '<canvas id="tokenChart">' in html
+    assert 'id="chart-container"' in html
+
+
+def test_build_html_has_interactive_controls(sample_agg):
+    """HTML must contain the toggle button, date pickers, and reset button."""
+    html = build_html(sample_agg, "")
+    assert 'id="toggleBtn"' in html
+    assert "Switch to Cost USD" in html
+    assert 'id="fromPicker"' in html
+    assert 'type="datetime-local"' in html
+    assert 'id="toPicker"' in html
+    assert 'id="resetBtn"' in html
+
+
+def test_build_html_contains_raw_data_variable(sample_agg):
+    """HTML must contain the JS variable declaration const RAW_DATA =."""
+    html = build_html(sample_agg, "")
+    assert "const RAW_DATA =" in html
+
+
+def test_build_html_raw_data_is_valid_json(sample_agg):
+    """The embedded RAW_DATA JSON must be parseable and have the required keys."""
+    html = build_html(sample_agg, "")
+    # Extract the JSON between "const RAW_DATA = " and the first ";\n"
+    marker = "const RAW_DATA = "
+    start = html.index(marker) + len(marker)
+    end = html.index(";\n", start)
+    raw_json = html[start:end]
+    data = json.loads(raw_json)
+    assert "labels" in data
+    assert "token_series" in data
+    assert "cost_series" in data
+
+
+def test_build_html_raw_data_token_series_coverage(sample_agg):
+    """A token_series entry must exist for every (agent, token_type) combination."""
+    html = build_html(sample_agg, "")
+    marker = "const RAW_DATA = "
+    start = html.index(marker) + len(marker)
+    end = html.index(";\n", start)
+    data = json.loads(html[start:end])
+    series_labels = {s["label"] for s in data["token_series"]}
+    token_types = ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"]
+    for agent in sample_agg["agent_totals"]:
+        for token_type in token_types:
+            expected_label = f"{agent} \u00b7 {token_type}"
+            assert expected_label in series_labels, f"Missing token series: {expected_label}"
+
+
+def test_build_html_raw_data_cost_series_coverage(sample_agg):
+    """A cost_series entry must exist for every agent."""
+    html = build_html(sample_agg, "")
+    marker = "const RAW_DATA = "
+    start = html.index(marker) + len(marker)
+    end = html.index(";\n", start)
+    data = json.loads(html[start:end])
+    cost_labels = {s["label"] for s in data["cost_series"]}
+    for agent in sample_agg["agent_totals"]:
+        expected_label = f"{agent} \u00b7 cost_usd"
+        assert expected_label in cost_labels, f"Missing cost series: {expected_label}"
+
+
+def test_build_html_raw_data_zero_fill_for_missing_minutes(sample_agg):
+    """For an agent with no records in a given minute bucket, the data point must be 0."""
+    # sample data: "ba" has no record at 12:01, "designer" has no record at 12:02
+    html = build_html(sample_agg, "")
+    marker = "const RAW_DATA = "
+    start = html.index(marker) + len(marker)
+    end = html.index(";\n", start)
+    data = json.loads(html[start:end])
+    labels = data["labels"]
+    # Find the index of "2026-03-30T12:01:00Z" (designer-only minute)
+    if "2026-03-30T12:01:00Z" in labels:
+        idx_12_01 = labels.index("2026-03-30T12:01:00Z")
+        for series in data["token_series"]:
+            if series["label"].startswith("ba \u00b7"):
+                assert series["data"][idx_12_01] == 0, (
+                    f"Expected 0 for 'ba' at 12:01, got {series['data'][idx_12_01]}"
+                )
+    # Find the index of "2026-03-30T12:02:00Z" (ba-only minute)
+    if "2026-03-30T12:02:00Z" in labels:
+        idx_12_02 = labels.index("2026-03-30T12:02:00Z")
+        for series in data["token_series"]:
+            if series["label"].startswith("designer \u00b7"):
+                assert series["data"][idx_12_02] == 0, (
+                    f"Expected 0 for 'designer' at 12:02, got {series['data'][idx_12_02]}"
+                )
+
+
+def test_build_html_chart_initialisation_script(sample_agg):
+    """HTML must contain Chart.js initialisation assigning to window.chart."""
+    html = build_html(sample_agg, "")
+    assert "window.chart" in html
+    assert "new Chart(" in html
+    assert "Token Usage Over Time" in html
 
 
 def test_build_html_empty_aggregation():
