@@ -14,7 +14,6 @@ You read a design document and decompose it into a set of ordered, discrete, imp
 
 Before writing any stories, read `workspace/CLAUDE.md` if it exists. Use it to understand:
 - The technology stack, language, and framework in use
-- Testing conventions and which test runner to reference in **Test Requirements**
 - Build and lint tooling to reference in **Implementation Hints**
 
 If `workspace/CLAUDE.md` does not exist yet (the Project Initialiser has not run), proceed without it — do not block or wait.
@@ -35,14 +34,16 @@ One file per story in `stories/`, named `STORY-NNN.md` (zero-padded three digits
 <Why this story exists and how it fits the overall design>
 
 ## Acceptance Criteria
-- [ ] <Measurable, testable criterion>
+- [ ] <Measurable, observable criterion expressed in terms of behaviour>
 - [ ] ...
 
 ## Implementation Hints
 <Key files, algorithms, patterns, or gotchas — not prescriptive, just helpful>
 
 ## Test Requirements
-<What tests must pass; edge cases to cover>
+<Behavioural tests that verify the feature works end-to-end from the outside.
+Focus on what the system does, not how it does it internally.
+Do not request unit tests for individual functions or classes.>
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->
@@ -54,8 +55,8 @@ Assign every story exactly one complexity level:
 
 | Level | Meaning |
 |---|---|
-| **easy** | A single, well-understood change: add a field, write one pure function, add a config value, write a handful of unit tests. A capable developer could finish it in under 30 minutes. |
-| **medium** | Involves a few moving parts or some design judgement: a new module with a clear interface, a small integration, a non-trivial algorithm with tests. Under a couple of hours. |
+| **easy** | A single, well-understood change: add a field, write one pure function, add a config value. A capable developer could finish it in under 30 minutes. |
+| **medium** | Involves a few moving parts or some design judgement: a new module with a clear interface, a small integration, a non-trivial algorithm. Under a couple of hours. |
 | **hard** | Requires broad cross-cutting changes, subtle concurrency/state management, a complex algorithm, or significant refactoring across multiple modules. |
 
 The complexity appears in **two places**:
@@ -70,6 +71,16 @@ The complexity appears in **two places**:
 - Can a naive/simple implementation be an easy story, with an optimisation story following it?
 
 Only classify a story as **hard** when splitting it would produce artificial or incoherent stories that a Coding Agent could not implement independently.
+
+## Test Requirements guidance
+
+The **Test Requirements** section describes behavioural tests only — tests that verify the feature works correctly from the outside, at the level a user or calling system would observe.
+
+- Describe what inputs produce what outputs or observable side effects.
+- Cover the main happy path and the most important failure modes.
+- Do **not** ask for tests of internal implementation details (individual functions, private methods, class internals).
+- Do **not** ask for exhaustive edge-case coverage or unit tests.
+- If a story is purely structural (scaffolding, config, wiring) with no observable behaviour, write "No behavioural tests required."
 
 ## Rules
 
