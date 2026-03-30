@@ -731,6 +731,7 @@ totals = {}
 for path in sorted(glob.glob(os.path.join(tokens_dir, "*.jsonl"))):
     agent = os.path.basename(path).replace(".jsonl", "")
     inp = out = cache_r = cache_w = 0
+    cost = 0.0
     try:
         with open(path) as fh:
             for line in fh:
@@ -743,21 +744,26 @@ for path in sorted(glob.glob(os.path.join(tokens_dir, "*.jsonl"))):
                     out     += rec.get("output_tokens", 0)
                     cache_r += rec.get("cache_read_tokens", 0)
                     cache_w += rec.get("cache_write_tokens", 0)
+                    cost    += rec.get("cost_usd", 0.0)
                 except json.JSONDecodeError:
                     pass
     except OSError:
         pass
-    totals[agent] = (inp, out, cache_r, cache_w)
+    totals[agent] = (inp, out, cache_r, cache_w, cost)
 
 if not totals:
     sys.exit(0)
 
+grand_total_cost = sum(t[4] for t in totals.values())
+
 print("  Tokens:")
-for agent, (inp, out, cache_r, cache_w) in totals.items():
+for agent, (inp, out, cache_r, cache_w, cost) in totals.items():
     model = get_model(agent)
     model_note = f"  [{model}]" if model else ""
     cache_note = f"  cache r={cache_r:,} w={cache_w:,}" if cache_r or cache_w else ""
-    print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}{model_note}")
+    cost_note = f"  ${cost:.4f}" if cost else ""
+    print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}{cost_note}{model_note}")
+print(f"    {'TOTAL':<20}  cost=${grand_total_cost:.4f}")
 PYEOF
 }
 

@@ -4,9 +4,9 @@ import anyio
 import sys
 from pathlib import Path
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, ResultMessage, TextBlock, query
+from claude_agent_sdk import ClaudeAgentOptions, query
 
-from token_logger import flush_all, log_usage
+from token_logger import flush_all, log_usage, print_message
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
@@ -72,16 +72,8 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
     )
 
     async for message in query(prompt=task, options=options):
-        if isinstance(message, AssistantMessage):
-            log_usage(token_log, "pi", message.usage)
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    print(block.text, end="", flush=True)
-        elif isinstance(message, ResultMessage):
-            log_usage(token_log, "pi", message.usage)
-            print(
-                f"\n\n[Project Initialiser Agent finished — stop reason: {message.stop_reason}]"
-            )
+        log_usage(token_log, "pi", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
+        print_message(message)
 
 
 if __name__ == "__main__":
