@@ -35,14 +35,14 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 
 | Agent | Role | Reads from | Writes to |
 |---|---|---|---|
-| **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `design/` |
-| **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `workspace/CLAUDE.md`; all other agents gate on this file | `design/` | `workspace/` |
-| **Business Analyst** | Waits for `workspace/CLAUDE.md`, then watches `design/` for `*.new.md` files and decomposes each into story files with a **Complexity** field | `design/*.new.md`, `workspace/CLAUDE.md` | `stories/STORY-NNN.md` |
-| **Story Orchestrator** | Plain Python utility (no LLM); watches `stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `stories/STORY-NNN.md`, `stories/*.done.md` | `stories/` |
-| **Junior Coding Agent** (×N) | Python outer loop claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
-| **Senior Coding Agent** (×N) | Python outer loop claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `stories/*.medium/hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
-| **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `stories/*.failed.md` | `stories/` |
-| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `stories/` | `stories/` |
+| **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `workspace/design/` |
+| **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `workspace/CLAUDE.md`; all other agents gate on this file | `workspace/design/` | `workspace/` |
+| **Business Analyst** | Waits for `workspace/CLAUDE.md`, then watches `workspace/design/` for `*.new.md` files and decomposes each into story files with a **Complexity** field | `workspace/design/*.new.md`, `workspace/CLAUDE.md` | `workspace/stories/STORY-NNN.md` |
+| **Story Orchestrator** | Plain Python utility (no LLM); watches `workspace/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `workspace/stories/STORY-NNN.md`, `workspace/stories/*.done.md` | `workspace/stories/` |
+| **Junior Coding Agent** (×N) | Python outer loop claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `workspace/stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Senior Coding Agent** (×N) | Python outer loop claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `workspace/stories/*.medium/hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `workspace/stories/*.failed.md` | `workspace/stories/` |
+| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `workspace/stories/` | `workspace/stories/` |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
 
@@ -68,19 +68,19 @@ momo-agents/
 │   ├── junior-coding-agent.md
 │   ├── senior-coding-agent.md
 │   └── story-reviewer.md
-├── design/                    ← Designer Agent outputs
-│   ├── <feature>.new.md       ← written by Designer; queued for BA
-│   └── <feature>.processed.md ← renamed by BA after stories are generated
-├── stories/                   ← story files; complexity + state encoded in filename
-│   ├── STORY-001.md                      ← unprocessed (written by BA)
-│   ├── STORY-002.easy.ready.md           ← deps met; ready for Junior Agent
-│   ├── STORY-003.medium.working.md       ← claimed by a Senior Agent
-│   ├── STORY-004.easy.done.md            ← complete
-│   ├── STORY-005.hard.failed.md          ← failed; awaiting review
-│   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
-│   └── HALT                              ← sentinel: all Coding Agents must stop
-├── workspace/                 ← generated source code
+├── workspace/                 ← all generated artefacts
 │   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
+│   ├── design/                ← Designer Agent outputs
+│   │   ├── <feature>.new.md       ← written by Designer; queued for BA
+│   │   └── <feature>.processed.md ← renamed by BA after stories are generated
+│   ├── stories/               ← story files; complexity + state encoded in filename
+│   │   ├── STORY-001.md                      ← unprocessed (written by BA)
+│   │   ├── STORY-002.easy.ready.md           ← deps met; ready for Junior Agent
+│   │   ├── STORY-003.medium.working.md       ← claimed by a Senior Agent
+│   │   ├── STORY-004.easy.done.md            ← complete
+│   │   ├── STORY-005.hard.failed.md          ← failed; awaiting review
+│   │   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
+│   │   └── HALT                              ← sentinel: all Coding Agents must stop
 │   ├── src/
 │   └── tests/
 ├── start-team.sh              ← launches all agents simultaneously
@@ -100,7 +100,7 @@ The Designer runs as a genuine multi-turn conversation backed by `ClaudeSDKClien
 1. Agent greets the user and asks what they want to build.
 2. Asks clarifying questions — technology stack, constraints, integrations, non-functional requirements — until it has a complete picture.
 3. Does **not** write anything to disk until the user types **`write`**.
-4. On `write`: produces a thorough design document and saves it to `design/<feature-name>.new.md`, immediately queuing it for the Business Analyst.
+4. On `write`: produces a thorough design document and saves it to `workspace/design/<feature-name>.new.md`, immediately queuing it for the Business Analyst.
 5. If a `.processed.md` version already exists, writing a new `.new.md` re-queues the design and the BA regenerates stories.
 6. The session continues — the user can keep refining and issue `write` again at any time.
 7. Type `exit`, `quit`, or press **Ctrl+C** to end the session.
@@ -128,23 +128,23 @@ The BA agent uses design file **state encoded in the filename** — no mtime tra
 
 **Watch loop**:
 1. Wait for `workspace/CLAUDE.md` to exist.
-2. Every 5 seconds, glob all `*.new.md` files in `design/`.
-3. For each `<feature>.new.md` found: decompose it into `stories/STORY-NNN.md` files.
-4. On completion, rename `<feature>.new.md` → `<feature>.processed.md`.
+2. Every 5 seconds, glob all `*.new.md` files in `workspace/design/`.
+3. For each `<feature>.new.md` found: decompose it into `workspace/stories/STORY-NNN.md` files.
+4. On completion, rename `<feature>.new.md` → `<feature>.processed.md` inside `workspace/design/`.
 5. Sleep and repeat until `pipeline_complete` is written.
 
 Each story includes a `**Complexity**: easy | medium | hard` field and a `**Depends on**` field. Stories are written as bare `STORY-NNN.md` files; the Story Orchestrator assigns the `.ready` state.
 
 | Filename | State | Meaning |
 |---|---|---|
-| `design/<feature>.new.md` | **new** | Queued for BA; not yet processed |
-| `design/<feature>.processed.md` | **processed** | Stories have been generated for this version |
+| `workspace/design/<feature>.new.md` | **new** | Queued for BA; not yet processed |
+| `workspace/design/<feature>.processed.md` | **processed** | Stories have been generated for this version |
 
 ---
 
 ### Story Orchestrator
 
-A **plain Python utility** (no LLM calls) that continuously watches `stories/` and manages the unprocessed → ready transition.
+A **plain Python utility** (no LLM calls) that continuously watches `workspace/stories/` and manages the unprocessed → ready transition.
 
 - Scans for bare `STORY-NNN.md` files written by the BA.
 - Parses `**Complexity**` and `**Depends on**` fields from each file.
@@ -174,7 +174,7 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 2. Read `workspace/CLAUDE.md` and retain the content in memory for the lifetime of the process.
 
 **Python outer loop**:
-1. Check for `stories/HALT` or `pipeline_complete` sentinel — exit if either exists.
+1. Check for `workspace/stories/HALT` or `pipeline_complete` sentinel — exit if either exists.
 2. Atomically claim the lowest-numbered `.ready.md` story of the correct complexity tier by renaming it to `.working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
 3. If no story can be claimed, sleep 60 s and retry.
 4. Start a **fresh `query()` session** for the claimed story, passing the story path and the pre-read `workspace/CLAUDE.md` content directly in the task prompt.
@@ -185,29 +185,29 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 2. Using the `workspace/CLAUDE.md` content provided in the task, identify generated/vendored/tooling folders to avoid reading.
 3. Implement the acceptance criteria in `workspace/`.
 4. Run tests and linter as instructed in `workspace/CLAUDE.md`.
-5. Check for `stories/HALT` before committing. If found, perform the halt procedure.
+5. Check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
 6. **On success**: rename `.working.md` → `.done.md`, commit workspace changes.
-7. **On failure**: create `stories/HALT`, rename `.working.md` → `.failed.md`, perform halt procedure. No retries.
+7. **On failure**: create `workspace/stories/HALT`, rename `.working.md` → `.failed.md`, perform halt procedure. No retries.
 
 ---
 
 ### Story Reviewer
 
-1. Watches for `stories/HALT` in a continuous loop.
+1. Watches for `workspace/stories/HALT` in a continuous loop.
 2. Atomically claims `STORY-NNN.[complexity].failed.md` → `STORY-NNN.[complexity].reviewing.md`.
 3. Reads the full story including any appended failure notes.
 4. Presents the user with the original goal, acceptance criteria, and a summary of what failed.
 5. Asks the user how to proceed (new approach, relaxed constraints, split the story, etc.).
 6. Rewrites the file with a clean, updated story; preserves `**Index**` and `**Depends on**`.
 7. Renames to bare `STORY-NNN.md` — returns it to the unprocessed queue so the orchestrator re-evaluates.
-8. Deletes `stories/HALT` once all `.failed.md` stories are resolved.
+8. Deletes `workspace/stories/HALT` once all `.failed.md` stories are resolved.
 9. Returns to watching for the next HALT.
 
 ---
 
 ### Watchdog
 
-Runs continuously alongside the Coding Agents. Every 60 seconds it scans `stories/` for `.working.md` files older than **10 minutes** and resets them to `.ready.md`:
+Runs continuously alongside the Coding Agents. Every 60 seconds it scans `workspace/stories/` for `.working.md` files older than **10 minutes** and resets them to `.ready.md`:
 
 ```
 STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].ready.md
@@ -226,7 +226,7 @@ The complexity segment is preserved so the story can be immediately re-claimed w
 
 **Index**: N                        ← priority order; lower = worked first
 **Complexity**: easy | medium | hard ← assigned by BA; used by orchestrator and agents
-**Design ref**: design/<feature>.md
+**Design ref**: workspace/design/<feature>.md
 **Depends on**: STORY-NNN | none
 
 ## Context
@@ -273,7 +273,7 @@ STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
 success                     failure (no retry)
    │                            │
    ▼                            ▼
-STORY-NNN.[complexity].done.md   create stories/HALT
+STORY-NNN.[complexity].done.md   create workspace/stories/HALT
 (commit workspace)               rename to .failed.md
                                  coding agent exits
                                               │
@@ -296,7 +296,7 @@ All coordination is via atomic filesystem operations — no database, no message
 | Mark story ready | Story Orchestrator renames `STORY-NNN.md` → `STORY-NNN.[c].ready.md` after dep check |
 | Claim a story | Python agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic; LLM session starts only after a claim succeeds |
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
-| Halt detection | Check for `stories/HALT` before and after implementation; exit immediately if found |
+| Halt detection | Check for `workspace/stories/HALT` before and after implementation; exit immediately if found |
 | Workspace revert | Discard uncommitted changes on HALT detection |
 | Pipeline shutdown | `pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
 | Stale agent recovery | Watchdog resets `.[c].working.md` files idle > 10 minutes → `.[c].ready.md` |
@@ -358,7 +358,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 |---|---|---|
 | `🎨 Designer Agent` | Interactive design session | Type requirements; `write` saves the design |
 | `🏗️ Project Initialiser` | Workspace scaffolder | Runs once; skips if workspace already populated |
-| `📋 Business Analyst` | Design watcher | Polls `design/` every 5 s; waits for `workspace/CLAUDE.md` |
+| `📋 Business Analyst` | Design watcher | Polls `workspace/design/` every 5 s; waits for `workspace/CLAUDE.md` |
 | `🎯 Story Orchestrator` | Readiness manager | Continuously marks stories ready as deps complete |
 | `🐕 Watchdog` | Stale story reset | Resets stories idle > 10 min back to `.ready.md` |
 | `🔍 Story Reviewer` | Failed-story triage | Wakes on HALT; interactive with you |
@@ -413,7 +413,7 @@ Press **Ctrl+C** in the `start-team.sh` terminal. This:
 **Reset stories only** (keep generated code):
 
 ```bash
-rm -f stories/STORY-*.md stories/HALT
+rm -f workspace/stories/STORY-*.md workspace/stories/HALT
 ```
 
 **Full reset** — wipe everything generated:
@@ -425,8 +425,8 @@ rm -f stories/STORY-*.md stories/HALT
 
 | Path | What gets deleted |
 |---|---|
-| `stories/` | All `STORY-*` files in every state and the `HALT` sentinel |
-| `design/` | All `*.md` design documents |
+| `workspace/stories/` | All `STORY-*` files in every state and the `HALT` sentinel |
+| `workspace/design/` | All `*.md` design documents |
 | `.sentinels/` | Entire directory |
 | `workspace/` | All generated source code, tests, `CLAUDE.md`, and build artefacts |
 
@@ -444,12 +444,12 @@ python scripts/designer_agent.py --model claude-sonnet-4-6
 
 # Project Initialiser
 python scripts/project_initialiser_agent.py \
-  --design design/my-feature.new.md \
+  --design workspace/design/my-feature.new.md \
   --model claude-sonnet-4-6
 
 # Business Analyst (waits for workspace/CLAUDE.md before starting)
 python scripts/business_analyst_agent.py \
-  --design design/my-feature.new.md \
+  --design workspace/design/my-feature.new.md \
   --workspace-dir workspace \
   --model claude-sonnet-4-6
 

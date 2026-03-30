@@ -7,8 +7,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-export STORIES_DIR="$SCRIPT_DIR/stories"
 export WORKSPACE_DIR="$SCRIPT_DIR/workspace"
+export STORIES_DIR="$WORKSPACE_DIR/stories"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument Parsing
@@ -78,13 +78,16 @@ rm -f "$STORIES_DIR/HALT"
 # ─────────────────────────────────────────────────────────────────────────────
 ws_was_empty=true
 if [ -d "$WORKSPACE_DIR" ]; then
-    if [ "$(find "$WORKSPACE_DIR" -mindepth 1 -type f 2>/dev/null | wc -l)" -gt 0 ] || \
-       [ "$(find "$WORKSPACE_DIR" -mindepth 1 -type d 2>/dev/null | wc -l)" -gt 0 ]; then
+    if [ "$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 \
+            ! -name "stories" ! -name "design" 2>/dev/null | wc -l)" -gt 0 ]; then
         ws_was_empty=false
     fi
 fi
 if [ -d "$WORKSPACE_DIR" ] && [ "$ws_was_empty" = false ]; then
-    find "$WORKSPACE_DIR" -mindepth 1 -delete
+    # Remove generated content but preserve stories/ and design/ inside workspace/
+    find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 \
+        ! -name "stories" ! -name "design" \
+        -exec rm -rf {} +
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

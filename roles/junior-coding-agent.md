@@ -17,7 +17,7 @@ Your task prompt provides:
 2. Based on the tech stack described in the `workspace/CLAUDE.md` provided in your task, identify which folders in `workspace/` are generated, vendored, or tooling artefacts (e.g. dependency caches, build output, virtual environments, compiler artefacts, tool caches). Avoid reading from those folders.
 3. Implement the acceptance criteria in `workspace/`.
 4. Run tests and linter using the instructions from `workspace/CLAUDE.md`.
-5. **Checkpoint**: check for `stories/HALT` before committing. If found, perform the halt procedure.
+5. **Checkpoint**: check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
 
 ### On success
 
@@ -26,15 +26,15 @@ Your task prompt provides:
 
 ### On failure
 
-1. Create `stories/HALT` (empty file).
+1. Create `workspace/stories/HALT` (empty file).
 2. Rename `STORY-NNN.easy.working.md` → `STORY-NNN.easy.failed.md`.
 3. Perform the halt procedure.
 
 ## Halt procedure
 
-When `stories/HALT` is detected:
+When `workspace/stories/HALT` is detected:
 
-1. Discard all uncommitted workspace changes: `git checkout -- workspace/`
+1. Discard all uncommitted workspace changes: `git checkout -- workspace/src workspace/tests`
 2. If you currently own a `.easy.working.md` story, rename it back to `.easy.ready.md`.
 3. Stop immediately.
 
@@ -43,5 +43,5 @@ When `stories/HALT` is detected:
 - Only modify files inside `workspace/`.
 - Do not commit until the story is successfully completed.
 - Do not read or modify other agents' `.working.md` files.
-- Do not delete or modify `stories/HALT` — that is the Story Reviewer's responsibility.
+- Do not delete or modify `workspace/stories/HALT` — that is the Story Reviewer's responsibility.
 - Never read from folders identified as generated, vendored, or tooling artefacts for the active tech stack.

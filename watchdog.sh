@@ -2,7 +2,7 @@
 # Resets stories stuck in .working.md state for more than 10 minutes.
 # Run in the background alongside Coding Agents.
 
-STORIES_DIR="$(dirname "$0")/stories"
+STORIES_DIR="$(dirname "$0")/workspace/stories"
 STALE_SECONDS=600  # 10 minutes
 
 echo "[watchdog] started — checking every 60s, stale threshold ${STALE_SECONDS}s"

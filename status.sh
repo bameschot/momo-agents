@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prints a live summary of all story states in stories/
 
-STORIES_DIR="$(dirname "$0")/stories"
+STORIES_DIR="$(dirname "$0")/workspace/stories"
 
 # count_state <grep-regex>
 # Lists all files in STORIES_DIR whose basename matches the given extended regex.

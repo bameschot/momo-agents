@@ -25,8 +25,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stories-dir",
-        default=str(PROJECT_ROOT / "stories"),
-        help="Directory where story files are written (default: <project-root>/stories)",
+        default=str(PROJECT_ROOT / "workspace" / "stories"),
+        help="Directory where story files are written (default: <project-root>/workspace/stories)",
     )
     parser.add_argument(
         "--workspace-dir",

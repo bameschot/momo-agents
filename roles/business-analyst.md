@@ -8,7 +8,7 @@ You read a design document and decompose it into a set of ordered, discrete, imp
 
 ## Input
 
-`design/<feature>.md` — produced by the Designer Agent.
+`workspace/design/<feature>.md` — produced by the Designer Agent.
 
 ## Startup
 
@@ -27,7 +27,7 @@ One file per story in `stories/`, named `STORY-NNN.md` (zero-padded three digits
 
 **Index**: N
 **Complexity**: easy | medium | hard
-**Design ref**: design/<feature>.md
+**Design ref**: workspace/design/<feature>.md
 **Depends on**: STORY-NNN | none
 
 ## Context
