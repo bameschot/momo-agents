@@ -41,7 +41,9 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = [
-    "E501", # line too long — handled by formatter
+    "E501",   # line too long — handled by formatter
+    "UP006",  # require `list` instead of `List` — incompatible with Python 3.8
+    "UP045",  # require `X | None` instead of `Optional[X]` — incompatible with Python 3.8
 ]
 
 [tool.ruff.lint.isort]
