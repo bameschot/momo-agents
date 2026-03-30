@@ -38,6 +38,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to directory containing *.jsonl token log files "
              "(default: .sentinels/tokens relative to CWD).",
     )
+    parser.add_argument(
+        "--output-dir",
+        default=str(Path(__file__).parent / "workspace"),
+        metavar="PATH",
+        help="Directory to write the HTML report into "
+             "(default: workspace/ next to this script).",
+    )
     return parser.parse_args(argv)
 
 
@@ -474,6 +481,7 @@ def main() -> None:
     """Orchestrate loading, aggregation, HTML generation, and file output."""
     args = parse_args()
     tokens_dir = Path(args.tokens_dir)
+    output_dir = Path(args.output_dir)
 
     records = load_records(tokens_dir)
     agg = aggregate(records)
@@ -483,8 +491,9 @@ def main() -> None:
 
     html = build_html(agg, chartjs_src)
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
-    output_path = Path.cwd() / f"token-report_{timestamp}.html"
+    output_path = output_dir / f"token-report_{timestamp}.html"
     output_path.write_text(html, encoding="utf-8")
 
     print(str(output_path.resolve()))

@@ -786,6 +786,13 @@ _teardown() {
     bash "$SCRIPT_DIR/status.sh"
     echo ""
     _token_summary
+    echo ""
+    echo "  Generating token report..."
+    report_path=$("$PYTHON" "$SCRIPT_DIR/token_report.py" \
+        --tokens-dir "$SENTINEL_DIR/tokens" \
+        --output-dir "$WORKSPACE_DIR" 2>/dev/null) && \
+        echo "  Token report written → $report_path" || \
+        echo "  (Token report skipped — no log data)"
     rm -rf "$SENTINEL_DIR"
     exit 0
 }
