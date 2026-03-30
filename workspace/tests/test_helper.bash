@@ -1,44 +1,45 @@
 #!/usr/bin/env bash
-set -euo pipefail
-# tests/test_helper.bash — shared BATS setup/teardown and fixture helpers
+# test_helper.bash — shared BATS setup/teardown and fixture utilities
 # Loaded by reset-stories.bats via:  load 'test_helper'
 #
-# Provides:
-#   $TEST_DIR            — temporary directory created fresh for each test
-#   $SCRIPT_UNDER_TEST   — absolute path to ../reset-stories.sh
-#   make_story_fixture() — creates an empty story file in $TEST_DIR/stories/
+# Implements:
+#   setup              — called automatically before each @test
+#   teardown           — called automatically after each @test
+#   make_story_fixture — helper to create a story file in the fixture tree
 
-# setup is called before each @test block
+# ---------------------------------------------------------------------------
+# setup — called automatically before each @test
+# ---------------------------------------------------------------------------
 setup() {
-    # Create a temporary directory for this test
-    TEST_DIR=$(mktemp -d)
+  # Create a temporary directory for this test
+  TEST_DIR=$(mktemp -d)
+  export TEST_DIR
 
-    # Create required subdirectories
-    mkdir -p "$TEST_DIR/stories"
-    mkdir -p "$TEST_DIR/workspace"
+  # Create the required subdirectories
+  mkdir -p "$TEST_DIR/stories"
+  mkdir -p "$TEST_DIR/workspace"
 
-    # Locate the script under test
-    # BATS_TEST_DIRNAME is the directory of the .bats file (workspace/tests/)
-    # We need to go up and find reset-stories.sh in the project root
-    SCRIPT_UNDER_TEST="$(cd "$BATS_TEST_DIRNAME/.." && pwd)/reset-stories.sh"
-
-    # Export variables so they're available to tests
-    export TEST_DIR
-    export SCRIPT_UNDER_TEST
+  # Set the path to the script under test (from the tests/ subdirectory)
+  export SCRIPT_UNDER_TEST="${BATS_TEST_DIRNAME}/../reset-stories.sh"
 }
 
-# teardown is called after each @test block
+# ---------------------------------------------------------------------------
+# teardown — called automatically after each @test
+# ---------------------------------------------------------------------------
 teardown() {
-    # Clean up the temporary directory
-    rm -rf "$TEST_DIR"
+  # Remove the temporary directory and all its contents
+  rm -rf "$TEST_DIR"
 }
 
-# make_story_fixture - creates an empty story file for testing
+# ---------------------------------------------------------------------------
+# make_story_fixture — create an empty story file in the fixture directory
 # Usage: make_story_fixture <dir> <filename>
-# Example: make_story_fixture "$TEST_DIR" "STORY-001.easy.ready.md"
+# Example: make_story_fixture "$TEST_DIR" "STORY-001.md"
+# ---------------------------------------------------------------------------
 make_story_fixture() {
-    local dir="$1"
-    local filename="$2"
+  local fixture_dir="$1"
+  local filename="$2"
 
-    touch "$dir/stories/$filename"
+  # Create an empty file in the stories/ subdirectory
+  touch "$fixture_dir/stories/$filename"
 }
