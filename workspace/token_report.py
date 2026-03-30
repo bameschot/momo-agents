@@ -333,6 +333,78 @@ const RAW_DATA = """ + raw_data_json + """;
       }
     }
   });
+
+  // -----------------------------------------------------------------------
+  // Interactive controls
+  // -----------------------------------------------------------------------
+
+  var currentView = 'tokens';
+
+  function renderChart(labels, datasets) {
+    window.chart.data.labels = labels;
+    window.chart.data.datasets = datasets.map(function(s) {
+      return { label: s.label, data: s.data, fill: false, tension: 0.1 };
+    });
+    window.chart.update();
+  }
+
+  function getFilteredIndices() {
+    var fromVal = document.getElementById('fromPicker').value;
+    var toVal = document.getElementById('toPicker').value;
+    var indices = [];
+    RAW_DATA.labels.forEach(function(label, idx) {
+      // label format: YYYY-MM-DDTHH:MM:00Z
+      // picker format: YYYY-MM-DDTHH:MM
+      // Slice to first 16 chars for comparison
+      var labelSlice = label.slice(0, 16);
+      if (fromVal && labelSlice < fromVal) { return; }
+      if (toVal && labelSlice > toVal) { return; }
+      indices.push(idx);
+    });
+    return indices;
+  }
+
+  function applyFilter() {
+    var indices = getFilteredIndices();
+    var filteredLabels = indices.map(function(i) { return RAW_DATA.labels[i]; });
+    var series = currentView === 'tokens' ? RAW_DATA.token_series : RAW_DATA.cost_series;
+    var filteredDatasets = series.map(function(s) {
+      return { label: s.label, data: indices.map(function(i) { return s.data[i]; }) };
+    });
+    renderChart(filteredLabels, filteredDatasets);
+  }
+
+  // Toggle button
+  document.getElementById('toggleBtn').addEventListener('click', function() {
+    if (currentView === 'tokens') {
+      currentView = 'cost';
+      this.textContent = 'Switch to Token Counts';
+      window.chart.options.plugins.title.text = 'Token Cost Over Time';
+      window.chart.options.scales.y.title.text = 'Cost (USD)';
+    } else {
+      currentView = 'tokens';
+      this.textContent = 'Switch to Cost USD';
+      window.chart.options.plugins.title.text = 'Token Usage Over Time';
+      window.chart.options.scales.y.title.text = 'Tokens';
+    }
+    applyFilter();
+  });
+
+  // Date pickers
+  document.getElementById('fromPicker').addEventListener('change', function() {
+    applyFilter();
+  });
+  document.getElementById('toPicker').addEventListener('change', function() {
+    applyFilter();
+  });
+
+  // Reset button
+  document.getElementById('resetBtn').addEventListener('click', function() {
+    document.getElementById('fromPicker').value = '';
+    document.getElementById('toPicker').value = '';
+    applyFilter();
+  });
+
 })();
 """
 
