@@ -18,6 +18,7 @@ import argparse
 import json
 import sys
 import urllib.request
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -134,8 +135,63 @@ def aggregate(records: list[dict]) -> dict:
         },
     }
     """
-    # TODO: implement
-    raise NotImplementedError
+    def _zero() -> dict:
+        return {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "cost_usd": 0.0,
+        }
+
+    # Accumulate per (minute, agent) bucket sums
+    bucket_map: dict = defaultdict(lambda: defaultdict(_zero))
+    # Accumulate per-agent totals
+    agent_map: dict = defaultdict(_zero)
+
+    numeric_keys = (
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "cost_usd",
+    )
+
+    for rec in records:
+        ts: str = rec["ts"]
+        agent: str = rec["agent"]
+        # Derive minute bucket: YYYY-MM-DDTHH:MM:00Z
+        minute = ts[:16] + ":00Z"
+
+        bucket = bucket_map[minute][agent]
+        totals = agent_map[agent]
+
+        for key in numeric_keys:
+            bucket[key] += rec.get(key, 0)
+            totals[key] += rec.get(key, 0)
+
+    # Build sorted buckets list
+    buckets = []
+    for minute in sorted(bucket_map.keys()):
+        for agent in sorted(bucket_map[minute].keys()):
+            entry = {"minute": minute, "agent": agent}
+            entry.update(bucket_map[minute][agent])
+            buckets.append(entry)
+
+    # Build agent_totals dict
+    agent_totals = {agent: dict(totals) for agent, totals in sorted(agent_map.items())}
+
+    # Build grand_total
+    grand_total = _zero()
+    for totals in agent_map.values():
+        for key in numeric_keys:
+            grand_total[key] += totals[key]
+
+    return {
+        "buckets": buckets,
+        "agent_totals": agent_totals,
+        "grand_total": grand_total,
+    }
 
 
 # ---------------------------------------------------------------------------
