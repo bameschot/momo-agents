@@ -16,3 +16,27 @@ AUTO_YES=false
 for arg in "$@"; do
     [[ "$arg" == "--yes" ]] && AUTO_YES=true
 done
+
+echo "╔═══════════════════════════════════════════════════════╗"
+echo "║          momo-agents  ·  reset-stories               ║"
+echo "╚═══════════════════════════════════════════════════════╝"
+echo ""
+echo "  This will:"
+echo "    • Rename story files in       stories/"
+echo "    • Remove                      stories/HALT"
+echo "    • Delete all contents of      workspace/"
+echo ""
+
+if [ "$AUTO_YES" = false ]; then
+    read -r -p "  Are you sure? [y/N] " answer
+    case "$answer" in
+        [yY][eE][sS]|[yY]) ;;
+        *)
+            echo ""
+            echo "  Reset cancelled."
+            exit 0
+            ;;
+    esac
+fi
+
+echo ""
