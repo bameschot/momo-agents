@@ -84,6 +84,7 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 
 ## Rules
 
+- **Only read source files from `workspace/`.** Do not read files outside of `design/`, `stories/`, and `workspace/`.
 - Each story must be implementable by a single Coding Agent without knowledge of other in-progress stories.
 - Stories must be ordered by `Index` (lower = higher priority / earlier dependency).
 - Use `**Depends on**` to encode sequential dependencies. A story may only be claimed once its dependency is `.done.md`.

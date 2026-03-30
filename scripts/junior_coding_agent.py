@@ -150,7 +150,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
         model=model,
     )
 
-    async for message in query(prompt=task,cwd=workspace_dir, options=options):
+    async for message in query(prompt=task, options=options):
         log_usage(token_log, "junior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
         print_message(message)
 
