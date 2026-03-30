@@ -138,7 +138,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
         print(f"[Senior Coding Agent] Claimed {story_path.name} — starting fresh session.")
         task = _build_task(story_path, workspace_dir, claude_md, halt_file)
 
-        async for message in query(prompt=task, options=options):
+        async for message in query(prompt=task, cwd=workspace_dir, options=options):
             log_usage(token_log, "senior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
             print_message(message)
 
