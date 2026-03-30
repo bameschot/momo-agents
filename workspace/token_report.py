@@ -19,7 +19,7 @@ import json
 import sys
 import urllib.request
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -483,11 +483,11 @@ def main() -> None:
 
     html = build_html(agg, chartjs_src)
 
-    timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
     output_path = Path.cwd() / f"token-report_{timestamp}.html"
     output_path.write_text(html, encoding="utf-8")
 
-    print(str(output_path))
+    print(str(output_path.resolve()))
 
 
 if __name__ == "__main__":
