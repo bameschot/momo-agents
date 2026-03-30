@@ -235,13 +235,80 @@ def build_html(agg: dict, chartjs_src: str) -> str:
 
     The returned string is a complete, self-contained HTML document containing:
       - A summary table (per-agent token counts + cost, plus a grand-total row)
-      - Toggle button (Token Counts / Cost USD view)
-      - From/To datetime pickers + Reset button
-      - A Chart.js canvas with all data embedded as a JSON literal
-      - The Chart.js bundle inlined in a <script> tag
+      - A <div id="chart-container"> placeholder for the chart (added in STORY-007)
     """
-    # TODO: implement
-    raise NotImplementedError
+    # Build table rows for each agent (alphabetical order)
+    rows = []
+    for agent, totals in sorted(agg["agent_totals"].items()):
+        row = (
+            f"    <tr>"
+            f"<td>{agent}</td>"
+            f"<td>{totals['input_tokens']:,}</td>"
+            f"<td>{totals['output_tokens']:,}</td>"
+            f"<td>{totals['cache_read_tokens']:,}</td>"
+            f"<td>{totals['cache_write_tokens']:,}</td>"
+            f"<td>{totals['cost_usd']:.6f}</td>"
+            f"</tr>"
+        )
+        rows.append(row)
+
+    tbody = "\n".join(rows)
+
+    # Grand total row
+    gt = agg["grand_total"]
+    tfoot_row = (
+        f"    <tr>"
+        f"<td><strong>Grand Total</strong></td>"
+        f"<td>{gt['input_tokens']:,}</td>"
+        f"<td>{gt['output_tokens']:,}</td>"
+        f"<td>{gt['cache_read_tokens']:,}</td>"
+        f"<td>{gt['cache_write_tokens']:,}</td>"
+        f"<td>{gt['cost_usd']:.6f}</td>"
+        f"</tr>"
+    )
+
+    html = (
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\">\n"
+        "<head>\n"
+        "  <meta charset=\"utf-8\">\n"
+        "  <title>Token Usage Report</title>\n"
+        "  <style>\n"
+        "    body { font-family: sans-serif; margin: 2rem; }\n"
+        "    h1 { margin-bottom: 1rem; }\n"
+        "    table { border-collapse: collapse; width: 100%; }\n"
+        "    th, td { padding: 6px 12px; border: 1px solid #ccc; text-align: right; }\n"
+        "    th:first-child, td:first-child { text-align: left; }\n"
+        "    thead { background-color: #f0f0f0; }\n"
+        "    tfoot { font-weight: bold; background-color: #e8e8e8; }\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body>\n"
+        "  <h1>Token Usage Report</h1>\n"
+        "  <table>\n"
+        "    <thead>\n"
+        "      <tr>\n"
+        "        <th>Agent</th>\n"
+        "        <th>Input Tokens</th>\n"
+        "        <th>Output Tokens</th>\n"
+        "        <th>Cache Read Tokens</th>\n"
+        "        <th>Cache Write Tokens</th>\n"
+        "        <th>Total Cost (USD)</th>\n"
+        "      </tr>\n"
+        "    </thead>\n"
+        "    <tbody>\n"
+        + tbody + "\n"
+        "    </tbody>\n"
+        "    <tfoot>\n"
+        + tfoot_row + "\n"
+        "    </tfoot>\n"
+        "  </table>\n"
+        "  <div id=\"chart-container\"></div>\n"
+        "</body>\n"
+        "</html>\n"
+    )
+
+    return html
 
 
 # ---------------------------------------------------------------------------
