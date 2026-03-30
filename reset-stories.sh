@@ -1,31 +1,26 @@
 #!/usr/bin/env bash
-# reset-stories.sh — rolls a pipeline run back to the post-BA state:
-#   • Renames every state-encoded story file back to its bare STORY-NNN.md form
-#   • Removes stories/HALT if present
-#   • Clears all contents of workspace/ (preserving the directory itself)
-#
-# What is NOT touched: design/, .sentinels/, generated-test-applications/
+# reset-stories.sh — resets story files to a clean state.
 #
 # Usage: ./reset-stories.sh [--yes]
-#   --yes   Skip the confirmation prompt (useful in scripts / CI)
+#   --yes   Skip the confirmation prompt
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-STORIES_DIR="$SCRIPT_DIR/stories"
-WORKSPACE_DIR="$SCRIPT_DIR/workspace"
+export WORKSPACE_DIR="$SCRIPT_DIR/workspace"
+export STORIES_DIR="$WORKSPACE_DIR/stories"
 
-# ---------------------------------------------------------------------------
-# Parse flags
-# ---------------------------------------------------------------------------
-AUTO_YES=false
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument Parsing
+# ─────────────────────────────────────────────────────────────────────────────
+export AUTO_YES=false
 for arg in "$@"; do
     [[ "$arg" == "--yes" ]] && AUTO_YES=true
 done
 
-# ---------------------------------------------------------------------------
-# Confirmation banner
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Confirmation Banner
+# ─────────────────────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════════════╗"
 echo "║         momo-agents  ·  reset-stories            ║"
 echo "╚══════════════════════════════════════════════════╝"
@@ -50,54 +45,75 @@ fi
 
 echo ""
 
-# ---------------------------------------------------------------------------
-# Story Renamer — rename STORY-NNN.<complexity>.<state>.md → STORY-NNN.md
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Story Renamer — rename state-encoded files back to bare STORY-NNN.md form
+# ─────────────────────────────────────────────────────────────────────────────
 renamed_count=0
-
 for f in "$STORIES_DIR"/STORY-*.*.*.md; do
     [[ -e "$f" ]] || continue
-    # Extract just the filename
-    name="$(basename "$f")"
-    # Get the STORY-NNN prefix (everything before the first dot)
-    prefix="${name%%.*}"
-    bare_dest="$STORIES_DIR/${prefix}.md"
-    mv "$f" "$bare_dest"
+    filename="$(basename "$f")"
+    prefix="${filename%%.*}"
+    bare_name="${prefix}.md"
+    mv "$f" "$STORIES_DIR/$bare_name"
     renamed_count=$(( renamed_count + 1 ))
 done
 
-if [ "$renamed_count" -gt 0 ]; then
-    echo "  ✓ stories/     renamed $renamed_count stor$([ "$renamed_count" -eq 1 ] && echo 'y' || echo 'ies') to bare form"
+if [[ "$renamed_count" -gt 0 ]]; then
+    echo "  ✓ renamed $renamed_count stories"
 else
-    echo "  – stories/     already clean (no state-encoded files found)"
+    echo "  – stories/     already clean"
 fi
 
-# ---------------------------------------------------------------------------
-# HALT Cleaner — remove stories/HALT if present
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# HALT Cleaner — remove stories/HALT sentinel if present
+# ─────────────────────────────────────────────────────────────────────────────
+halt_was_present=false
 if [ -f "$STORIES_DIR/HALT" ]; then
-    rm -f "$STORIES_DIR/HALT"
-    echo "  ✓ stories/HALT removed"
-else
-    echo "  – stories/HALT not present (nothing to remove)"
+    halt_was_present=true
+fi
+rm -f "$STORIES_DIR/HALT"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Workspace Cleaner — remove all contents of workspace/ while keeping directory
+# ─────────────────────────────────────────────────────────────────────────────
+ws_was_empty=true
+if [ -d "$WORKSPACE_DIR" ]; then
+    if [ "$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 \
+            ! -name "stories" ! -name "design" 2>/dev/null | wc -l)" -gt 0 ]; then
+        ws_was_empty=false
+    fi
+fi
+if [ -d "$WORKSPACE_DIR" ] && [ "$ws_was_empty" = false ]; then
+    # Remove generated content but preserve stories/ and design/ inside workspace/
+    find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 \
+        ! -name "stories" ! -name "design" \
+        -exec rm -rf {} +
 fi
 
-# ---------------------------------------------------------------------------
-# Workspace Cleaner — remove all contents of workspace/ (keep directory)
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Summary Reporter
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+
+if [ "$halt_was_present" = true ]; then
+    echo "  ✓ HALT removed"
+else
+    echo "  – HALT         not present"
+fi
+
 if [ -d "$WORKSPACE_DIR" ]; then
-    find "$WORKSPACE_DIR" -mindepth 1 -delete 2>/dev/null || true
-    echo "  ✓ workspace/   cleared"
+    if [ "$ws_was_empty" = false ]; then
+        echo "  ✓ workspace/   cleared"
+    else
+        echo "  – workspace/   already empty"
+    fi
 else
     echo "  – workspace/   does not exist (nothing to clear)"
 fi
 
-# ---------------------------------------------------------------------------
-# Done
-# ---------------------------------------------------------------------------
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║        Reset complete — ready to go  🧹         ║"
+echo "║       Reset complete — ready to go 🧹           ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "  Run './start-team.sh <feature-name>' to start a fresh session."

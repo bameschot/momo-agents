@@ -14,10 +14,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-STORIES_DIR="$SCRIPT_DIR/stories"
-DESIGN_DIR="$SCRIPT_DIR/design"
-SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
 WORKSPACE_DIR="$SCRIPT_DIR/workspace"
+DESIGN_DIR="$WORKSPACE_DIR/design"
+STORIES_DIR="$WORKSPACE_DIR/stories"
+SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Confirmation
@@ -32,8 +32,8 @@ echo "║           momo-agents  ·  reset-team             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "  This will permanently delete:"
-echo "    • All story files in       stories/"
-echo "    • All design documents in  design/"
+echo "    • All story files in       workspace/stories/"
+echo "    • All design documents in  workspace/design/"
 echo "    • All sentinel files in    .sentinels/"
 echo "    • All generated code in    workspace/  (src/, tests/, CLAUDE.md)"
 echo ""

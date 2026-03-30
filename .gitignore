@@ -212,7 +212,7 @@ __marimo__/
 .sentinels/**
 /stories/**
 /design/**
-/workspace/**
+# /workspace/**
 
 *.zip
 .env

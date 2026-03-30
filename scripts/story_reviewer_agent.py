@@ -18,8 +18,8 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Story Reviewer Agent")
     parser.add_argument(
         "--stories-dir",
-        default=str(PROJECT_ROOT / "stories"),
-        help="Directory containing story files (default: <project-root>/stories)",
+        default=str(PROJECT_ROOT / "workspace" / "stories"),
+        help="Directory containing story files (default: <project-root>/workspace/stories)",
     )
     parser.add_argument(
         "--model",

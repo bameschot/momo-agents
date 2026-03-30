@@ -17,9 +17,9 @@ set -euo pipefail
 # Arguments
 # ─────────────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-STORIES_DIR="$SCRIPT_DIR/stories"
-DESIGN_DIR="$SCRIPT_DIR/design"
 WORKSPACE_DIR="$SCRIPT_DIR/workspace"
+DESIGN_DIR="$WORKSPACE_DIR/design"
+STORIES_DIR="$WORKSPACE_DIR/stories"
 SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
 
 FEATURE="${1:-}"
@@ -178,10 +178,11 @@ APPLESCRIPT
 # Workspace initialisation probe
 # ─────────────────────────────────────────────────────────────────────────────
 _workspace_initialized() {
-    # True when workspace contains anything beyond the skeleton CLAUDE.md
+    # True when workspace contains anything beyond CLAUDE.md, design/, and stories/
     local n
     n=$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 \
-            ! -name "CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
+            ! -name "CLAUDE.md" ! -name "design" ! -name "stories" \
+            2>/dev/null | wc -l | tr -d ' ')
     [ "$n" -gt 0 ]
 }
 
@@ -260,7 +261,7 @@ echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
 "$PYTHON" "${SCRIPT_DIR}/scripts/designer_agent.py" \
     --model "${MODEL_DESIGNER}" \
-    --design-dir "${SCRIPT_DIR}/design" \
+    --design-dir "${WORKSPACE_DIR}/design" \
     --token-log "${SENTINEL_DIR}/tokens/designer.jsonl"
 touch "${SENTINEL_DIR}/designer.done"
 echo ""
@@ -285,8 +286,6 @@ echo "║      Business Analyst Agent      ║"
 echo "╚══════════════════════════════════╝"
 echo "Watching ${SCRIPT_DIR}/design/ for *.new.md files..."
 echo ""
-
-DESIGN_DIR="${SCRIPT_DIR}/design"
 
 while true; do
     if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
@@ -341,7 +340,8 @@ echo "║    Project Initialiser Agent     ║"
 echo "╚══════════════════════════════════╝"
 
 ws_content=$(find "${WORKSPACE_DIR}" -mindepth 1 -maxdepth 1 \
-    ! -name "CLAUDE.md" 2>/dev/null | wc -l | tr -d ' ')
+    ! -name "CLAUDE.md" ! -name "design" ! -name "stories" \
+    2>/dev/null | wc -l | tr -d ' ')
 
 if [ "${ws_content}" -gt 0 ]; then
     echo "Workspace already initialised — skipping scaffold step."
@@ -786,6 +786,13 @@ _teardown() {
     bash "$SCRIPT_DIR/status.sh"
     echo ""
     _token_summary
+    echo ""
+    echo "  Generating token report..."
+    report_path=$("$PYTHON" "$SCRIPT_DIR/token_report.py" \
+        --tokens-dir "$SENTINEL_DIR/tokens" \
+        --output-dir "$WORKSPACE_DIR" 2>/dev/null) && \
+        echo "  Token report written → $report_path" || \
+        echo "  (Token report skipped — no log data)"
     rm -rf "$SENTINEL_DIR"
     exit 0
 }

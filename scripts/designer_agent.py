@@ -23,8 +23,8 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Designer Agent")
     parser.add_argument(
         "--design-dir",
-        default=str(PROJECT_ROOT / "design"),
-        help="Directory where design documents are written (default: <project-root>/design)",
+        default=str(PROJECT_ROOT / "workspace" / "design"),
+        help="Directory where design documents are written (default: <project-root>/workspace/design)",
     )
     parser.add_argument(
         "--model",

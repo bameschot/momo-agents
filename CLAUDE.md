@@ -19,7 +19,7 @@ momo-agents/
 ├── LICENSE                 # MIT License
 ├── pyproject.toml          # Project metadata and dependencies
 ├── scripts/          # Python agent implementations
-│   ├── designer_agent.py         # Interactive design session → design/<feature>.md
+│   ├── designer_agent.py         # Interactive design session → workspace/design/<feature>.md
 │   ├── business_analyst_agent.py # Breaks design into story files
 │   ├── project_initialiser_agent.py  # Scaffolds workspace/ from design
 │   ├── coding_agent.py     # Claims and implements stories
@@ -30,10 +30,10 @@ momo-agents/
 │   ├── project-initialiser.md
 │   ├── coding-agent.md
 │   └── story-reviewer.md
-├── design/                 # Designer Agent outputs (<feature>.md)
-├── stories/                # Story files (state encoded in filename suffix)
-├── workspace/              # Generated source code
+├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions for Coding Agents
+│   ├── design/             # Designer Agent outputs (<feature>.md)
+│   ├── stories/            # Story files (state encoded in filename suffix)
 │   ├── src/
 │   └── tests/
 ├── orchestrate.sh          # Full pipeline orchestrator
