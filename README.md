@@ -404,9 +404,12 @@ Prints a live snapshot of how many stories are in each state:
 Press **Ctrl+C** in the `start-team.sh` terminal. This:
 
 1. Writes `.sentinels/pipeline_complete` — all agent windows exit cleanly.
-2. Kills the watchdog process.
+2. Kills the watchdog process and closes all opened agent terminal windows.
 3. Prints a final per-agent token-usage summary and `status.sh` snapshot.
-4. Removes the `.sentinels/` directory.
+4. Generates a self-contained HTML token usage report and writes it to `workspace/token-report_YYYY-MM-DD_HH-MM-SS.html`.
+5. Removes the `.sentinels/` directory.
+
+The token report includes a per-agent breakdown of input, output, and cache tokens plus cost, and an interactive Chart.js timeline. Open it in any browser after the run.
 
 ### Reset
 

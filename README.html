@@ -479,7 +479,8 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
   HALT           no</code></pre>
 <h3 id="shut-down">Shut down</h3>
 <p>Press <strong>Ctrl+C</strong> in the <code>start-team.sh</code> terminal. This:</p>
-<ol><li>Writes <code>.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process.</li><li>Prints a final per-agent token-usage summary and <code>status.sh</code> snapshot.</li><li>Removes the <code>.sentinels/</code> directory.</li></ol>
+<ol><li>Writes <code>.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process and closes all opened agent terminal windows.</li><li>Prints a final per-agent token-usage summary and <code>status.sh</code> snapshot.</li><li>Generates a self-contained HTML token usage report and writes it to <code>workspace/token-report_YYYY-MM-DD_HH-MM-SS.html</code>.</li><li>Removes the <code>.sentinels/</code> directory.</li></ol>
+<p>The token report includes a per-agent breakdown of input, output, and cache tokens plus cost, and an interactive Chart.js timeline. Open it in any browser after the run.</p>
 <h3 id="reset">Reset</h3>
 <p><strong>Reset stories only</strong> (keep generated code):</p>
 <pre><code class="language-bash">rm -f workspace/stories/STORY-*.md workspace/stories/HALT</code></pre>
