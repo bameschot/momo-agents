@@ -39,8 +39,8 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `workspace/CLAUDE.md`; all other agents gate on this file | `design/` | `workspace/` |
 | **Business Analyst** | Waits for `workspace/CLAUDE.md`, then watches `design/` for `*.new.md` files and decomposes each into story files with a **Complexity** field | `design/*.new.md`, `workspace/CLAUDE.md` | `stories/STORY-NNN.md` |
 | **Story Orchestrator** | Plain Python utility (no LLM); watches `stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `stories/STORY-NNN.md`, `stories/*.done.md` | `stories/` |
-| **Junior Coding Agent** (×N) | Waits for `workspace/CLAUDE.md`, then claims and implements `easy` stories; polls indefinitely for new work | `stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
-| **Senior Coding Agent** (×N) | Waits for `workspace/CLAUDE.md`, then claims and implements `medium` and `hard` stories; polls indefinitely | `stories/*.medium/hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Junior Coding Agent** (×N) | Python outer loop claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
+| **Senior Coding Agent** (×N) | Python outer loop claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `stories/*.medium/hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
 | **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `stories/*.failed.md` | `stories/` |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `stories/` | `stories/` |
 
@@ -167,23 +167,27 @@ Two tiers handle stories by complexity:
 | **Junior Coding Agent** | `easy` stories | `claude-haiku-4-5-20251001` |
 | **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` |
 
-Both follow the same structure.
+Both agents follow the same structure: **Python owns the outer loop; a fresh LLM session is started for every story.** This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.
 
-**Startup sequence** (once, before the loop):
+**Python startup** (once, before the loop):
 1. Poll every 60 s until `workspace/CLAUDE.md` exists.
-2. Read `workspace/CLAUDE.md` once and retain build/test/lint instructions for the entire session — never re-read during the loop.
-3. Based on the tech stack described in `workspace/CLAUDE.md`, identify generated/vendored/tooling folders to avoid reading (dependency caches, build output, virtual environments, compiler artefacts, tool caches).
+2. Read `workspace/CLAUDE.md` and retain the content in memory for the lifetime of the process.
 
-**Coding loop**:
-1. Check for `stories/HALT` — exit immediately if it exists.
-2. Scan for `.ready.md` stories of the correct complexity tier.
-3. Sort by story number (ascending); pick the lowest-numbered candidate.
-4. Atomically claim: rename `STORY-NNN.[complexity].ready.md` → `STORY-NNN.[complexity].working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
-5. Implement acceptance criteria in `workspace/`.
-6. Run tests and linter using retained instructions.
-7. Check for `HALT` again before committing. If found, revert changes, rename back to `.ready.md`, exit.
-8. **On success**: rename to `.done.md`, commit workspace changes, loop back to step 1.
-9. **On failure**: create `stories/HALT`, rename to `.failed.md`, discard uncommitted changes, exit. No retries.
+**Python outer loop**:
+1. Check for `stories/HALT` or `pipeline_complete` sentinel — exit if either exists.
+2. Atomically claim the lowest-numbered `.ready.md` story of the correct complexity tier by renaming it to `.working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
+3. If no story can be claimed, sleep 60 s and retry.
+4. Start a **fresh `query()` session** for the claimed story, passing the story path and the pre-read `workspace/CLAUDE.md` content directly in the task prompt.
+5. When the session ends, loop back to step 1.
+
+**Per-story LLM session** (one `query()` call per story):
+1. Read the story file fully.
+2. Using the `workspace/CLAUDE.md` content provided in the task, identify generated/vendored/tooling folders to avoid reading.
+3. Implement the acceptance criteria in `workspace/`.
+4. Run tests and linter as instructed in `workspace/CLAUDE.md`.
+5. Check for `stories/HALT` before committing. If found, perform the halt procedure.
+6. **On success**: rename `.working.md` → `.done.md`, commit workspace changes.
+7. **On failure**: create `stories/HALT`, rename `.working.md` → `.failed.md`, perform halt procedure. No retries.
 
 ---
 
@@ -290,7 +294,7 @@ All coordination is via atomic filesystem operations — no database, no message
 | Operation | Mechanism |
 |---|---|
 | Mark story ready | Story Orchestrator renames `STORY-NNN.md` → `STORY-NNN.[c].ready.md` after dep check |
-| Claim a story | Coding Agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic |
+| Claim a story | Python agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic; LLM session starts only after a claim succeeds |
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
 | Halt detection | Check for `stories/HALT` before and after implementation; exit immediately if found |
 | Workspace revert | Discard uncommitted changes on HALT detection |
