@@ -6,7 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-from token_logger import flush_all, log_usage, print_message
+from token_logger import log_usage, print_message
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
@@ -166,4 +166,3 @@ if __name__ == "__main__":
         workspace_dir = PROJECT_ROOT / workspace_dir
     token_log = Path(args.token_log) if args.token_log else None
     anyio.run(run, stories_dir, workspace_dir, args.model, token_log)
-    flush_all()

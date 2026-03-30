@@ -11,7 +11,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from token_logger import flush_all, log_usage
+from token_logger import log_usage
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
@@ -128,4 +128,3 @@ if __name__ == "__main__":
         design_dir = PROJECT_ROOT / design_dir
     token_log = Path(args.token_log) if args.token_log else None
     anyio.run(run, design_dir, args.model, token_log)
-    flush_all()

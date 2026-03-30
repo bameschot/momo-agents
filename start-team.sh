@@ -754,16 +754,21 @@ for path in sorted(glob.glob(os.path.join(tokens_dir, "*.jsonl"))):
 if not totals:
     sys.exit(0)
 
-grand_total_cost = sum(t[4] for t in totals.values())
+grand_total_inp     = sum(t[0] for t in totals.values())
+grand_total_out     = sum(t[1] for t in totals.values())
+grand_total_cache_r = sum(t[2] for t in totals.values())
+grand_total_cache_w = sum(t[3] for t in totals.values())
+grand_total_cost    = sum(t[4] for t in totals.values())
 
 print("  Tokens:")
 for agent, (inp, out, cache_r, cache_w, cost) in totals.items():
     model = get_model(agent)
     model_note = f"  [{model}]" if model else ""
     cache_note = f"  cache r={cache_r:,} w={cache_w:,}" if cache_r or cache_w else ""
-    cost_note = f"  ${cost:.4f}" if cost else ""
+    cost_note = f"  cost=${cost:.4f}" if cost else ""
     print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}{cost_note}{model_note}")
-print(f"    {'TOTAL':<20}  cost=${grand_total_cost:.4f}")
+grand_cache_note = f"  cache r={grand_total_cache_r:,} w={grand_total_cache_w:,}" if grand_total_cache_r or grand_total_cache_w else ""
+print(f"    {'TOTAL':<20}  in={grand_total_inp:>8,}  out={grand_total_out:>7,}{grand_cache_note}  cost=${grand_total_cost:.4f}")
 PYEOF
 }
 

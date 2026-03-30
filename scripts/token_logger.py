@@ -2,16 +2,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from time import monotonic
 from typing import Any
-
-# Flush interval in seconds — accumulated tokens are written at most this often.
-_FLUSH_INTERVAL = 15.0
-
-# Per-agent accumulator: agent -> {"last_flush": float, "input": int, "output": int,
-#                                   "cache_read": int, "cache_write": int}
-_accumulators: dict[str, dict] = {}
-
 
 _MAX_RESULT_CHARS = 500  # truncation limit for tool result content in console output
 
@@ -111,67 +102,24 @@ def log_usage(
     usage: dict | None,
     cost_usd: float | None = None,
 ) -> None:
-    """Accumulate token counts and cost from a message and flush to *log_file*
-    at most every 30 seconds.  The final flush is guaranteed on exit via
-    :func:`flush_all`.
+    """Write one JSONL record immediately to *log_file* for each call.
 
     Safe to call with ``usage=None`` and/or ``cost_usd=None`` (no-op when both
     are absent) so callers need no guard logic.
-    The file and its parent directory are created automatically on first flush.
+    The file and its parent directory are created automatically.
     """
     if log_file is None or (not usage and cost_usd is None):
         return
 
-    now = monotonic()
-    acc = _accumulators.setdefault(
-        agent,
-        {
-            "last_flush": now,
-            "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
-            "cost": 0.0,
-            "log_file": log_file,
-        },
-    )
-
-    if usage:
-        acc["input"] += usage.get("input_tokens", 0)
-        acc["output"] += usage.get("output_tokens", 0)
-        acc["cache_read"] += usage.get("cache_read_input_tokens", 0)
-        acc["cache_write"] += usage.get("cache_creation_input_tokens", 0)
-    if cost_usd is not None:
-        acc["cost"] += cost_usd
-
-    if now - acc["last_flush"] >= _FLUSH_INTERVAL:
-        _flush(agent, acc)
-
-
-def flush_all() -> None:
-    """Flush any remaining accumulated tokens and cost for all agents and print
-    a per-agent cost summary to stdout.  Call once on process exit."""
-    for agent, acc in _accumulators.items():
-        if acc["input"] or acc["output"] or acc["cache_read"] or acc["cache_write"] or acc["cost"]:
-            _flush(agent, acc)
-
-
-def _flush(agent: str, acc: dict) -> None:
-    """Write one JSONL record for *agent* and reset the accumulator."""
-    log_file: Path = acc["log_file"]
     entry = {
         "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "agent": agent,
-        "input_tokens": acc["input"],
-        "output_tokens": acc["output"],
-        "cache_read_tokens": acc["cache_read"],
-        "cache_write_tokens": acc["cache_write"],
-        "cost_usd": round(acc["cost"], 6),
+        "input_tokens": usage.get("input_tokens", 0) if usage else 0,
+        "output_tokens": usage.get("output_tokens", 0) if usage else 0,
+        "cache_read_tokens": usage.get("cache_read_input_tokens", 0) if usage else 0,
+        "cache_write_tokens": usage.get("cache_creation_input_tokens", 0) if usage else 0,
+        "cost_usd": round(cost_usd, 6) if cost_usd is not None else 0.0,
     }
     log_file.parent.mkdir(parents=True, exist_ok=True)
     with log_file.open("a") as fh:
         fh.write(json.dumps(entry) + "\n")
-
-    acc["input"] = 0
-    acc["output"] = 0
-    acc["cache_read"] = 0
-    acc["cache_write"] = 0
-    acc["cost"] = 0.0
-    acc["last_flush"] = monotonic()
