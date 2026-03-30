@@ -44,3 +44,22 @@ if [ "$AUTO_YES" = false ]; then
 fi
 
 echo ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Story Renamer — rename state-encoded files back to bare STORY-NNN.md form
+# ─────────────────────────────────────────────────────────────────────────────
+renamed_count=0
+for f in "$STORIES_DIR"/STORY-*.*.*.md; do
+    [[ -e "$f" ]] || continue
+    filename="$(basename "$f")"
+    prefix="${filename%%.*}"
+    bare_name="${prefix}.md"
+    mv "$f" "$STORIES_DIR/$bare_name"
+    renamed_count=$(( renamed_count + 1 ))
+done
+
+if [[ "$renamed_count" -gt 0 ]]; then
+    echo "  ✓ stories/     renamed $renamed_count file(s) to bare form"
+else
+    echo "  – stories/     no state-encoded files found (nothing to rename)"
+fi
