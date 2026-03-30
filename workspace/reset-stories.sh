@@ -85,11 +85,11 @@ fi
 # ---------------------------------------------------------------------------
 # Workspace Cleaner — remove all contents of workspace/ (keep directory)
 # ---------------------------------------------------------------------------
-if [ -d "$WORKSPACE_DIR" ] && [ "$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 | head -1)" ]; then
+if [ -d "$WORKSPACE_DIR" ]; then
     find "$WORKSPACE_DIR" -mindepth 1 -delete 2>/dev/null || true
     echo "  ✓ workspace/   cleared"
 else
-    echo "  – workspace/   already empty"
+    echo "  – workspace/   does not exist (nothing to clear)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -97,8 +97,8 @@ fi
 # ---------------------------------------------------------------------------
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║       Reset complete — ready to retry  🧹        ║"
+echo "║        Reset complete — ready to go  🧹         ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
-echo "  Run the pipeline to start a fresh coding session."
+echo "  Run './start-team.sh <feature-name>' to start a fresh session."
 echo ""
