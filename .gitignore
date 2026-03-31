@@ -214,5 +214,7 @@ __marimo__/
 /design/**
 # /workspace/**
 
+/workspace/.sentinels
+
 *.zip
 .env

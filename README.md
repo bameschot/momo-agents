@@ -121,7 +121,7 @@ Runs once automatically when the workspace is empty. Its primary output — `wor
 3. Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.
 4. Does **not** implement any story logic.
 
-If `workspace/` already contains files beyond the skeleton `CLAUDE.md`, the initialiser skips immediately.
+If `workspace/CLAUDE.md` already exists the initialiser skips immediately — the presence of that file is the sole signal that scaffolding has already been completed.
 
 ---
 

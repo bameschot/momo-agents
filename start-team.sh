@@ -178,12 +178,8 @@ APPLESCRIPT
 # Workspace initialisation probe
 # ─────────────────────────────────────────────────────────────────────────────
 _workspace_initialized() {
-    # True when workspace contains anything beyond CLAUDE.md, design/, and stories/
-    local n
-    n=$(find "$WORKSPACE_DIR" -mindepth 1 -maxdepth 1 \
-            ! -name "CLAUDE.md" ! -name "design" ! -name "stories" \
-            2>/dev/null | wc -l | tr -d ' ')
-    [ "$n" -gt 0 ]
+    # True when workspace/CLAUDE.md already exists (PI has previously run)
+    [ -f "$WORKSPACE_DIR/CLAUDE.md" ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -323,9 +319,8 @@ done
 WRAPPER
 
 # ── Project Initialiser ───────────────────────────────────────────────────────
-# Skips when the workspace already has content.
-# Otherwise watches design/ for the first *.new.md file the Designer produces,
-# then scaffolds the workspace from that design — exactly once.
+# Skips when workspace/CLAUDE.md already exists.
+# Otherwise waits for the first *.new.md design file, then scaffolds — exactly once.
 cat > "$SENTINEL_DIR/run_pi.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -339,16 +334,12 @@ echo "╔═══════════════════════�
 echo "║    Project Initialiser Agent     ║"
 echo "╚══════════════════════════════════╝"
 
-ws_content=$(find "${WORKSPACE_DIR}" -mindepth 1 -maxdepth 1 \
-    ! -name "CLAUDE.md" ! -name "design" ! -name "stories" \
-    2>/dev/null | wc -l | tr -d ' ')
-
-if [ "${ws_content}" -gt 0 ]; then
-    echo "Workspace already initialised — skipping scaffold step."
+if [ -f "${WORKSPACE_DIR}/CLAUDE.md" ]; then
+    echo "workspace/CLAUDE.md already exists — skipping scaffold step."
     exit 0
 fi
 
-echo "Waiting for a design/*.new.md file from the Designer..."
+echo "Waiting for a design/*.new.md file..."
 
 design_file=""
 while true; do
