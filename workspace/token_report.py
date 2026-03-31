@@ -14,6 +14,7 @@ Output:
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -61,8 +62,33 @@ def load_records(tokens_dir: Path) -> list[dict]:
     Blank lines and lines that fail JSON parsing are skipped with a warning.
     The agent name is derived from the filename stem.
     """
-    # TODO: implement
-    raise NotImplementedError
+    records = []
+    jsonl_files = sorted(tokens_dir.glob("*.jsonl"))
+
+    for jsonl_file in jsonl_files:
+        agent_name = jsonl_file.stem
+
+        with open(jsonl_file, encoding="utf-8") as f:
+            for line_num, line in enumerate(f, start=1):
+                line = line.rstrip("\n\r")
+
+                # Skip blank lines
+                if not line.strip():
+                    continue
+
+                # Parse JSON line
+                try:
+                    record = json.loads(line)
+                    record["agent"] = agent_name
+                    records.append(record)
+                except json.JSONDecodeError as e:
+                    print(
+                        f"Warning: {jsonl_file}:{line_num}: Failed to parse JSON: {e}",
+                        file=sys.stderr,
+                    )
+                    continue
+
+    return records
 
 
 # ---------------------------------------------------------------------------
