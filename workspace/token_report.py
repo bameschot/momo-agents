@@ -246,18 +246,80 @@ def get_chartjs_bundle(cache_dir):
     return bundle_str
 
 
-def render_summary_table(per_agent_totals, grand_total):
-    """Render the summary table HTML.
+def render_summary_table(agent_totals, grand_total):
+    """Render the summary table HTML showing per-agent token counts and costs.
+
+    Generates an HTML table with one row per agent plus a grand-total row.
+    Integer token counts are formatted with thousands separators (e.g., 1,234,567).
+    Cost values are formatted to exactly 6 decimal places (e.g., 0.012345).
 
     Args:
-        per_agent_totals: Dict of agent totals
-        grand_total: Dict of grand totals
+        agent_totals: List of per-agent total dicts, each containing:
+                     agent, input_tokens, output_tokens, cache_read_tokens,
+                     cache_write_tokens, cost_usd
+        grand_total: Dict with aggregated totals across all agents,
+                    containing the same keys as agent_totals entries
 
     Returns:
-        HTML string for the table (stub)
+        HTML string containing a <table> element with styled rows and cells
     """
-    # TODO: Implemented in a later story
-    return "<table></table>"
+    # Build header row
+    header = (
+        "<tr>"
+        "<th>Agent</th>"
+        "<th style='text-align: right;'>Input Tokens</th>"
+        "<th style='text-align: right;'>Output Tokens</th>"
+        "<th style='text-align: right;'>Cache Read Tokens</th>"
+        "<th style='text-align: right;'>Cache Write Tokens</th>"
+        "<th style='text-align: right;'>Total Cost (USD)</th>"
+        "</tr>"
+    )
+
+    # Build data rows for each agent
+    data_rows = []
+    for agent_total in agent_totals:
+        agent = agent_total["agent"]
+        input_tokens = agent_total["input_tokens"]
+        output_tokens = agent_total["output_tokens"]
+        cache_read = agent_total["cache_read_tokens"]
+        cache_write = agent_total["cache_write_tokens"]
+        cost = agent_total["cost_usd"]
+
+        row = (
+            "<tr>"
+            f"<td>{agent}</td>"
+            f"<td style='text-align: right;'>{input_tokens:,}</td>"
+            f"<td style='text-align: right;'>{output_tokens:,}</td>"
+            f"<td style='text-align: right;'>{cache_read:,}</td>"
+            f"<td style='text-align: right;'>{cache_write:,}</td>"
+            f"<td style='text-align: right;'>{cost:.6f}</td>"
+            "</tr>"
+        )
+        data_rows.append(row)
+
+    # Build grand total row
+    input_tokens = grand_total["input_tokens"]
+    output_tokens = grand_total["output_tokens"]
+    cache_read = grand_total["cache_read_tokens"]
+    cache_write = grand_total["cache_write_tokens"]
+    cost = grand_total["cost_usd"]
+
+    total_row = (
+        "<tr class='total-row'>"
+        "<th>Total</th>"
+        f"<th style='text-align: right;'>{input_tokens:,}</th>"
+        f"<th style='text-align: right;'>{output_tokens:,}</th>"
+        f"<th style='text-align: right;'>{cache_read:,}</th>"
+        f"<th style='text-align: right;'>{cache_write:,}</th>"
+        f"<th style='text-align: right;'>{cost:.6f}</th>"
+        "</tr>"
+    )
+
+    # Assemble table
+    table_content = header + "".join(data_rows) + total_row
+    html = f"<table>\n{table_content}\n</table>"
+
+    return html
 
 
 def render_chart_html(minute_buckets):
