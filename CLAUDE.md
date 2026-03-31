@@ -4,11 +4,11 @@ This file provides guidance for AI assistants (Claude Code and others) working i
 
 ## Project Overview
 
-**momo-agents** is a Python project for building coding agents powered by Claude Code. The project is in its early bootstrapping phase — only the initial repo skeleton exists as of now.
+**momo-agents** is a Python project for building coding agents powered by the Claude Agent SDK. A team of specialised agents collaborate over the filesystem to take a feature idea from concept through to working, tested code.
 
 - **Author**: bameschot
 - **License**: MIT (2026)
-- **Purpose**: Developing AI coding agents using Claude Code
+- **Purpose**: Developing AI coding agents using the Claude Agent SDK
 
 ## Repository Structure
 
@@ -18,26 +18,34 @@ momo-agents/
 ├── README.md               # Project overview
 ├── LICENSE                 # MIT License
 ├── pyproject.toml          # Project metadata and dependencies
-├── scripts/          # Python agent implementations
-│   ├── designer_agent.py         # Interactive design session → workspace/design/<feature>.md
-│   ├── business_analyst_agent.py # Breaks design into story files
-│   ├── project_initialiser_agent.py  # Scaffolds workspace/ from design
-│   ├── coding_agent.py     # Claims and implements stories
-│   └── story_reviewer_agent.py   # Triages failed stories with user
-├── roles/                  # System prompts (read by each agent)
+├── scripts/                # Python agent and utility implementations
+│   ├── designer_agent.py             # Interactive design session → workspace/design/<feature>.md
+│   ├── business_analyst_agent.py     # Decomposes design into story files
+│   ├── project_initialiser_agent.py  # Scaffolds workspace/ from design; writes workspace/CLAUDE.md
+│   ├── story_orchestrator.py         # Non-LLM utility; marks stories ready when deps are met
+│   ├── junior_coding_agent.py        # Claims and implements easy stories
+│   ├── senior_coding_agent.py        # Claims and implements medium/hard stories
+│   ├── story_reviewer_agent.py       # Triages failed stories with user
+│   ├── agent_utilities.py            # Shared agent helpers
+│   └── token_logger.py               # Shared JSONL token-usage logger
+├── roles/                  # System prompt files (one per LLM agent)
 │   ├── designer.md
 │   ├── business-analyst.md
 │   ├── project-initialiser.md
-│   ├── coding-agent.md
+│   ├── junior-coding-agent.md
+│   ├── senior-coding-agent.md
 │   └── story-reviewer.md
 ├── workspace/              # All generated artefacts
-│   ├── CLAUDE.md           # Build/test/lint instructions for Coding Agents
-│   ├── design/             # Designer Agent outputs (<feature>.md)
-│   ├── stories/            # Story files (state encoded in filename suffix)
+│   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
+│   ├── design/             # Designer Agent outputs (<feature>.new.md / <feature>.processed.md)
+│   ├── stories/            # Story files (complexity + state encoded in filename)
+│   ├── .sentinels/         # Runtime coordination files (created by start-team.sh)
 │   ├── src/
 │   └── tests/
-├── orchestrate.sh          # Full pipeline orchestrator
-├── status.sh               # Live story state summary
+├── start-team.sh           # Launches all agents simultaneously in named terminal windows
+├── reset-team.sh           # Wipes all artefacts; resets to clean state
+├── reset-stories.sh        # Resets story files only (keeps generated code)
+├── status.sh               # Live story-state summary
 └── watchdog.sh             # Resets stale .working.md files after 10 min
 ```
 
@@ -73,18 +81,24 @@ ruff format .
 # Run type checker
 mypy scripts/
 
-# Run the pipeline
-./orchestrate.sh <feature-name>
+# Run the full pipeline
+./start-team.sh <feature-name>
 
 # Run an agent directly
 python scripts/designer_agent.py
-python scripts/business_analyst_agent.py --design design/my-feature.md
-python scripts/project_initialiser_agent.py --design design/my-feature.md
-python scripts/coding_agent.py
+python scripts/business_analyst_agent.py --design workspace/design/my-feature.new.md
+python scripts/project_initialiser_agent.py --design workspace/design/my-feature.new.md
+python scripts/story_orchestrator.py
+python scripts/junior_coding_agent.py
+python scripts/senior_coding_agent.py
 python scripts/story_reviewer_agent.py
 
 # Check pipeline status
 ./status.sh
+
+# Reset
+./reset-stories.sh          # stories only (keeps generated code)
+./reset-team.sh             # full reset (wipes all artefacts)
 ```
 
 ## Git Workflow
@@ -95,8 +109,6 @@ python scripts/story_reviewer_agent.py
 - **Do not force-push** to `master`/`main`
 
 ## Code Conventions
-
-Since no source code exists yet, the following are the anticipated conventions based on the Python tooling present:
 
 ### Python Style
 - Follow **PEP 8** enforced via **Ruff**
