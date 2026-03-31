@@ -207,14 +207,43 @@ def aggregate(records):
     }
 
 
-def get_chartjs_bundle():
+# Chart.js CDN URL for the UMD bundle
+CHARTJS_CDN_URL = "https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js"
+
+
+def get_chartjs_bundle(cache_dir):
     """Get the Chart.js JavaScript bundle (inline).
 
+    Fetches the Chart.js UMD bundle and caches it locally to avoid repeated
+    network requests. If the cached file exists, it is read and returned
+    immediately. If not, the bundle is downloaded from the CDN, cached, and
+    returned as a string.
+
+    Args:
+        cache_dir: Path object pointing to the directory where the cached
+                   bundle will be stored
+
     Returns:
-        String containing Chart.js source code (stub)
+        String containing Chart.js source code (UTF-8 decoded)
     """
-    # TODO: Implemented in a later story
-    return ""
+    cache_file = cache_dir / "chart.umd.min.js"
+
+    # If cache file exists, read and return it
+    if cache_file.exists():
+        return cache_file.read_text(encoding="utf-8")
+
+    # Cache miss: download from CDN
+    response = urllib.request.urlopen(CHARTJS_CDN_URL)
+    bundle_bytes = response.read()
+    bundle_str = bundle_bytes.decode("utf-8")
+
+    # Create cache directory if needed
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    # Write to cache
+    cache_file.write_text(bundle_str, encoding="utf-8")
+
+    return bundle_str
 
 
 def render_summary_table(per_agent_totals, grand_total):
@@ -275,7 +304,8 @@ def main():
     grand_total = result["grand_total"]
 
     # Get Chart.js bundle
-    chartjs_bundle = get_chartjs_bundle()
+    cache_dir = Path("workspace/.chartjs_cache")
+    chartjs_bundle = get_chartjs_bundle(cache_dir)
 
     # Render report components
     summary_table = render_summary_table(per_agent_totals, grand_total)
