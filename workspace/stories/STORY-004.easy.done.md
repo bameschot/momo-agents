@@ -1,31 +1,36 @@
-# STORY-004: easy Chart.js Bundle Fetcher and Cache
+# STORY-004: easy Summary Table HTML Renderer
 
 **Index**: 4
 **Complexity**: easy
 **Design ref**: workspace/design/token-report.new.md
-**Depends on**: STORY-001
+**Depends on**: STORY-003
 
 ## Context
-The generated HTML must be fully self-contained and work offline, which requires bundling the Chart.js UMD source inline. Downloading it on every run would be slow and fragile, so the tool maintains a local cache. This story implements the fetch-and-cache helper that later stories will call to obtain the Chart.js source string.
+This story implements the HTML summary table that appears at the top of the generated report. The table shows per-agent token counts and total cost, with a grand-total row at the bottom. Formatting correctness (thousands separators, cost precision) is a key requirement.
 
 ## Acceptance Criteria
-- [ ] `fetch_chartjs() -> str` returns the full text of the Chart.js UMD min bundle.
-- [ ] On the first call (cache absent), the function downloads from `https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js` using `urllib.request` and writes the result to `workspace/.chartjs_cache/chart.umd.min.js`.
-- [ ] On subsequent calls (cache present), the function reads from the local cache without making any network request.
-- [ ] The cache directory `workspace/.chartjs_cache/` is created automatically if it does not exist.
-- [ ] The returned string is non-empty and starts with a JavaScript comment or the `!function` / `(function` preamble typical of a UMD bundle (a basic sanity check).
-- [ ] A `tests/test_html_generator.py` file exists (even if it only contains a placeholder import for now — full chart-generation tests come in STORY-005).
+- [ ] `render_summary_table(agent_totals: list[dict], grand_total: dict) -> str` is implemented in `workspace/token_report.py`, replacing the stub from STORY-001.
+- [ ] Returns an HTML string containing a `<table>` element.
+- [ ] Table has a header row with columns: Agent, Input Tokens, Output Tokens, Cache Read Tokens, Cache Write Tokens, Total Cost (USD).
+- [ ] One data row per entry in `agent_totals`; rows are in the same order as the input list.
+- [ ] A final row labelled **Total** (using `<strong>` or `<th>`) is appended from `grand_total`.
+- [ ] Integer token counts are formatted with thousands separators (e.g. `1,234,567`).
+- [ ] `cost_usd` is formatted to exactly 6 decimal places (e.g. `0.012345`).
+- [ ] Function has a docstring.
+- [ ] Code passes `ruff check token_report.py` with no errors.
 
 ## Implementation Hints
-- Cache path: `Path(__file__).parent / ".chartjs_cache" / "chart.umd.min.js"` — this makes the cache relative to `token_report.py`, which lives in `workspace/`.
-- Use `urllib.request.urlopen` with a reasonable timeout (e.g. 15 seconds).
-- Read/write the cache file in text mode with UTF-8 encoding.
-- The function should live in `token_report.py` (single-file convention).
-- During unit tests, avoid hitting the real network: the test can pre-create the cache file with a dummy JS string and assert that `fetch_chartjs()` returns it without making a network call (monkeypatch `urllib.request.urlopen` or pre-seed the cache).
+- Use Python's built-in format spec: `f"{value:,}"` for integers with thousands separators, `f"{value:.6f}"` for cost.
+- Build the HTML with string concatenation or an f-string; no templating library needed.
+- Wrap integer cells in `<td>` and apply a `text-align: right` style (inline or via a CSS class) so numbers align correctly in the browser.
+- The grand-total row can use `<tr class="total-row">` to allow easy styling in the surrounding HTML page.
 
 ## Test Requirements
-- When a pre-seeded cache file exists at the expected path, `fetch_chartjs()` should return its contents without making any network call (verify by monkeypatching `urllib.request.urlopen` to raise if called).
-- No test is required for the live download path; that is implicitly validated by the cache-miss branch at integration time.
+Create `tests/test_summary_table.py`.
+
+- **Correct values**: given two agent-total dicts and a grand-total dict with known values, assert the returned HTML contains the correctly formatted token counts (with commas) and costs (6 dp) for each row.
+- **Grand total row**: assert the HTML contains the text "Total" and the correctly summed values.
+- **Empty agent list**: `render_summary_table([], grand_total)` returns a valid HTML table containing only the header and the grand-total row without raising.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

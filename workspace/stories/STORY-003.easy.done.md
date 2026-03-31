@@ -6,27 +6,32 @@
 **Depends on**: STORY-002
 
 ## Context
-With raw records available from the data loader, this story implements the aggregation logic that is the analytical core of the tool. It groups records by `(agent, minute bucket)` and computes per-agent totals and a grand-total row — the three data structures that the HTML generator (STORY-005) will consume to populate both the chart and the summary table.
+The aggregator takes the flat list of raw records produced by the data loader and produces two derived data structures needed by the HTML generator: (1) minute-bucket rows for the time-series chart, and (2) per-agent totals (plus a grand-total row) for the summary table. All aggregation is in-memory arithmetic — no I/O.
 
 ## Acceptance Criteria
-- [ ] `aggregate_by_minute(records)` returns a list of dicts, each with keys `minute`, `agent`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`.
-- [ ] The `minute` field is the record's `ts` truncated to `YYYY-MM-DDTHH:MM:00Z` (seconds zeroed out, trailing `Z` preserved).
-- [ ] Records sharing the same `(agent, minute)` pair have their numeric fields summed.
-- [ ] `compute_agent_totals(records)` returns a dict keyed by agent name; each value is a dict with summed `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` across **all** records for that agent.
-- [ ] `compute_grand_total(agent_totals)` returns a single dict with the same five fields summed across all agents.
-- [ ] All three functions accept an empty input and return an empty / zero result without raising.
-- [ ] `tests/test_aggregator.py` contains at least one test verifying correct minute-bucket grouping and at least one test verifying correct per-agent totalling.
+- [ ] `aggregate(records: list[dict]) -> dict` is implemented in `workspace/token_report.py`, replacing the stub from STORY-001.
+- [ ] The function returns a dict with two keys: `"buckets"` and `"agent_totals"`.
+- [ ] `"buckets"` is a list of dicts, each with keys: `minute`, `agent`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`. The `minute` field is the record's `ts` truncated to `YYYY-MM-DDTHH:MM:00Z`.
+- [ ] Within the same `(agent, minute)` pair, all numeric fields are summed correctly.
+- [ ] Buckets are sorted ascending by `minute` then by `agent` (deterministic ordering for chart rendering).
+- [ ] `"agent_totals"` is a list of dicts, each with keys: `agent`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd` — summed across all time for that agent.
+- [ ] A `"grand_total"` key in the returned dict holds a single dict with the same fields summed across all agents (agent field set to `"Total"`).
+- [ ] Function has a docstring.
+- [ ] Code passes `ruff check token_report.py` with no errors.
 
 ## Implementation Hints
-- Truncating to minute: parse `ts` with `datetime.datetime.fromisoformat(ts.rstrip("Z"))`, set `second=0`, `microsecond=0`, then format back to `YYYY-MM-DDTHH:MM:00Z`. On Python 3.8 `fromisoformat` does not support the trailing `Z` — strip it first.
-- Use `collections.defaultdict` to accumulate sums per `(agent, minute)` key.
-- These should be pure functions (no I/O) so they are straightforward to test.
-- Keep all three functions in `token_report.py` (single-file convention from CLAUDE.md).
+- Use `collections.defaultdict` keyed on `(agent, minute)` to accumulate bucket sums.
+- Truncate the timestamp by slicing the ISO string: `ts[:16] + ":00Z"` (works for strings in `YYYY-MM-DDTHH:MM` prefix form). Alternatively parse with `datetime.datetime.fromisoformat` and replace seconds/microseconds.
+- Build `agent_totals` with a second `defaultdict` keyed on `agent`.
+- Grand total can be computed from `agent_totals` in a single pass.
+- Return value structure: `{"buckets": [...], "agent_totals": [...], "grand_total": {...}}`.
 
 ## Test Requirements
-- Given two records for the same agent within the same minute and one record for the same agent in a different minute, `aggregate_by_minute()` should return two bucket dicts with the correct summed values in the shared-minute bucket.
-- Given records for two different agents, `compute_agent_totals()` should return a dict with two keys, each holding the correct per-agent sums.
-- `compute_grand_total()` applied to a two-agent totals dict should return the combined sum of all fields across both agents.
+Create `tests/test_aggregator.py`.
+
+- **Minute bucketing**: given four records for the same agent where two share the same minute and two differ, assert the result contains exactly three bucket rows with correct summed values in the shared-minute row.
+- **Multi-agent totals**: given records from two agents, assert `agent_totals` contains one entry per agent with correct sums, and `grand_total` sums across both agents.
+- **Empty input**: `aggregate([])` returns `{"buckets": [], "agent_totals": [], "grand_total": {...all zeros...}}` without raising.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

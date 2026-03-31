@@ -28,9 +28,10 @@ N_SENIOR_AGENTS=1
 DEFAULT_MODEL="claude-sonnet-4-6"
 DEFAULT_JUNIOR_MODEL="claude-haiku-4-5-20251001"
 DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
+DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
 MODEL_DESIGNER="$DEFAULT_MODEL"
 MODEL_BA="$DEFAULT_MODEL"
-MODEL_PI="$DEFAULT_MODEL"
+MODEL_PI="$DEFAULT_PI_MODEL"
 MODEL_JUNIOR="$DEFAULT_JUNIOR_MODEL"
 MODEL_SENIOR="$DEFAULT_SENIOR_MODEL"
 MODEL_REVIEWER="$DEFAULT_MODEL"
@@ -47,7 +48,7 @@ for ((i = 0; i < ${#args[@]}; i++)); do
         --model-ba=*)       MODEL_BA="${args[$i]#*=}" ;;
         --model-ba)         MODEL_BA="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
         --model-pi=*)       MODEL_PI="${args[$i]#*=}" ;;
-        --model-pi)         MODEL_PI="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-pi)         MODEL_PI="${args[$((i + 1))]:-$DEFAULT_PI_MODEL}" ;;
         --model-junior=*)   MODEL_JUNIOR="${args[$i]#*=}" ;;
         --model-junior)     MODEL_JUNIOR="${args[$((i + 1))]:-$DEFAULT_JUNIOR_MODEL}" ;;
         --model-senior=*)   MODEL_SENIOR="${args[$i]#*=}" ;;
@@ -66,7 +67,7 @@ if [ -z "$FEATURE" ]; then
     echo "  --senior-agents N     Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
     echo "  --model-designer M    Model for Designer Agent      (default: $DEFAULT_MODEL)"
     echo "  --model-ba M          Model for Business Analyst    (default: $DEFAULT_MODEL)"
-    echo "  --model-pi M          Model for Project Initialiser (default: $DEFAULT_MODEL)"
+    echo "  --model-pi M          Model for Project Initialiser (default: $DEFAULT_PI_MODEL)"
     echo "  --model-junior M      Model for Junior Coding Agents (default: $DEFAULT_JUNIOR_MODEL)"
     echo "  --model-senior M      Model for Senior Coding Agents (default: $DEFAULT_SENIOR_MODEL)"
     echo "  --model-reviewer M    Model for Story Reviewer      (default: $DEFAULT_MODEL)"

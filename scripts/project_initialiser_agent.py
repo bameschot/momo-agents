@@ -11,7 +11,7 @@ from token_logger import log_usage, print_message
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _parse_args() -> argparse.Namespace:

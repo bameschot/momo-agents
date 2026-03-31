@@ -1,4 +1,4 @@
-# STORY-002: easy CLI Entry Point and Data Loader
+# STORY-002: easy Data Loader
 
 **Index**: 2
 **Complexity**: easy
@@ -6,31 +6,33 @@
 **Depends on**: STORY-001
 
 ## Context
-This story creates `workspace/token_report.py` — the single production file for the entire tool — and implements the two lowest-level concerns: the CLI argument parser and the JSONL data loader. Together they form the foundation on which the aggregator and HTML generator (later stories) will be built. Getting the data-loading contract right here means subsequent stories can trust the shape of the records they receive.
+The data loader is responsible for discovering all `*.jsonl` files under the tokens directory, deriving agent names from filenames, and parsing each line into a structured record dict. Robustness is a key requirement: invalid JSON lines must not crash the tool; they are skipped with a warning to stderr. The loader also enforces the requirement that at least one `.jsonl` file is present (exit code 1 otherwise).
 
 ## Acceptance Criteria
-- [ ] `python workspace/token_report.py --help` exits 0 and documents the `--tokens-dir` option.
-- [ ] `python workspace/token_report.py --tokens-dir <missing-path>` exits with code 1 and prints an error to stderr.
-- [ ] When `--tokens-dir` points to a directory containing no `*.jsonl` files, the tool exits with code 1 and prints a descriptive error to stderr.
-- [ ] The data loader discovers all `*.jsonl` files in the given directory (non-recursive is acceptable).
-- [ ] The agent name for each file is the stem of the filename (e.g. `designer.jsonl` → `"designer"`).
-- [ ] Each valid JSON line is parsed into a record dict with keys: `ts`, `agent`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`.
+- [ ] `load_records(tokens_dir: Path) -> list[dict]` is implemented in `workspace/token_report.py`, replacing the stub from STORY-001.
+- [ ] All `*.jsonl` files in `tokens_dir` are discovered (non-recursive is sufficient; all files are at the top level per the design).
+- [ ] Agent name is derived from the filename stem (e.g. `designer.jsonl` → `"designer"`).
+- [ ] Each valid JSON line produces a record dict with keys: `ts`, `agent`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`.
 - [ ] Blank lines are silently skipped.
-- [ ] Lines that fail JSON parsing emit a warning to stderr and are skipped; the tool continues processing the remaining lines.
-- [ ] The `tests/test_data_loader.py` file exists and contains at least one passing test that exercises the happy path and at least one test for the malformed-line warning.
+- [ ] Lines that fail `json.loads()` are skipped and a warning is printed to stderr identifying the file and line number.
+- [ ] If no `*.jsonl` files are found in `tokens_dir`, the function prints an error to stderr and the tool exits with code 1.
+- [ ] Function has a docstring.
+- [ ] Code passes `ruff check token_report.py` with no errors.
 
 ## Implementation Hints
-- Use `argparse.ArgumentParser` with one optional argument `--tokens-dir` defaulting to `".sentinels/tokens"`.
-- Use `pathlib.Path` throughout for file discovery and path manipulation.
-- The output filename (`token-report_YYYY-MM-DD_HH-MM-SS.html`) can be generated here with `datetime.datetime.now().strftime(...)` even if the file is not yet written — the placeholder can be wired up properly in STORY-005.
-- Keep `load_records(tokens_dir: Path) -> list[dict]` as a standalone function so tests can call it directly.
-- `from __future__ import annotations` at the top of the file enables lowercase `list[dict]` generics on Python 3.8.
-- Only stdlib imports: `json`, `argparse`, `pathlib`, `sys` for the exit-1 path.
+- Use `pathlib.Path.glob("*.jsonl")` to discover files.
+- Iterate with `enumerate(f, 1)` to get 1-based line numbers for warnings.
+- Use `json.loads(line.strip())` inside a `try/except json.JSONDecodeError`.
+- After parsing, inject `"agent": path.stem` into each record dict.
+- Numeric fields (`input_tokens`, etc.) should be cast to `int`/`float` if they arrive as the wrong type — the design guarantees the schema but defensive casting is fine.
+- If no files are found, call `sys.exit(1)` after printing to stderr; this keeps error handling consistent with the CLI entry point.
 
 ## Test Requirements
-- Given a temporary directory with two JSONL files (each containing two valid records and one malformed line), calling `load_records()` should return exactly four records (two per file), each with the correct agent name derived from the filename.
-- Given a temporary directory with a file that contains only blank lines, `load_records()` should return an empty list without raising an exception.
-- Calling `load_records()` with a path to a non-existent directory should raise an appropriate error (or return an error signal) that causes the CLI to exit 1.
+Create `tests/test_loader.py`.
+
+- **Valid data**: given a temporary directory with two `.jsonl` files (each containing several valid records), assert that `load_records` returns the correct number of records, agent names match filename stems, and all expected fields are present.
+- **Invalid lines skipped**: a file containing one valid line and one malformed JSON line; assert only the valid record is returned and a warning was printed to stderr.
+- **No files found**: calling `load_records` on an empty temporary directory causes the process to exit with code 1 (test via `subprocess` or `pytest.raises(SystemExit)`).
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

@@ -360,7 +360,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--senior-agents N` | Number of parallel Senior Coding Agents (medium/hard stories) | `1` |
 | `--model-designer M` | Claude model for the Designer | `claude-sonnet-4-6` |
 | `--model-ba M` | Claude model for the Business Analyst | `claude-sonnet-4-6` |
-| `--model-pi M` | Claude model for the Project Initialiser | `claude-sonnet-4-6` |
+| `--model-pi M` | Claude model for the Project Initialiser | `claude-haiku-4-5-20251001` |
 | `--model-junior M` | Claude model for Junior Coding Agents | `claude-haiku-4-5-20251001` |
 | `--model-senior M` | Claude model for Senior Coding Agents | `claude-sonnet-4-6` |
 | `--model-reviewer M` | Claude model for the Story Reviewer | `claude-sonnet-4-6` |
