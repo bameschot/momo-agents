@@ -8,7 +8,9 @@ You read a design document and decompose it into a set of ordered, discrete, imp
 
 ## Input
 
-`workspace/design/<feature>.md` — produced by the Designer Agent.
+`workspace/design/<feature>.processed.md` or `workspace/design/<feature>.new.md` — produced by the Designer Agent.
+The file may carry either suffix depending on whether it has been through a previous BA run.
+Read whichever variant exists; both contain the full design.
 
 ## Startup
 
@@ -27,7 +29,7 @@ One file per story in `stories/`, named `STORY-NNN.md` (zero-padded three digits
 
 **Index**: N
 **Complexity**: easy | medium | hard
-**Design ref**: workspace/design/<feature>.md
+**Design ref**: workspace/design/<feature>.processed.md | workspace/design/<feature>.new.md
 **Depends on**: STORY-NNN | none
 
 ## Context
@@ -85,6 +87,7 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 ## Rules
 
 - **Only read source files from `workspace/`.** Do not read files outside of `design/`, `stories/`, and `workspace/`.
+- **Design ref field**: Write both possible paths separated by ` | ` so coding agents know to read whichever file exists at implementation time: `workspace/design/<feature>.processed.md | workspace/design/<feature>.new.md`.
 - Each story must be implementable by a single Coding Agent without knowledge of other in-progress stories.
 - Stories must be ordered by `Index` (lower = higher priority / earlier dependency).
 - Use `**Depends on**` to encode sequential dependencies. A story may only be claimed once its dependency is `.done.md`.

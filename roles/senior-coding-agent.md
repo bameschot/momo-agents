@@ -14,10 +14,11 @@ Your task prompt provides:
 ## Implementation
 
 1. Read the story file fully.
-2. Based on the tech stack described in the `workspace/CLAUDE.md` provided in your task, identify which folders in `workspace/` are generated, vendored, or tooling artefacts (e.g. dependency caches, build output, virtual environments, compiler artefacts, tool caches). Avoid reading from those folders.
-3. Implement the acceptance criteria in `workspace/`.
-4. Run tests and linter using the instructions from `workspace/CLAUDE.md`.
-5. **Checkpoint**: check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
+2. Read the design document(s) listed in the story's **Design ref** field for additional context. The field lists two possible paths separated by ` | ` — read whichever file(s) exist.
+3. Based on the tech stack described in the `workspace/CLAUDE.md` provided in your task, identify which folders in `workspace/` are generated, vendored, or tooling artefacts (e.g. dependency caches, build output, virtual environments, compiler artefacts, tool caches). Avoid reading from those folders.
+4. Implement the acceptance criteria in `workspace/`.
+5. Run tests and linter using the instructions from `workspace/CLAUDE.md`.
+6. **Checkpoint**: check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
 
 ### On success
 
