@@ -16,6 +16,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.request
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -104,8 +106,43 @@ def aggregate_by_minute(records: list[dict]) -> list[dict]:
 
     Returns a list of aggregated dicts sorted by (minute, agent).
     """
-    # TODO: implement
-    raise NotImplementedError
+    buckets: dict[tuple[str, str], dict] = defaultdict(
+        lambda: {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "cost_usd": 0.0,
+        }
+    )
+
+    for record in records:
+        # Truncate timestamp to minute
+        ts = record["ts"]
+        dt = datetime.fromisoformat(ts.rstrip("Z"))
+        dt = dt.replace(second=0, microsecond=0)
+        minute_bucket = dt.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+
+        agent = record["agent"]
+        key = (minute_bucket, agent)
+
+        # Sum the numeric fields
+        for field in TOKEN_FIELDS:
+            buckets[key][field] += record.get(field, 0)
+        buckets[key]["cost_usd"] += record.get("cost_usd", 0.0)
+
+    # Convert to list and sort by (minute, agent)
+    result = []
+    for (minute, agent), totals in sorted(buckets.items()):
+        result.append(
+            {
+                "minute": minute,
+                "agent": agent,
+                **totals,
+            }
+        )
+
+    return result
 
 
 def compute_agent_totals(records: list[dict]) -> dict[str, dict]:
@@ -115,14 +152,41 @@ def compute_agent_totals(records: list[dict]) -> dict[str, dict]:
         input_tokens, output_tokens, cache_read_tokens,
         cache_write_tokens, cost_usd
     """
-    # TODO: implement
-    raise NotImplementedError
+    totals: dict[str, dict] = defaultdict(
+        lambda: {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "cost_usd": 0.0,
+        }
+    )
+
+    for record in records:
+        agent = record["agent"]
+        for field in TOKEN_FIELDS:
+            totals[agent][field] += record.get(field, 0)
+        totals[agent]["cost_usd"] += record.get("cost_usd", 0.0)
+
+    return dict(totals)
 
 
 def compute_grand_total(agent_totals: dict[str, dict]) -> dict:
     """Sum all agents into a single grand-total dict."""
-    # TODO: implement
-    raise NotImplementedError
+    grand_total = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0,
+    }
+
+    for agent_dict in agent_totals.values():
+        for field in TOKEN_FIELDS:
+            grand_total[field] += agent_dict.get(field, 0)
+        grand_total["cost_usd"] += agent_dict.get("cost_usd", 0.0)
+
+    return grand_total
 
 
 # ---------------------------------------------------------------------------
