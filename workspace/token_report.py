@@ -322,17 +322,188 @@ def render_summary_table(agent_totals, grand_total):
     return html
 
 
-def render_chart_html(minute_buckets):
-    """Render the interactive chart HTML and JavaScript.
+def render_chart_html(buckets, chartjs_src):
+    """Render the interactive Chart.js chart section as a self-contained HTML fragment.
+
+    Generates an HTML fragment containing the Chart.js library (embedded verbatim),
+    interactive controls (toggle button, datetime-range pickers, reset button),
+    a canvas element, and an inline script that embeds all aggregated data as a
+    JSON literal and implements client-side interactivity.
 
     Args:
-        minute_buckets: List of aggregated minute bucket records
+        buckets: List of aggregated minute-bucket dicts, each containing:
+                 minute, agent, input_tokens, output_tokens, cache_read_tokens,
+                 cache_write_tokens, cost_usd
+        chartjs_src: String containing the Chart.js source code to embed inline
 
     Returns:
-        HTML and JavaScript string (stub)
+        HTML string containing the full interactive chart section
     """
-    # TODO: Implemented in a later story
-    return ""
+    token_types = ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"]
+    palette = [
+        "#4dc9f6", "#f67019", "#f53794", "#537bc4", "#acc236",
+        "#166a8f", "#00a950", "#58595b", "#8549ba", "#e8c534",
+        "#d35400", "#27ae60", "#2980b9", "#8e44ad", "#c0392b",
+    ]
+
+    # Deduplicate and sort minutes and agents from the full bucket list
+    all_minutes = sorted({b["minute"] for b in buckets})
+    all_agents = sorted({b["agent"] for b in buckets})
+
+    # Pre-compute token count datasets (one per agent × token_type)
+    token_datasets = []
+    color_idx = 0
+    for agent in all_agents:
+        for tt in token_types:
+            data = []
+            for m in all_minutes:
+                matching = [b for b in buckets if b["agent"] == agent and b["minute"] == m]
+                data.append(matching[0][tt] if matching else 0)
+            token_datasets.append({
+                "label": f"{agent} \u00b7 {tt}",
+                "data": data,
+                "borderColor": palette[color_idx % len(palette)],
+                "backgroundColor": palette[color_idx % len(palette)],
+                "fill": False,
+                "tension": 0.1,
+            })
+            color_idx += 1
+
+    # Pre-compute cost datasets (one per agent)
+    cost_datasets = []
+    for i, agent in enumerate(all_agents):
+        data = []
+        for m in all_minutes:
+            matching = [b for b in buckets if b["agent"] == agent and b["minute"] == m]
+            data.append(matching[0]["cost_usd"] if matching else 0)
+        cost_datasets.append({
+            "label": f"{agent} \u00b7 cost_usd",
+            "data": data,
+            "borderColor": palette[i % len(palette)],
+            "backgroundColor": palette[i % len(palette)],
+            "fill": False,
+            "tension": 0.1,
+        })
+
+    buckets_json = json.dumps(buckets, default=str)
+    all_minutes_json = json.dumps(all_minutes)
+    token_datasets_json = json.dumps(token_datasets, default=str, ensure_ascii=False)
+    cost_datasets_json = json.dumps(cost_datasets, default=str, ensure_ascii=False)
+
+    return f"""<script>{chartjs_src}</script>
+<div style="margin: 20px 0;">
+  <button id="toggleBtn" onclick="toggleView()">Switch to Cost USD</button>
+  &nbsp;
+  <label>From: <input type="datetime-local" id="fromPicker" onchange="applyFilter()"></label>
+  &nbsp;
+  <label>To: <input type="datetime-local" id="toPicker" onchange="applyFilter()"></label>
+  &nbsp;
+  <button id="resetBtn" onclick="resetFilter()">Reset</button>
+</div>
+<canvas id="tokenChart"></canvas>
+<script>
+(function() {{
+  const RAW_BUCKETS = {buckets_json};
+  const ALL_MINUTES = {all_minutes_json};
+  const TOKEN_DATASETS = {token_datasets_json};
+  const COST_DATASETS = {cost_datasets_json};
+
+  let currentView = 'tokens';
+  let chart = null;
+
+  function getFilteredIndices() {{
+    const fromVal = document.getElementById('fromPicker').value;
+    const toVal = document.getElementById('toPicker').value;
+    const indices = [];
+    ALL_MINUTES.forEach(function(m, i) {{
+      if (fromVal && m < fromVal) return;
+      if (toVal && m > toVal) return;
+      indices.push(i);
+    }});
+    return indices;
+  }}
+
+  function filterDatasets(datasets, indices) {{
+    return datasets.map(function(ds) {{
+      return Object.assign({{}}, ds, {{
+        data: indices.map(function(i) {{ return ds.data[i]; }})
+      }});
+    }});
+  }}
+
+  function renderChart() {{
+    const indices = getFilteredIndices();
+    const labels = indices.map(function(i) {{ return ALL_MINUTES[i]; }});
+    const isTokenView = currentView === 'tokens';
+    const datasets = isTokenView
+      ? filterDatasets(TOKEN_DATASETS, indices)
+      : filterDatasets(COST_DATASETS, indices);
+    const yLabel = isTokenView ? 'Token Count' : 'Cost (USD)';
+    const title = isTokenView ? 'Token Usage Over Time' : 'Cost Over Time';
+
+    const ctx = document.getElementById('tokenChart').getContext('2d');
+    if (chart) {{
+      chart.destroy();
+    }}
+    chart = new Chart(ctx, {{
+      type: 'line',
+      data: {{
+        labels: labels,
+        datasets: datasets
+      }},
+      options: {{
+        responsive: true,
+        plugins: {{
+          title: {{
+            display: true,
+            text: title
+          }},
+          legend: {{
+            display: true
+          }}
+        }},
+        scales: {{
+          y: {{
+            title: {{
+              display: true,
+              text: yLabel
+            }}
+          }}
+        }}
+      }}
+    }});
+  }}
+
+  function toggleView() {{
+    if (currentView === 'tokens') {{
+      currentView = 'cost';
+      document.getElementById('toggleBtn').textContent = 'Switch to Token Counts';
+    }} else {{
+      currentView = 'tokens';
+      document.getElementById('toggleBtn').textContent = 'Switch to Cost USD';
+    }}
+    renderChart();
+  }}
+
+  function applyFilter() {{
+    renderChart();
+  }}
+
+  function resetFilter() {{
+    document.getElementById('fromPicker').value = '';
+    document.getElementById('toPicker').value = '';
+    renderChart();
+  }}
+
+  window.toggleView = toggleView;
+  window.applyFilter = applyFilter;
+  window.resetFilter = resetFilter;
+
+  document.addEventListener('DOMContentLoaded', function() {{
+    renderChart();
+  }});
+}})();
+</script>"""
 
 
 def main():
@@ -371,7 +542,7 @@ def main():
 
     # Render report components
     summary_table = render_summary_table(per_agent_totals, grand_total)
-    chart_html = render_chart_html(minute_buckets)
+    chart_html = render_chart_html(minute_buckets, chartjs_bundle)
 
     # Assemble HTML
     html_content = f"""<!DOCTYPE html>
@@ -420,9 +591,6 @@ def main():
         {summary_table}
         {chart_html}
     </div>
-    <script>
-    {chartjs_bundle}
-    </script>
 </body>
 </html>"""
 
