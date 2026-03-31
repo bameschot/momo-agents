@@ -92,7 +92,7 @@ body {
 .page-wrapper {
   display: flex;
   gap: 2rem;
-  max-width: 1200px;
+  max-width: calc(860px + 2rem + 220px); /* article + gap + toc = 1112px */
   margin: 0 auto;
 }
 
@@ -147,7 +147,7 @@ article {
 #toc-mobile nav ul { list-style: none; padding-left: 0; }
 #toc-mobile nav ul ul { padding-left: 1rem; }
 
-@media (max-width: 768px) {
+@media (max-width: 860px) {
   .page-wrapper { display: block; }
   #toc-sidebar { display: none; }
   #toc-mobile { display: block; }
@@ -246,10 +246,17 @@ pre code {
 }
 
 /* ── Tables ─────────────────────────────────────────────────────────────── */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
-  margin: 1rem 0;
+  min-width: max-content;
+  margin: 0;
   font-size: 0.95rem;
 }
 
@@ -764,7 +771,7 @@ class _BlockParser:
                 return
 
         # Build table HTML
-        out: list[str] = ['<table>']
+        out: list[str] = ['<div class="table-wrapper"><table>']
 
         # Header
         out.append('<thead><tr>')
@@ -786,7 +793,7 @@ class _BlockParser:
             out.append('</tr>')
         out.append('</tbody>')
 
-        out.append('</table>')
+        out.append('</table></div>')
         self._html_parts.append(''.join(out))
 
     def _parse_paragraph(self) -> None:
