@@ -16,6 +16,7 @@ Output:
 import argparse
 import json
 import sys
+import urllib.request
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -88,14 +89,122 @@ def load_records(tokens_dir):
 def aggregate(records):
     """Aggregate records by minute bucket and compute totals.
 
+    Groups records by (agent, minute) where minute is the record's timestamp
+    truncated to YYYY-MM-DDTHH:MM:00Z. Computes sums of all numeric fields
+    within each bucket, per-agent totals, and a grand total across all agents.
+
     Args:
-        records: List of record dicts
+        records: List of record dicts with keys: ts, agent, input_tokens,
+                 output_tokens, cache_read_tokens, cache_write_tokens, cost_usd
 
     Returns:
-        Tuple of (minute_buckets, per_agent_totals, grand_total) (stubs)
+        Dict with keys:
+        - "buckets": list of aggregated minute-bucket dicts, sorted by minute
+                     then agent
+        - "agent_totals": list of per-agent total dicts, with all numeric fields
+                          summed across all time
+        - "grand_total": dict with all numeric fields summed across all agents
+                         (agent field set to "Total")
     """
-    # TODO: Implemented in a later story
-    return [], {}, {}
+    # Use defaultdict to accumulate bucket sums
+    bucket_data = defaultdict(lambda: {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0,
+    })
+
+    # Use defaultdict for agent totals
+    agent_totals_data = defaultdict(lambda: {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0,
+    })
+
+    # Process each record
+    for record in records:
+        # Truncate timestamp to minute bucket
+        ts = record["ts"]
+        minute = ts[:16] + ":00Z"  # YYYY-MM-DDTHH:MM:00Z
+
+        # Bucket key
+        bucket_key = (record["agent"], minute)
+
+        # Accumulate bucket data
+        bucket_data[bucket_key]["input_tokens"] += record.get(
+            "input_tokens", 0
+        )
+        bucket_data[bucket_key]["output_tokens"] += record.get(
+            "output_tokens", 0
+        )
+        bucket_data[bucket_key]["cache_read_tokens"] += record.get(
+            "cache_read_tokens", 0
+        )
+        bucket_data[bucket_key]["cache_write_tokens"] += record.get(
+            "cache_write_tokens", 0
+        )
+        bucket_data[bucket_key]["cost_usd"] += record.get("cost_usd", 0.0)
+
+        # Accumulate agent totals
+        agent = record["agent"]
+        agent_totals_data[agent]["input_tokens"] += record.get(
+            "input_tokens", 0
+        )
+        agent_totals_data[agent]["output_tokens"] += record.get(
+            "output_tokens", 0
+        )
+        agent_totals_data[agent]["cache_read_tokens"] += record.get(
+            "cache_read_tokens", 0
+        )
+        agent_totals_data[agent]["cache_write_tokens"] += record.get(
+            "cache_write_tokens", 0
+        )
+        agent_totals_data[agent]["cost_usd"] += record.get("cost_usd", 0.0)
+
+    # Build buckets list with minute and agent fields
+    buckets = []
+    for (agent, minute), data in bucket_data.items():
+        bucket = {"minute": minute, "agent": agent, **data}
+        buckets.append(bucket)
+
+    # Sort buckets by minute, then by agent
+    buckets.sort(key=lambda x: (x["minute"], x["agent"]))
+
+    # Build agent_totals list
+    agent_totals = []
+    for agent, data in agent_totals_data.items():
+        total = {"agent": agent, **data}
+        agent_totals.append(total)
+
+    # Sort agent totals by agent name for deterministic ordering
+    agent_totals.sort(key=lambda x: x["agent"])
+
+    # Build grand total
+    grand_total = {
+        "agent": "Total",
+        "input_tokens": sum(
+            a["input_tokens"] for a in agent_totals
+        ),
+        "output_tokens": sum(
+            a["output_tokens"] for a in agent_totals
+        ),
+        "cache_read_tokens": sum(
+            a["cache_read_tokens"] for a in agent_totals
+        ),
+        "cache_write_tokens": sum(
+            a["cache_write_tokens"] for a in agent_totals
+        ),
+        "cost_usd": sum(a["cost_usd"] for a in agent_totals),
+    }
+
+    return {
+        "buckets": buckets,
+        "agent_totals": agent_totals,
+        "grand_total": grand_total,
+    }
 
 
 def get_chartjs_bundle():
@@ -160,7 +269,10 @@ def main():
 
     # Load and aggregate records
     records = load_records(tokens_dir)
-    minute_buckets, per_agent_totals, grand_total = aggregate(records)
+    result = aggregate(records)
+    minute_buckets = result["buckets"]
+    per_agent_totals = result["agent_totals"]
+    grand_total = result["grand_total"]
 
     # Get Chart.js bundle
     chartjs_bundle = get_chartjs_bundle()

@@ -1,150 +1,242 @@
-"""Tests for the aggregation logic (minute-bucket grouping and per-agent totals)."""
+"""Tests for the aggregator component."""
 
-from __future__ import annotations
-
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from token_report import aggregate_by_minute, compute_agent_totals, compute_grand_total
+from token_report import aggregate
 
 
-def make_record(
-    agent: str,
-    ts: str,
-    input_tokens: int = 0,
-    output_tokens: int = 0,
-    cache_read_tokens: int = 0,
-    cache_write_tokens: int = 0,
-    cost_usd: float = 0.0,
-) -> dict:
-    """Helper to create a test record dict."""
-    return {
-        "ts": ts,
-        "agent": agent,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cache_read_tokens": cache_read_tokens,
-        "cache_write_tokens": cache_write_tokens,
-        "cost_usd": cost_usd,
-    }
+class TestAggregator:
+    """Tests for the aggregator component."""
 
+    def test_minute_bucketing(self):
+        """Test minute bucketing with sum aggregation.
 
-def test_aggregate_same_minute_same_agent() -> None:
-    """Two records in the same minute for the same agent are summed."""
-    records = [
-        make_record("designer", "2026-03-30T12:55:10Z", input_tokens=3, output_tokens=10),
-        make_record("designer", "2026-03-30T12:55:40Z", input_tokens=7, output_tokens=20),
-    ]
-    buckets = aggregate_by_minute(records)
+        Given four records for the same agent where two share the same minute,
+        verify:
+        - Exactly three bucket rows (two single records + one combined)
+        - Correct summed values in the shared-minute row
+        """
+        records = [
+            {
+                "ts": "2026-03-30T12:00:15Z",
+                "agent": "test",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_tokens": 200,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.001,
+            },
+            {
+                "ts": "2026-03-30T12:00:45Z",  # Same minute
+                "agent": "test",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_tokens": 200,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.001,
+            },
+            {
+                "ts": "2026-03-30T12:01:15Z",  # Different minute
+                "agent": "test",
+                "input_tokens": 50,
+                "output_tokens": 25,
+                "cache_read_tokens": 100,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.0005,
+            },
+            {
+                "ts": "2026-03-30T12:02:15Z",  # Different minute
+                "agent": "test",
+                "input_tokens": 75,
+                "output_tokens": 37,
+                "cache_read_tokens": 150,
+                "cache_write_tokens": 10,
+                "cost_usd": 0.00075,
+            },
+        ]
 
-    assert len(buckets) == 1
-    assert buckets[0]["minute"] == "2026-03-30T12:55:00Z"
-    assert buckets[0]["agent"] == "designer"
-    assert buckets[0]["input_tokens"] == 10
-    assert buckets[0]["output_tokens"] == 30
+        result = aggregate(records)
+        buckets = result["buckets"]
 
+        # Assert exactly three buckets
+        assert len(buckets) == 3, (
+            f"Expected 3 buckets, got {len(buckets)}"
+        )
 
-def test_aggregate_different_minutes() -> None:
-    """Two records in different minutes for the same agent are separate."""
-    records = [
-        make_record("designer", "2026-03-30T12:55:10Z", input_tokens=3, output_tokens=10),
-        make_record("designer", "2026-03-30T12:56:10Z", input_tokens=7, output_tokens=20),
-    ]
-    buckets = aggregate_by_minute(records)
+        # Check the first bucket (combined minute)
+        first_bucket = buckets[0]
+        assert first_bucket["minute"] == "2026-03-30T12:00:00Z"
+        assert first_bucket["agent"] == "test"
+        assert first_bucket["input_tokens"] == 200  # 100 + 100
+        assert first_bucket["output_tokens"] == 100  # 50 + 50
+        assert first_bucket["cache_read_tokens"] == 400  # 200 + 200
+        assert first_bucket["cache_write_tokens"] == 0  # 0 + 0
+        assert first_bucket["cost_usd"] == 0.002  # 0.001 + 0.001
 
-    assert len(buckets) == 2
-    assert buckets[0]["minute"] == "2026-03-30T12:55:00Z"
-    assert buckets[1]["minute"] == "2026-03-30T12:56:00Z"
+    def test_multi_agent_totals(self):
+        """Test aggregation with multiple agents.
 
+        Given records from two agents, verify:
+        - agent_totals contains one entry per agent with correct sums
+        - grand_total sums across both agents
+        """
+        records = [
+            {
+                "ts": "2026-03-30T12:00:15Z",
+                "agent": "agent_a",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_tokens": 200,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.001,
+            },
+            {
+                "ts": "2026-03-30T12:01:15Z",
+                "agent": "agent_a",
+                "input_tokens": 100,
+                "output_tokens": 50,
+                "cache_read_tokens": 200,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.001,
+            },
+            {
+                "ts": "2026-03-30T12:00:15Z",
+                "agent": "agent_b",
+                "input_tokens": 50,
+                "output_tokens": 25,
+                "cache_read_tokens": 100,
+                "cache_write_tokens": 10,
+                "cost_usd": 0.0005,
+            },
+            {
+                "ts": "2026-03-30T12:01:15Z",
+                "agent": "agent_b",
+                "input_tokens": 50,
+                "output_tokens": 25,
+                "cache_read_tokens": 100,
+                "cache_write_tokens": 10,
+                "cost_usd": 0.0005,
+            },
+        ]
 
-def test_aggregate_different_agents_same_minute() -> None:
-    """Two records for different agents in the same minute are separate."""
-    records = [
-        make_record("designer", "2026-03-30T12:55:10Z", input_tokens=3, output_tokens=10),
-        make_record("architect", "2026-03-30T12:55:40Z", input_tokens=7, output_tokens=20),
-    ]
-    buckets = aggregate_by_minute(records)
+        result = aggregate(records)
+        agent_totals = result["agent_totals"]
+        grand_total = result["grand_total"]
 
-    assert len(buckets) == 2
-    # Sorted by (minute, agent)
-    assert buckets[0]["agent"] == "architect"
-    assert buckets[1]["agent"] == "designer"
+        # Assert one entry per agent
+        assert len(agent_totals) == 2, (
+            f"Expected 2 agent totals, got {len(agent_totals)}"
+        )
 
+        # Check agent_a totals
+        agent_a_total = next(
+            (a for a in agent_totals if a["agent"] == "agent_a"), None
+        )
+        assert agent_a_total is not None
+        assert agent_a_total["input_tokens"] == 200
+        assert agent_a_total["output_tokens"] == 100
+        assert agent_a_total["cache_read_tokens"] == 400
+        assert agent_a_total["cache_write_tokens"] == 0
+        assert agent_a_total["cost_usd"] == 0.002
 
-def test_aggregate_cost_usd_summed() -> None:
-    """Cost fields are summed correctly."""
-    records = [
-        make_record("designer", "2026-03-30T12:55:10Z", cost_usd=0.001234),
-        make_record("designer", "2026-03-30T12:55:40Z", cost_usd=0.005678),
-    ]
-    buckets = aggregate_by_minute(records)
+        # Check agent_b totals
+        agent_b_total = next(
+            (a for a in agent_totals if a["agent"] == "agent_b"), None
+        )
+        assert agent_b_total is not None
+        assert agent_b_total["input_tokens"] == 100
+        assert agent_b_total["output_tokens"] == 50
+        assert agent_b_total["cache_read_tokens"] == 200
+        assert agent_b_total["cache_write_tokens"] == 20
+        assert agent_b_total["cost_usd"] == 0.001
 
-    assert len(buckets) == 1
-    # Allow for floating point precision
-    assert abs(buckets[0]["cost_usd"] - 0.006912) < 1e-9
+        # Check grand total
+        assert grand_total["agent"] == "Total"
+        assert grand_total["input_tokens"] == 300  # 200 + 100
+        assert grand_total["output_tokens"] == 150  # 100 + 50
+        assert grand_total["cache_read_tokens"] == 600  # 400 + 200
+        assert grand_total["cache_write_tokens"] == 20  # 0 + 20
+        assert grand_total["cost_usd"] == 0.003  # 0.002 + 0.001
 
+    def test_empty_input(self):
+        """Test aggregation with empty input.
 
-def test_aggregate_empty_records() -> None:
-    """Empty records list returns empty list."""
-    buckets = aggregate_by_minute([])
-    assert len(buckets) == 0
+        Verify:
+        - Returns structure with empty lists
+        - grand_total has all fields set to zero
+        """
+        result = aggregate([])
 
+        # Assert empty buckets
+        assert result["buckets"] == [], (
+            f"Expected empty buckets, got {result['buckets']}"
+        )
 
-def test_compute_agent_totals_basic() -> None:
-    """Per-agent totals sum correctly across all time."""
-    records = [
-        make_record("designer", "2026-03-30T12:55:10Z", input_tokens=3, output_tokens=10),
-        make_record("designer", "2026-03-30T12:56:10Z", input_tokens=7, output_tokens=20),
-        make_record("architect", "2026-03-30T12:55:10Z", input_tokens=5, output_tokens=15),
-    ]
-    totals = compute_agent_totals(records)
+        # Assert empty agent_totals
+        assert result["agent_totals"] == [], (
+            f"Expected empty agent_totals, got {result['agent_totals']}"
+        )
 
-    assert len(totals) == 2
-    assert totals["designer"]["input_tokens"] == 10
-    assert totals["designer"]["output_tokens"] == 30
-    assert totals["architect"]["input_tokens"] == 5
-    assert totals["architect"]["output_tokens"] == 15
+        # Assert grand_total with zeros
+        grand_total = result["grand_total"]
+        assert grand_total["agent"] == "Total"
+        assert grand_total["input_tokens"] == 0
+        assert grand_total["output_tokens"] == 0
+        assert grand_total["cache_read_tokens"] == 0
+        assert grand_total["cache_write_tokens"] == 0
+        assert grand_total["cost_usd"] == 0.0
 
+    def test_bucket_sorting(self):
+        """Test that buckets are sorted by minute then by agent."""
+        records = [
+            {
+                "ts": "2026-03-30T12:02:15Z",
+                "agent": "zebra",
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_read_tokens": 20,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.0001,
+            },
+            {
+                "ts": "2026-03-30T12:01:15Z",
+                "agent": "alpha",
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_read_tokens": 20,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.0001,
+            },
+            {
+                "ts": "2026-03-30T12:01:20Z",
+                "agent": "beta",
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_read_tokens": 20,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.0001,
+            },
+            {
+                "ts": "2026-03-30T12:02:20Z",
+                "agent": "alpha",
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cache_read_tokens": 20,
+                "cache_write_tokens": 0,
+                "cost_usd": 0.0001,
+            },
+        ]
 
-def test_compute_agent_totals_empty() -> None:
-    """Empty records list returns empty dict."""
-    totals = compute_agent_totals([])
-    assert len(totals) == 0
+        result = aggregate(records)
+        buckets = result["buckets"]
 
+        # Assert buckets are sorted by (minute, agent)
+        expected_order = [
+            ("2026-03-30T12:01:00Z", "alpha"),
+            ("2026-03-30T12:01:00Z", "beta"),
+            ("2026-03-30T12:02:00Z", "alpha"),
+            ("2026-03-30T12:02:00Z", "zebra"),
+        ]
 
-def test_compute_grand_total() -> None:
-    """Grand total sums across all agents."""
-    agent_totals = {
-        "designer": {
-            "input_tokens": 10,
-            "output_tokens": 30,
-            "cache_read_tokens": 100,
-            "cache_write_tokens": 0,
-            "cost_usd": 0.01,
-        },
-        "architect": {
-            "input_tokens": 5,
-            "output_tokens": 15,
-            "cache_read_tokens": 50,
-            "cache_write_tokens": 0,
-            "cost_usd": 0.005,
-        },
-    }
-    grand = compute_grand_total(agent_totals)
-
-    assert grand["input_tokens"] == 15
-    assert grand["output_tokens"] == 45
-    assert grand["cache_read_tokens"] == 150
-    assert grand["cache_write_tokens"] == 0
-    assert abs(grand["cost_usd"] - 0.015) < 1e-9
-
-
-def test_compute_grand_total_empty() -> None:
-    """Empty agent totals returns zero dict."""
-    grand = compute_grand_total({})
-    assert grand["input_tokens"] == 0
-    assert grand["output_tokens"] == 0
-    assert grand["cache_read_tokens"] == 0
-    assert grand["cache_write_tokens"] == 0
-    assert grand["cost_usd"] == 0.0
+        actual_order = [(b["minute"], b["agent"]) for b in buckets]
+        assert actual_order == expected_order, (
+            f"Expected order {expected_order}, got {actual_order}"
+        )
