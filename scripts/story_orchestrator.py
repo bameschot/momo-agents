@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
+from agent_utilities import PROJECT_ROOT, resolve_path
 
 DEFAULT_POLL_INTERVAL = 5  # seconds
 
@@ -116,7 +116,5 @@ def run(stories_dir: Path, poll_interval: int) -> None:
 
 if __name__ == "__main__":
     args = _parse_args()
-    stories_dir = Path(args.stories_dir)
-    if not stories_dir.is_absolute():
-        stories_dir = PROJECT_ROOT / stories_dir
+    stories_dir = resolve_path(args.stories_dir)
     run(stories_dir, args.poll_interval)

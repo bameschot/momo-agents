@@ -6,10 +6,8 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+from agent_utilities import PROJECT_ROOT, load_role, resolve_path
 from token_logger import log_usage, print_message
-
-PROJECT_ROOT = Path(__file__).parent.parent
-ROLES_DIR = PROJECT_ROOT / "roles"
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -39,10 +37,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _system_prompt() -> str:
-    return (ROLES_DIR / "project-initialiser.md").read_text()
-
-
 async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
@@ -63,7 +57,7 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
 
     options = ClaudeAgentOptions(
         cwd=str(workspace_dir),
-        system_prompt=_system_prompt(),
+        system_prompt=load_role("project-initialiser"),
         allowed_tools=["Read", "Write", "Bash", "Glob"],
         permission_mode="acceptEdits",
         max_turns=200,
@@ -77,11 +71,7 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
 
 if __name__ == "__main__":
     args = _parse_args()
-    design_path = Path(args.design)
-    if not design_path.is_absolute():
-        design_path = PROJECT_ROOT / design_path
-    workspace_dir = Path(args.workspace_dir)
-    if not workspace_dir.is_absolute():
-        workspace_dir = PROJECT_ROOT / workspace_dir
+    design_path = resolve_path(args.design)
+    workspace_dir = resolve_path(args.workspace_dir)
     token_log = Path(args.token_log) if args.token_log else None
     anyio.run(run, design_path, workspace_dir, args.model, token_log)

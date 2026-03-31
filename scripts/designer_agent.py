@@ -11,10 +11,8 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
+from agent_utilities import PROJECT_ROOT, load_role, resolve_path
 from token_logger import log_usage
-
-PROJECT_ROOT = Path(__file__).parent.parent
-ROLES_DIR = PROJECT_ROOT / "roles"
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -37,10 +35,6 @@ def _parse_args() -> argparse.Namespace:
         help="Path to JSONL file for token usage logging (optional)",
     )
     return parser.parse_args()
-
-
-def _system_prompt() -> str:
-    return (ROLES_DIR / "designer.md").read_text()
 
 
 def _initial_prompt(design_dir: Path) -> str:
@@ -81,7 +75,7 @@ async def run(design_dir: Path, model: str, token_log: Path | None) -> None:
 
     options = ClaudeAgentOptions(
         cwd=str(PROJECT_ROOT),
-        system_prompt=_system_prompt(),
+        system_prompt=load_role("designer"),
         allowed_tools=["Read", "Write"],
         permission_mode="acceptEdits",
         max_turns=50,
@@ -123,8 +117,6 @@ async def run(design_dir: Path, model: str, token_log: Path | None) -> None:
 
 if __name__ == "__main__":
     args = _parse_args()
-    design_dir = Path(args.design_dir)
-    if not design_dir.is_absolute():
-        design_dir = PROJECT_ROOT / design_dir
+    design_dir = resolve_path(args.design_dir)
     token_log = Path(args.token_log) if args.token_log else None
     anyio.run(run, design_dir, args.model, token_log)
