@@ -1,4 +1,5 @@
 """Tests for the data loading / JSONL parsing logic (load_records)."""
+
 from __future__ import annotations
 
 import json

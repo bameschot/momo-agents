@@ -1,4 +1,5 @@
 """Tests for the aggregation logic (minute-bucket grouping and per-agent totals)."""
+
 from __future__ import annotations
 
 import sys

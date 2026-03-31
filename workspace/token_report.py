@@ -11,6 +11,7 @@ Usage:
 Output:
     ./token-report_YYYY-MM-DD_HH-MM-SS.html  (written to CWD)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -199,8 +200,35 @@ def get_chartjs_source() -> str:
 
     Downloads from CHARTJS_URL on first run and caches to CHARTJS_CACHE_PATH.
     """
-    # TODO: implement
-    raise NotImplementedError
+    # Check if cache exists
+    if CHARTJS_CACHE_PATH.exists():
+        return CHARTJS_CACHE_PATH.read_text(encoding="utf-8")
+
+    # Cache miss: download from CDN
+    try:
+        with urllib.request.urlopen(CHARTJS_URL, timeout=15) as response:
+            chartjs_source = response.read().decode("utf-8")
+    except Exception as e:
+        print(f"Error downloading Chart.js from {CHARTJS_URL}: {e}", file=sys.stderr)
+        raise
+
+    # Ensure returned string is valid (non-empty and looks like JS)
+    if not chartjs_source or not (
+        chartjs_source.strip().startswith("/*")
+        or chartjs_source.strip().startswith("//")
+        or chartjs_source.strip().startswith("!")
+        or chartjs_source.strip().startswith("(")
+    ):
+        raise ValueError(
+            f"Invalid Chart.js source: expected to start with JS comment or UMD preamble, "
+            f"got: {chartjs_source[:100]}"
+        )
+
+    # Create cache directory and write cache
+    CHARTJS_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CHARTJS_CACHE_PATH.write_text(chartjs_source, encoding="utf-8")
+
+    return chartjs_source
 
 
 # ---------------------------------------------------------------------------
