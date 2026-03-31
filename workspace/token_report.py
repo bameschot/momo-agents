@@ -14,6 +14,7 @@ Output:
 """
 
 import argparse
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -22,14 +23,65 @@ from pathlib import Path
 def load_records(tokens_dir):
     """Load token records from JSONL files in tokens directory.
 
+    Discovers all *.jsonl files in the tokens directory, parses each line as JSON,
+    derives agent names from filenames, and returns a list of record dicts.
+    Skips blank lines silently; invalid JSON lines are skipped with a warning.
+    Exits with code 1 if no .jsonl files are found.
+
     Args:
         tokens_dir: Path object pointing to the tokens directory
 
     Returns:
-        List of record dicts (empty list as stub)
+        List of record dicts with keys: ts, agent, input_tokens, output_tokens,
+        cache_read_tokens, cache_write_tokens, cost_usd
     """
-    # TODO: Implemented in a later story
-    return []
+    records = []
+
+    # Discover all *.jsonl files in the directory
+    jsonl_files = list(tokens_dir.glob("*.jsonl"))
+
+    # Check if any files were found
+    if not jsonl_files:
+        print(
+            f"Error: no .jsonl files found in {tokens_dir}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Parse each file
+    for filepath in jsonl_files:
+        agent_name = filepath.stem
+        try:
+            with open(filepath, encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+
+                    # Skip blank lines silently
+                    if not line:
+                        continue
+
+                    # Parse JSON line
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as e:
+                        print(
+                            f"Warning: invalid JSON in {filepath}:{line_num} - "
+                            f"skipping. Error: {e}",
+                            file=sys.stderr,
+                        )
+                        continue
+
+                    # Inject agent name
+                    record["agent"] = agent_name
+                    records.append(record)
+        except OSError as e:
+            print(
+                f"Warning: error reading {filepath} - skipping. Error: {e}",
+                file=sys.stderr,
+            )
+            continue
+
+    return records
 
 
 def aggregate(records):

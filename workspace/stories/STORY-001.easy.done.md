@@ -1,4 +1,4 @@
-# STORY-001: easy Project Scaffold
+# STORY-001: easy CLI Scaffold and Entry Point
 
 **Index**: 1
 **Complexity**: easy
@@ -6,23 +6,31 @@
 **Depends on**: none
 
 ## Context
-Before any other code can be written or tested, the project needs its structural skeleton in place: a `pyproject.toml` that declares the project's metadata and dev dependencies, and the `tests/` package directory with an `__init__.py` so `pytest` can discover tests. Without this scaffold every subsequent story has nowhere to land.
+This story creates the `workspace/token_report.py` file and establishes the overall program structure. It handles argument parsing, output filename generation, tokens-directory validation, and the top-level `main()` function that will eventually call the loader, aggregator, and HTML-generator components. Subsequent stories fill in those components; this story wires them through stubs so the entry point is executable from day one.
 
 ## Acceptance Criteria
-- [ ] `workspace/pyproject.toml` exists and declares the project name, a Python `>=3.8` requirement, and a `[project.optional-dependencies] dev` group that includes at least `pytest` and `ruff`.
-- [ ] `workspace/tests/__init__.py` exists (may be empty).
-- [ ] `pip install --quiet ".[dev]"` (run from inside `workspace/`) succeeds and installs `pytest` and `ruff`.
-- [ ] `ruff check workspace/` exits 0 on a clean repository (no source files yet to lint).
-- [ ] `pytest workspace/tests/ -v` exits 0 (no tests collected is acceptable at this stage).
+- [ ] `workspace/token_report.py` exists and is runnable with `python token_report.py`.
+- [ ] `--tokens-dir <path>` argument is accepted; default is `.sentinels/tokens` relative to CWD.
+- [ ] When `--tokens-dir` points to a directory that does not exist, the tool prints an error to stderr and exits with code 1.
+- [ ] When `--tokens-dir` points to a valid directory, the tool runs to completion (possibly with an empty report if no data yet), prints the output file path to stdout, and exits with code 0.
+- [ ] Output filename follows the pattern `token-report_YYYY-MM-DD_HH-MM-SS.html` (using the script's run time; no colons in the timestamp).
+- [ ] The file is written to the current working directory.
+- [ ] Module and `main()` function have docstrings.
+- [ ] Code passes `ruff check token_report.py` with no errors.
 
 ## Implementation Hints
-- Use `[build-system]` with `setuptools` or `flit_core` — either is fine; choose whichever requires less boilerplate.
-- The `[project]` table should set `name = "token-report"` and `requires-python = ">=3.8"`.
-- `ruff` configuration can live inline in `pyproject.toml` under `[tool.ruff]`; a minimal config (just `line-length = 100`) is sufficient.
-- No `token_report.py` needs to exist yet — that is created in STORY-002.
+- Use `argparse.ArgumentParser` with a single optional argument `--tokens-dir`.
+- Use `datetime.datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")` to build the filename.
+- Use `pathlib.Path` throughout; validate the tokens dir with `.is_dir()`.
+- Stub out `load_records`, `aggregate`, `get_chartjs_bundle`, `render_summary_table`, and `render_chart_html` as functions that return empty/placeholder values — they will be replaced by later stories.
+- The `main()` function should: parse args → validate dir → call stubs → assemble HTML string → write file → print path.
+- Keep stubs in clearly marked sections so coding agents in later stories know exactly where to implement each one.
 
 ## Test Requirements
-No behavioural tests required — this story is pure project scaffolding with no observable runtime behaviour.
+Create `tests/test_cli.py`.
+
+- **Happy path**: invoke `token_report.py` via `subprocess` with `--tokens-dir` pointing to a temporary directory containing at least one `.jsonl` file; assert exit code is 0 and stdout contains a filename matching `token-report_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.html`.
+- **Missing directory**: invoke with `--tokens-dir /nonexistent/path`; assert exit code is 1 and stderr contains a meaningful error message.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->
