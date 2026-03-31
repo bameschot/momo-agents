@@ -591,8 +591,158 @@
 
     <script>
         'use strict';
-        // JavaScript functionality will be implemented in subsequent stories.
-        // This file currently provides the static HTML and CSS foundation.
+
+        // ========================================
+        // State Management
+        // ========================================
+
+        /**
+         * Generate a unique ID for a card.
+         * Uses crypto.randomUUID() when available, falls back to timestamp-based shim.
+         */
+        function generateId() {
+            if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+            // Fallback for older browsers
+            return Date.now().toString(36) + Math.random().toString(36).slice(2);
+        }
+
+        /**
+         * Parse the kanban_state cookie and return the state object.
+         * If the cookie is absent or its JSON is malformed, returns a default state
+         * with three empty columns (todo, inprogress, done).
+         */
+        function loadState() {
+            const defaultState = {
+                columns: {
+                    todo: { cards: [] },
+                    inprogress: { cards: [] },
+                    done: { cards: [] }
+                }
+            };
+
+            try {
+                // Parse document.cookie string: key1=value1; key2=value2; ...
+                const cookies = document.cookie.split('; ');
+                const kanbanStateCookie = cookies.find(cookie => cookie.startsWith('kanban_state='));
+
+                if (!kanbanStateCookie) {
+                    return defaultState;
+                }
+
+                // Extract the value and decode
+                const cookieValue = kanbanStateCookie.substring('kanban_state='.length);
+                const decodedValue = decodeURIComponent(cookieValue);
+                const state = JSON.parse(decodedValue);
+
+                // Validate state structure
+                if (state && state.columns &&
+                    state.columns.todo && Array.isArray(state.columns.todo.cards) &&
+                    state.columns.inprogress && Array.isArray(state.columns.inprogress.cards) &&
+                    state.columns.done && Array.isArray(state.columns.done.cards)) {
+                    return state;
+                }
+
+                return defaultState;
+            } catch (error) {
+                // JSON parse error or any other error - return default state
+                console.error('Error parsing kanban state:', error);
+                return defaultState;
+            }
+        }
+
+        /**
+         * Serialize the state object to JSON, URL-encode it, and write it to the kanban_state cookie.
+         * Uses path=/ and SameSite=Lax. No expiry is set (session cookie).
+         */
+        function saveState(state) {
+            try {
+                const jsonString = JSON.stringify(state);
+                const encodedValue = encodeURIComponent(jsonString);
+
+                // Check if size exceeds conservative limit (3800 bytes)
+                if (jsonString.length > 3800) {
+                    console.warn('Cookie payload exceeds 3800 bytes. Data may be truncated.');
+                }
+
+                // Set the cookie
+                document.cookie = `kanban_state=${encodedValue}; path=/; SameSite=Lax`;
+            } catch (error) {
+                console.error('Error saving kanban state:', error);
+            }
+        }
+
+        /**
+         * Clear the three column card-list elements and re-populate them from state.
+         * Each rendered card shows at minimum its title.
+         * Updates the column badge to reflect the current card count.
+         */
+        function renderBoard(state) {
+            const columnIds = ['todo', 'inprogress', 'done'];
+
+            columnIds.forEach(columnId => {
+                const columnElement = document.querySelector(`[data-column="${columnId}"]`);
+                if (!columnElement) return;
+
+                const cardsList = columnElement.querySelector('.column__cards');
+                const badgeElement = columnElement.querySelector('.column__badge');
+
+                // Clear existing cards
+                cardsList.innerHTML = '';
+
+                const cards = state.columns[columnId].cards || [];
+
+                // Render each card
+                cards.forEach(card => {
+                    const cardElement = document.createElement('li');
+                    cardElement.className = 'card';
+                    cardElement.setAttribute('data-card-id', card.id);
+                    cardElement.setAttribute('data-column-id', columnId);
+
+                    // Build card HTML
+                    let cardHTML = `
+                        <div class="card__title">${escapeHtml(card.title)}</div>
+                    `;
+
+                    if (card.description) {
+                        cardHTML += `<div class="card__description">${escapeHtml(card.description)}</div>`;
+                    }
+
+                    cardElement.innerHTML = cardHTML;
+                    cardsList.appendChild(cardElement);
+                });
+
+                // Update badge
+                if (badgeElement) {
+                    badgeElement.textContent = cards.length;
+                }
+            });
+        }
+
+        /**
+         * Escape HTML special characters to prevent XSS.
+         */
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Initialize the board on page load.
+         * Load state from cookie and render it.
+         */
+        function initializeBoard() {
+            const state = loadState();
+            renderBoard(state);
+        }
+
+        // ========================================
+        // Event Listeners
+        // ========================================
+
+        document.addEventListener('DOMContentLoaded', initializeBoard);
     </script>
 </body>
 </html>
