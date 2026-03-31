@@ -245,8 +245,117 @@ def render_summary_table(agent_totals: dict[str, dict], grand_total: dict) -> st
     Numbers use thousands separators; cost is formatted to 6 decimal places.
     Last row is the grand-total row.
     """
-    # TODO: implement
-    raise NotImplementedError
+    rows = []
+    for agent in sorted(agent_totals.keys()):
+        t = agent_totals[agent]
+        rows.append(
+            f"<tr>"
+            f"<td>{agent}</td>"
+            f"<td>{t['input_tokens']:,}</td>"
+            f"<td>{t['output_tokens']:,}</td>"
+            f"<td>{t['cache_read_tokens']:,}</td>"
+            f"<td>{t['cache_write_tokens']:,}</td>"
+            f"<td>{t['cost_usd']:.6f}</td>"
+            f"</tr>"
+        )
+
+    gt = grand_total
+    rows.append(
+        f"<tr class='total-row'>"
+        f"<td><strong>Total</strong></td>"
+        f"<td><strong>{gt['input_tokens']:,}</strong></td>"
+        f"<td><strong>{gt['output_tokens']:,}</strong></td>"
+        f"<td><strong>{gt['cache_read_tokens']:,}</strong></td>"
+        f"<td><strong>{gt['cache_write_tokens']:,}</strong></td>"
+        f"<td><strong>{gt['cost_usd']:.6f}</strong></td>"
+        f"</tr>"
+    )
+
+    rows_html = "\n".join(rows)
+    return (
+        "<table>\n"
+        "<thead><tr>"
+        "<th>Agent</th>"
+        "<th>Input Tokens</th>"
+        "<th>Output Tokens</th>"
+        "<th>Cache Read Tokens</th>"
+        "<th>Cache Write Tokens</th>"
+        "<th>Total Cost (USD)</th>"
+        "</tr></thead>\n"
+        f"<tbody>\n{rows_html}\n</tbody>\n"
+        "</table>"
+    )
+
+
+def _build_chart_data(minute_buckets: list[dict]) -> dict:
+    """Pre-compute chart datasets from minute_buckets for embedding as JSON.
+
+    Returns a dict with:
+        buckets       – the raw minute_buckets list
+        tokenDatasets – list of dataset dicts (label, data) for token-count view
+        costDatasets  – list of dataset dicts (label, data) for cost view
+        allMinutes    – sorted list of all unique minute strings
+    """
+    agents = sorted({b["agent"] for b in minute_buckets})
+    all_minutes = sorted({b["minute"] for b in minute_buckets})
+
+    colors = [
+        "#4e79a7",
+        "#f28e2b",
+        "#e15759",
+        "#76b7b2",
+        "#59a14f",
+        "#edc948",
+        "#b07aa1",
+        "#ff9da7",
+        "#9c755f",
+        "#bab0ac",
+        "#499894",
+        "#86bcb6",
+    ]
+
+    def sum_field(agent: str, minute: str, field: str) -> float:
+        return sum(
+            b.get(field, 0) for b in minute_buckets if b["agent"] == agent and b["minute"] == minute
+        )
+
+    token_datasets = []
+    color_idx = 0
+    for agent in agents:
+        for tt in TOKEN_FIELDS:
+            data = [sum_field(agent, m, tt) for m in all_minutes]
+            token_datasets.append(
+                {
+                    "label": f"{agent} \u00b7 {tt}",
+                    "data": data,
+                    "borderColor": colors[color_idx % len(colors)],
+                    "backgroundColor": colors[color_idx % len(colors)],
+                    "fill": False,
+                    "tension": 0.1,
+                }
+            )
+            color_idx += 1
+
+    cost_datasets = []
+    for i, agent in enumerate(agents):
+        data = [sum_field(agent, m, "cost_usd") for m in all_minutes]
+        cost_datasets.append(
+            {
+                "label": f"{agent} \u00b7 cost_usd",
+                "data": data,
+                "borderColor": colors[i % len(colors)],
+                "backgroundColor": colors[i % len(colors)],
+                "fill": False,
+                "tension": 0.1,
+            }
+        )
+
+    return {
+        "buckets": minute_buckets,
+        "tokenDatasets": token_datasets,
+        "costDatasets": cost_datasets,
+        "allMinutes": all_minutes,
+    }
 
 
 def render_html(
@@ -262,8 +371,161 @@ def render_html(
     - chartjs_source inside a <script> tag
     - Client-side JS for toggle, date filtering, and Chart.js initialisation
     """
-    # TODO: implement
-    raise NotImplementedError
+    chart_data = _build_chart_data(minute_buckets)
+    data_json = json.dumps(chart_data, ensure_ascii=False)
+
+    client_js = r"""
+    const chartData = DATA_PLACEHOLDER;
+    const allBuckets = chartData.buckets;
+
+    function getMinutes(buckets) {
+        const seen = new Set();
+        for (const b of buckets) seen.add(b.minute);
+        return Array.from(seen).sort();
+    }
+
+    let showCost = false;
+    let chartInstance = null;
+
+    function filterBucketsByDate() {
+        const fromVal = document.getElementById('from-date').value;
+        const toVal = document.getElementById('to-date').value;
+        if (!fromVal && !toVal) return allBuckets;
+        return allBuckets.filter(function(b) {
+            const m = b.minute;
+            if (fromVal) {
+                const fromStr = fromVal.slice(0, 16) + ':00Z';
+                if (m < fromStr) return false;
+            }
+            if (toVal) {
+                const toStr = toVal.slice(0, 16) + ':00Z';
+                if (m > toStr) return false;
+            }
+            return true;
+        });
+    }
+
+    function rebuildDataArrays(templateDatasets, filteredBuckets, filteredMinutes, costMode) {
+        return templateDatasets.map(function(ds) {
+            var parts = ds.label.split(' \u00b7 ');
+            var agent = parts[0];
+            var field = parts[1];
+            var data = filteredMinutes.map(function(m) {
+                var val = 0;
+                for (var i = 0; i < filteredBuckets.length; i++) {
+                    var b = filteredBuckets[i];
+                    if (b.minute === m && b.agent === agent) val += b[field];
+                }
+                return val;
+            });
+            return Object.assign({}, ds, { data: data });
+        });
+    }
+
+    function renderChart() {
+        const ctx = document.getElementById('tokenChart').getContext('2d');
+        if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+        const filteredBuckets = filterBucketsByDate();
+        const filteredMinutes = getMinutes(filteredBuckets);
+
+        const templateDatasets = showCost ? chartData.costDatasets : chartData.tokenDatasets;
+        const datasets = rebuildDataArrays(
+            templateDatasets, filteredBuckets, filteredMinutes, showCost
+        );
+
+        const yLabel = showCost ? 'Cost (USD)' : 'Token Count';
+        const chartTitle = showCost ? 'Token Cost Over Time' : 'Token Usage Over Time';
+
+        chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { labels: filteredMinutes, datasets: datasets },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: { display: true, text: chartTitle },
+                    legend: { position: 'top' }
+                },
+                scales: {
+                    y: { title: { display: true, text: yLabel } },
+                    x: { title: { display: true, text: 'Time (UTC)' } }
+                }
+            }
+        });
+    }
+
+    document.getElementById('toggle-btn').addEventListener('click', function() {
+        showCost = !showCost;
+        this.textContent = showCost ? 'Switch to Token Counts' : 'Switch to Cost USD';
+        renderChart();
+    });
+
+    document.getElementById('from-date').addEventListener('change', renderChart);
+    document.getElementById('to-date').addEventListener('change', renderChart);
+    document.getElementById('reset-btn').addEventListener('click', function() {
+        document.getElementById('from-date').value = '';
+        document.getElementById('to-date').value = '';
+        renderChart();
+    });
+
+    renderChart();
+    """
+
+    client_js = client_js.replace("DATA_PLACEHOLDER", data_json)
+
+    html = (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="UTF-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        "<title>Token Usage Report</title>\n"
+        "<style>\n"
+        "body { font-family: sans-serif; margin: 2em; }\n"
+        "table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }\n"
+        "th, td { border: 1px solid #ccc; padding: 0.5em 1em; text-align: right; }\n"
+        "th:first-child, td:first-child { text-align: left; }\n"
+        "th { background: #f0f0f0; }\n"
+        ".total-row td { background: #f8f8f8; }\n"
+        ".controls { margin-bottom: 1.5em; display: flex; gap: 1em;"
+        " align-items: center; flex-wrap: wrap; }\n"
+        ".chart-container { position: relative; width: 100%; max-height: 500px; }\n"
+        "</style>\n"
+        "</head>\n"
+        "<body>\n"
+        "<h1>Token Usage Report</h1>\n"
+        "<h2>Summary</h2>\n" + summary_table_html + "\n"
+        "<h2>Chart</h2>\n"
+        '<div class="controls">\n'
+        '  <button id="toggle-btn">Switch to Cost USD</button>\n'
+        '  <label>From: <input type="datetime-local" id="from-date"></label>\n'
+        '  <label>To: <input type="datetime-local" id="to-date"></label>\n'
+        '  <button id="reset-btn">Reset</button>\n'
+        "</div>\n"
+        '<div class="chart-container">\n'
+        '  <canvas id="tokenChart"></canvas>\n'
+        "</div>\n"
+        "<script>\n" + chartjs_source + "\n</script>\n"
+        "<script>\n" + client_js + "\n</script>\n"
+        "</body>\n"
+        "</html>\n"
+    )
+
+    return html
+
+
+def generate_html(
+    minute_buckets: list[dict],
+    agent_totals: dict[str, dict],
+    grand_total: dict,
+    chartjs_source: str,
+) -> str:
+    """Convenience wrapper: render summary table then full HTML.
+
+    Parameters match what tests call directly.
+    """
+    summary_table_html = render_summary_table(agent_totals, grand_total)
+    return render_html(summary_table_html, minute_buckets, chartjs_source)
 
 
 # ---------------------------------------------------------------------------
