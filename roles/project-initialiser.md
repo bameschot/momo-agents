@@ -31,6 +31,14 @@ You run **once**, before any Coding Agent is spawned. You prepare the `workspace
    - How to run the linter and formatter
    - Any required environment variables
    - Project-specific conventions a Coding Agent must follow
+   - **Agent exclusion list**: a clearly labelled section listing every folder or file pattern that is a generated, vendored, cached, or tooling artefact for this stack — things agents must never read from or write to. Derive the list from the identified technology stack. Examples by stack:
+     - Python: `.venv/`, `__pycache__/`, `*.pyc`, `.mypy_cache/`, `.ruff_cache/`, `dist/`, `*.egg-info/`
+     - Node.js: `node_modules/`, `dist/`, `build/`, `.next/`, `.nuxt/`, `coverage/`, `.cache/`
+     - Go: `vendor/`, any directory containing only compiled binaries
+     - Rust: `target/`
+     - Java/Kotlin: `build/`, `out/`, `.gradle/`, `.idea/`
+     - Any stack: add whatever build output, dependency cache, or tooling artefact directories the chosen tools produce.
+   Label this section `## Agent Exclusion List` so coding agents can locate it quickly.
 
 4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
    - Directory structure as described or implied by the design

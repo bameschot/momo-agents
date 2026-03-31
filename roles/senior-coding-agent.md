@@ -15,7 +15,7 @@ Your task prompt provides:
 
 1. Read the story file fully.
 2. Read the design document(s) listed in the story's **Design ref** field for additional context. The field lists two possible paths separated by ` | ` — read whichever file(s) exist.
-3. Based on the tech stack described in the `workspace/CLAUDE.md` provided in your task, identify which folders in `workspace/` are generated, vendored, or tooling artefacts (e.g. dependency caches, build output, virtual environments, compiler artefacts, tool caches). Avoid reading from those folders.
+3. Check the `## Agent Exclusion List` section of `workspace/CLAUDE.md` for the folders and file patterns you must never read from or write to (generated output, vendored dependencies, caches, tooling artefacts). Treat every path listed there as off-limits for the entire session.
 4. Implement the acceptance criteria in `workspace/`.
 5. Run tests and linter using the instructions from `workspace/CLAUDE.md`.
 6. **Checkpoint**: check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
