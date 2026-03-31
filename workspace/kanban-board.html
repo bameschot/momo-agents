@@ -457,6 +457,16 @@
         }
 
         /* ========================================
+           Form Validation Error
+           ======================================== */
+        .form-error {
+            display: block;
+            color: var(--color-danger);
+            font-size: 0.8rem;
+            margin-top: 0.375rem;
+        }
+
+        /* ========================================
            Responsive Design
            ======================================== */
         @media (max-width: 600px) {
@@ -593,7 +603,25 @@
         'use strict';
 
         // ========================================
-        // State Management
+        // Module-level state & modal context
+        // ========================================
+
+        /** The current board state, loaded once and mutated in place. */
+        let state = null;
+
+        /**
+         * Tracks which mode the modal is in plus the relevant IDs.
+         * mode: 'create' | 'edit'
+         * columnId: string
+         * cardId: string | null (null in create mode)
+         */
+        let modalContext = { mode: null, columnId: null, cardId: null };
+
+        /** The element that triggered the modal; focus returns here on close. */
+        let modalTriggerElement = null;
+
+        // ========================================
+        // Utility helpers
         // ========================================
 
         /**
@@ -607,6 +635,41 @@
             // Fallback for older browsers
             return Date.now().toString(36) + Math.random().toString(36).slice(2);
         }
+
+        /**
+         * Escape HTML special characters to prevent XSS.
+         */
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /**
+         * Return true when dateStr is a valid YYYY-MM-DD representing a date
+         * strictly before today (midnight local time). Returns false for null,
+         * empty string, today, or any future date.
+         */
+        function isOverdue(dateStr) {
+            if (!dateStr) return false;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const date = new Date(dateStr + 'T00:00:00');
+            return date < today;
+        }
+
+        /**
+         * Format a YYYY-MM-DD string to a locale-friendly display string.
+         * Appending T00:00:00 prevents UTC-offset display issues.
+         */
+        function formatDate(dateStr) {
+            if (!dateStr) return '';
+            return new Date(dateStr + 'T00:00:00').toLocaleDateString();
+        }
+
+        // ========================================
+        // State Management
+        // ========================================
 
         /**
          * Parse the kanban_state cookie and return the state object.
@@ -634,14 +697,14 @@
                 // Extract the value and decode
                 const cookieValue = kanbanStateCookie.substring('kanban_state='.length);
                 const decodedValue = decodeURIComponent(cookieValue);
-                const state = JSON.parse(decodedValue);
+                const parsed = JSON.parse(decodedValue);
 
                 // Validate state structure
-                if (state && state.columns &&
-                    state.columns.todo && Array.isArray(state.columns.todo.cards) &&
-                    state.columns.inprogress && Array.isArray(state.columns.inprogress.cards) &&
-                    state.columns.done && Array.isArray(state.columns.done.cards)) {
-                    return state;
+                if (parsed && parsed.columns &&
+                    parsed.columns.todo && Array.isArray(parsed.columns.todo.cards) &&
+                    parsed.columns.inprogress && Array.isArray(parsed.columns.inprogress.cards) &&
+                    parsed.columns.done && Array.isArray(parsed.columns.done.cards)) {
+                    return parsed;
                 }
 
                 return defaultState;
@@ -655,15 +718,17 @@
         /**
          * Serialize the state object to JSON, URL-encode it, and write it to the kanban_state cookie.
          * Uses path=/ and SameSite=Lax. No expiry is set (session cookie).
+         * Shows a warning banner if payload exceeds 3800 bytes.
          */
-        function saveState(state) {
+        function saveState(currentState) {
             try {
-                const jsonString = JSON.stringify(state);
+                const jsonString = JSON.stringify(currentState);
                 const encodedValue = encodeURIComponent(jsonString);
 
-                // Check if size exceeds conservative limit (3800 bytes)
+                // Warn if size exceeds conservative limit (3800 bytes)
                 if (jsonString.length > 3800) {
                     console.warn('Cookie payload exceeds 3800 bytes. Data may be truncated.');
+                    showWarning('Storage limit approaching — cookie may be truncated. Consider removing some cards.');
                 }
 
                 // Set the cookie
@@ -673,12 +738,39 @@
             }
         }
 
+        // ========================================
+        // Warning Banner
+        // ========================================
+
+        function showWarning(message) {
+            const banner = document.getElementById('warningBanner');
+            const msgEl = document.getElementById('warningMessage');
+            if (msgEl) msgEl.textContent = message;
+            banner.classList.add('visible');
+        }
+
+        function checkWarnings(currentState) {
+            const totalCards = Object.values(currentState.columns)
+                .reduce((sum, col) => sum + col.cards.length, 0);
+            if (totalCards > 20) {
+                showWarning('You have more than 20 cards — cookie storage may be limited.');
+            } else {
+                // Hide banner when count drops back to safe range
+                const banner = document.getElementById('warningBanner');
+                banner.classList.remove('visible');
+            }
+        }
+
+        // ========================================
+        // Board Rendering
+        // ========================================
+
         /**
          * Clear the three column card-list elements and re-populate them from state.
-         * Each rendered card shows at minimum its title.
+         * Renders full card content: title, description, priority badge, due date, and action buttons.
          * Updates the column badge to reflect the current card count.
          */
-        function renderBoard(state) {
+        function renderBoard(currentState) {
             const columnIds = ['todo', 'inprogress', 'done'];
 
             columnIds.forEach(columnId => {
@@ -691,56 +783,310 @@
                 // Clear existing cards
                 cardsList.innerHTML = '';
 
-                const cards = state.columns[columnId].cards || [];
+                const cards = currentState.columns[columnId].cards || [];
 
                 // Render each card
                 cards.forEach(card => {
                     const cardElement = document.createElement('li');
                     cardElement.className = 'card';
+
+                    // Apply overdue class when due date is strictly before today
+                    if (isOverdue(card.dueDate)) {
+                        cardElement.classList.add('card--overdue');
+                    }
+
                     cardElement.setAttribute('data-card-id', card.id);
                     cardElement.setAttribute('data-column-id', columnId);
 
-                    // Build card HTML
-                    let cardHTML = `
-                        <div class="card__title">${escapeHtml(card.title)}</div>
-                    `;
+                    // Accessible description of the card
+                    const dateLabel = card.dueDate
+                        ? `due ${formatDate(card.dueDate)}`
+                        : 'no due date';
+                    cardElement.setAttribute(
+                        'aria-label',
+                        `Card: ${card.title}, priority ${card.priority || 'medium'}, ${dateLabel}`
+                    );
+
+                    // Priority badge display
+                    const priority = card.priority || 'medium';
+                    const priorityLabel = priority.charAt(0).toUpperCase() + priority.slice(1);
+
+                    // Build card inner HTML
+                    let cardHTML = `<div class="card__title">${escapeHtml(card.title)}</div>`;
 
                     if (card.description) {
                         cardHTML += `<div class="card__description">${escapeHtml(card.description)}</div>`;
                     }
 
+                    cardHTML += `
+                        <div class="card__meta">
+                            <span class="card__priority card__priority--${escapeHtml(priority)}">${escapeHtml(priorityLabel)}</span>
+                            ${card.dueDate ? `<span class="card__date">${escapeHtml(formatDate(card.dueDate))}</span>` : ''}
+                        </div>
+                        <div class="card__actions">
+                            <button class="btn-card-action btn-edit" aria-label="Edit card ${escapeHtml(card.title)}">✏️</button>
+                            <button class="btn-card-action btn-delete" aria-label="Delete card ${escapeHtml(card.title)}">🗑️</button>
+                        </div>
+                    `;
+
                     cardElement.innerHTML = cardHTML;
+
+                    // Attach edit/delete listeners after setting innerHTML
+                    cardElement.querySelector('.btn-edit').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openModal('edit', columnId, card.id, e.currentTarget);
+                    });
+
+                    cardElement.querySelector('.btn-delete').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        deleteCard(columnId, card.id);
+                    });
+
                     cardsList.appendChild(cardElement);
                 });
 
-                // Update badge
+                // Update badge count
                 if (badgeElement) {
                     badgeElement.textContent = cards.length;
                 }
             });
+
+            checkWarnings(currentState);
+        }
+
+        // ========================================
+        // Card CRUD
+        // ========================================
+
+        /**
+         * Remove a card from state, re-render, and persist.
+         */
+        function deleteCard(columnId, cardId) {
+            const cards = state.columns[columnId].cards;
+            const idx = cards.findIndex(c => c.id === cardId);
+            if (idx !== -1) {
+                cards.splice(idx, 1);
+                renderBoard(state);
+                saveState(state);
+            }
+        }
+
+        // ========================================
+        // Modal
+        // ========================================
+
+        /**
+         * Open the card modal in the given mode.
+         * Stores context at module level so the Save handler can read it without closures over DOM.
+         */
+        function openModal(mode, columnId, cardId, triggerElement) {
+            modalContext = { mode, columnId, cardId };
+            modalTriggerElement = triggerElement || null;
+
+            const modal = document.getElementById('cardModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const titleInput = document.getElementById('cardTitle');
+            const descInput = document.getElementById('cardDescription');
+            const prioritySelect = document.getElementById('cardPriority');
+            const dueDateInput = document.getElementById('cardDueDate');
+
+            // Clear the form and any previous validation errors
+            document.getElementById('cardForm').reset();
+            const errorEl = document.getElementById('titleError');
+            if (errorEl) errorEl.textContent = '';
+
+            if (mode === 'edit') {
+                modalTitle.textContent = 'Edit Card';
+                // Pre-populate with the card's current values
+                const card = state.columns[columnId].cards.find(c => c.id === cardId);
+                if (card) {
+                    titleInput.value = card.title || '';
+                    descInput.value = card.description || '';
+                    prioritySelect.value = card.priority || 'medium';
+                    dueDateInput.value = card.dueDate || '';
+                }
+            } else {
+                modalTitle.textContent = 'Add Card';
+            }
+
+            modal.classList.add('visible');
+            modal.setAttribute('aria-hidden', 'false');
+            titleInput.focus();
         }
 
         /**
-         * Escape HTML special characters to prevent XSS.
+         * Close the modal without modifying state.
+         * Returns focus to the element that opened the modal.
          */
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        function closeModal() {
+            const modal = document.getElementById('cardModal');
+            modal.classList.remove('visible');
+            modal.setAttribute('aria-hidden', 'true');
+
+            // Return focus to triggering element
+            if (modalTriggerElement) {
+                modalTriggerElement.focus();
+            }
+
+            modalContext = { mode: null, columnId: null, cardId: null };
+            modalTriggerElement = null;
         }
 
         /**
-         * Initialize the board on page load.
-         * Load state from cookie and render it.
+         * Handle the Save button.
+         * Validates title, then either creates a new card or updates an existing one.
          */
-        function initializeBoard() {
-            const state = loadState();
+        function handleSave() {
+            const titleInput = document.getElementById('cardTitle');
+            const descInput = document.getElementById('cardDescription');
+            const prioritySelect = document.getElementById('cardPriority');
+            const dueDateInput = document.getElementById('cardDueDate');
+
+            const title = titleInput.value.trim();
+
+            // Ensure the error element exists (create lazily if needed)
+            let errorEl = document.getElementById('titleError');
+            if (!errorEl) {
+                errorEl = document.createElement('span');
+                errorEl.id = 'titleError';
+                errorEl.className = 'form-error';
+                errorEl.setAttribute('aria-live', 'polite');
+                titleInput.parentNode.appendChild(errorEl);
+            }
+
+            // Inline validation — title is required
+            if (!title) {
+                errorEl.textContent = 'Title is required.';
+                titleInput.focus();
+                return;
+            }
+
+            errorEl.textContent = '';
+
+            const { mode, columnId, cardId } = modalContext;
+
+            if (mode === 'create') {
+                const newCard = {
+                    id: generateId(),
+                    title,
+                    description: descInput.value.trim(),
+                    priority: prioritySelect.value,
+                    dueDate: dueDateInput.value || null
+                };
+                state.columns[columnId].cards.push(newCard);
+            } else if (mode === 'edit') {
+                const card = state.columns[columnId].cards.find(c => c.id === cardId);
+                if (card) {
+                    card.title = title;
+                    card.description = descInput.value.trim();
+                    card.priority = prioritySelect.value;
+                    card.dueDate = dueDateInput.value || null;
+                }
+            }
+
             renderBoard(state);
+            saveState(state);
+            closeModal();
+        }
+
+        // ========================================
+        // Focus Trap Helper
+        // ========================================
+
+        /**
+         * Return all keyboard-focusable elements within a container.
+         */
+        function getFocusableElements(container) {
+            return Array.from(container.querySelectorAll(
+                'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])'
+            ));
         }
 
         // ========================================
         // Event Listeners
         // ========================================
+
+        function initializeEventListeners() {
+            // Dismiss warning banner
+            const warningBtn = document.querySelector('.warning-banner button');
+            if (warningBtn) {
+                warningBtn.addEventListener('click', () => {
+                    document.getElementById('warningBanner').classList.remove('visible');
+                });
+            }
+
+            // "+ Add Card" buttons — open modal in create mode
+            document.querySelectorAll('.btn-add-card').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const column = e.currentTarget.closest('[data-column]');
+                    const columnId = column.getAttribute('data-column');
+                    openModal('create', columnId, null, e.currentTarget);
+                });
+            });
+
+            // Cancel button
+            document.getElementById('cancelBtn').addEventListener('click', closeModal);
+
+            // Form submission (Save button)
+            document.getElementById('cardForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                handleSave();
+            });
+
+            // Backdrop click — close only when clicking the overlay itself, not the modal card
+            const modal = document.getElementById('cardModal');
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+
+            // Escape key to close modal + Tab focus trap
+            document.addEventListener('keydown', (e) => {
+                if (!modal.classList.contains('visible')) return;
+
+                if (e.key === 'Escape') {
+                    closeModal();
+                    return;
+                }
+
+                if (e.key === 'Tab') {
+                    const focusable = getFocusableElements(modal.querySelector('.modal__content'));
+                    if (focusable.length === 0) return;
+
+                    const first = focusable[0];
+                    const last = focusable[focusable.length - 1];
+
+                    if (e.shiftKey) {
+                        // Shift-Tab: wrap backward from first to last
+                        if (document.activeElement === first) {
+                            e.preventDefault();
+                            last.focus();
+                        }
+                    } else {
+                        // Tab: wrap forward from last to first
+                        if (document.activeElement === last) {
+                            e.preventDefault();
+                            first.focus();
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========================================
+        // Initialisation
+        // ========================================
+
+        /**
+         * Initialize the board on page load.
+         * Load state from cookie, render it, and wire up all event listeners.
+         */
+        function initializeBoard() {
+            state = loadState();
+            renderBoard(state);
+            initializeEventListeners();
+        }
 
         document.addEventListener('DOMContentLoaded', initializeBoard);
     </script>
