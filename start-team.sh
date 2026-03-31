@@ -2,9 +2,10 @@
 # start-team.sh — opens ALL agents simultaneously, each in its own console window.
 # Agents self-coordinate via the filesystem; no window needs to wait for another.
 #
-# Usage: ./start-team.sh <feature-name> [--junior-agents N] [--senior-agents N]
-#        [--model-designer M] [--model-ba M] [--model-pi M]
-#        [--model-junior M] [--model-senior M] [--model-reviewer M]
+# Usage: ./start-team.sh <feature-name> [options]
+#        Options: [--junior-agents N] [--senior-agents N]
+#                 [--model-designer M] [--model-ba M] [--model-pi M]
+#                 [--model-junior M] [--model-senior M] [--model-reviewer M]
 #
 # Supported terminal environments (auto-detected in priority order):
 #   macOS   : Terminal.app via osascript
@@ -14,7 +15,7 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Arguments
+# Paths
 # ─────────────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKSPACE_DIR="$SCRIPT_DIR/workspace"
@@ -22,13 +23,18 @@ DESIGN_DIR="$WORKSPACE_DIR/design"
 STORIES_DIR="$WORKSPACE_DIR/stories"
 SENTINEL_DIR="$WORKSPACE_DIR/.sentinels"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Defaults
+# ─────────────────────────────────────────────────────────────────────────────
 FEATURE="${1:-}"
 N_JUNIOR_AGENTS=2
 N_SENIOR_AGENTS=1
+
 DEFAULT_MODEL="claude-sonnet-4-6"
 DEFAULT_JUNIOR_MODEL="claude-haiku-4-5-20251001"
 DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
 DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
+
 MODEL_DESIGNER="$DEFAULT_MODEL"
 MODEL_BA="$DEFAULT_MODEL"
 MODEL_PI="$DEFAULT_PI_MODEL"
@@ -36,6 +42,9 @@ MODEL_JUNIOR="$DEFAULT_JUNIOR_MODEL"
 MODEL_SENIOR="$DEFAULT_SENIOR_MODEL"
 MODEL_REVIEWER="$DEFAULT_MODEL"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Argument parsing
+# ─────────────────────────────────────────────────────────────────────────────
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
@@ -97,7 +106,7 @@ fi
 # Terminal detection
 # ─────────────────────────────────────────────────────────────────────────────
 _detect_terminal() {
-    if [[ "$OSTYPE" == "darwin"* ]];         then echo "macos"
+    if [[ "$OSTYPE" == "darwin"* ]];           then echo "macos"
     elif command -v gnome-terminal &>/dev/null; then echo "gnome-terminal"
     elif command -v konsole        &>/dev/null; then echo "konsole"
     elif command -v xfce4-terminal &>/dev/null; then echo "xfce4-terminal"
@@ -114,7 +123,7 @@ _TMUX_FIRST_WINDOW=true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # open_window <title> <wrapper-script>
-#   Opens a new terminal window and runs the given wrapper script inside it.
+#   Opens a new terminal window/tab running the given wrapper script.
 #   Returns immediately — does not wait for the script to finish.
 # ─────────────────────────────────────────────────────────────────────────────
 open_window() {
@@ -132,31 +141,25 @@ tell application "Terminal"
 end tell
 APPLESCRIPT
             ;;
-
         gnome-terminal)
             gnome-terminal --title="$title" \
                 -- bash -c "bash '$script'; echo ''; echo '[done — press enter to close]'; read -r" &
             ;;
-
         konsole)
             konsole --new-tab -p "tabtitle=$title" \
                 -e bash -c "bash '$script'; read -r" &
             ;;
-
         xfce4-terminal)
             xfce4-terminal --title="$title" \
                 -e "bash -c \"bash '$script'; read -r\"" &
             ;;
-
         mate-terminal)
             mate-terminal --title="$title" \
                 -e "bash -c \"bash '$script'; read -r\"" &
             ;;
-
         xterm)
             xterm -title "$title" -e "bash '$script'" &
             ;;
-
         tmux)
             if [ "$_TMUX_FIRST_WINDOW" = "true" ]; then
                 tmux new-session -d -s "$TMUX_SESSION" -n "$title" \
@@ -166,8 +169,8 @@ APPLESCRIPT
                 tmux new-window -t "$TMUX_SESSION" -n "$title" "bash '$script'"
             fi
             ;;
-
         none)
+            # No terminal available — run in background and log to file
             local log="$SENTINEL_DIR/${title// /_}.log"
             bash "$script" >"$log" 2>&1 &
             echo "  [no terminal] logging → $log"
@@ -176,23 +179,22 @@ APPLESCRIPT
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Workspace initialisation probe
+# _workspace_initialized — true when workspace/CLAUDE.md exists
 # ─────────────────────────────────────────────────────────────────────────────
 _workspace_initialized() {
-    # True when workspace/CLAUDE.md already exists (PI has previously run)
     [ -f "$WORKSPACE_DIR/CLAUDE.md" ]
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Setup
+# Setup — create sentinel directory; clear any stale pipeline_complete sentinel
 # ─────────────────────────────────────────────────────────────────────────────
 mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens"
-rm -f "$SENTINEL_DIR"/*.done "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
+rm -f "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Write shared config — sourced by every wrapper script at runtime
+# Write shared config — sourced by every wrapper script at runtime.
+# Unquoted heredoc: variables expand NOW so all paths are baked in at write time.
 # ─────────────────────────────────────────────────────────────────────────────
-# NOTE: unquoted heredoc — variables expand NOW so paths are baked in.
 cat > "$SENTINEL_DIR/config.sh" << CONFIG
 # Auto-generated by start-team.sh — do not edit
 SCRIPT_DIR='$SCRIPT_DIR'
@@ -237,11 +239,11 @@ echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Write wrapper scripts
-# All heredocs below use << 'WRAPPER' (quoted) so the script body is written
-# verbatim — variables resolve at *runtime* when the wrapper is executed.
+# All heredocs below use << 'WRAPPER' (single-quoted) so the script body is
+# written verbatim — variables resolve at *runtime* when the wrapper executes.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ── Designer ─────────────────────────────────────────────────────────────────
+# ── Designer ──────────────────────────────────────────────────────────────────
 cat > "$SENTINEL_DIR/run_designer.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -260,13 +262,12 @@ echo ""
     --model "${MODEL_DESIGNER}" \
     --design-dir "${WORKSPACE_DIR}/design" \
     --token-log "${SENTINEL_DIR}/tokens/designer.jsonl"
-touch "${SENTINEL_DIR}/designer.done"
 echo ""
 echo "[Designer Agent complete]"
 WRAPPER
 
 # ── Business Analyst ──────────────────────────────────────────────────────────
-# Watches design/ for *.new.md files (written by the Designer Agent).
+# Watches design/ for *.new.md files produced by the Designer Agent.
 # Processes each one and renames it to *.processed.md when done.
 # Re-triggers automatically if the Designer re-saves a design as *.new.md.
 cat > "$SENTINEL_DIR/run_ba.sh" << 'WRAPPER'
@@ -281,7 +282,7 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║      Business Analyst Agent      ║"
 echo "╚══════════════════════════════════╝"
-echo "Watching ${SCRIPT_DIR}/design/ for *.new.md files..."
+echo "Watching ${DESIGN_DIR}/ for *.new.md files..."
 echo ""
 
 while true; do
@@ -292,8 +293,6 @@ while true; do
 
     shopt -s nullglob
     for design_file in "$DESIGN_DIR"/*.new.md; do
-        [ -f "$design_file" ] || continue
-
         processed="${design_file%.new.md}.processed.md"
         feature="$(basename "${design_file%.new.md}")"
 
@@ -306,9 +305,7 @@ while true; do
             --model "${MODEL_BA}" \
             --token-log "${SENTINEL_DIR}/tokens/ba.jsonl"
 
-        # Mark as processed — overwrites any previous .processed.md for the same feature
         mv "$design_file" "$processed"
-        touch "${SENTINEL_DIR}/ba.done"
         echo ""
         echo "[Business Analyst] ${feature} → processed. Resuming watch..."
         echo ""
@@ -423,7 +420,7 @@ while true; do
         echo ""
         echo "[Junior Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
         while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
-        sleep 2   # let renamed story files settle
+        sleep 2   # let renamed story files settle before resuming
         echo "[Junior Coding Agent ${AGENT_ID}] HALT cleared — resuming."
         echo ""
         continue
@@ -437,7 +434,6 @@ while true; do
     fi
 done
 
-touch "${SENTINEL_DIR}/junior_${AGENT_ID}.done"
 echo ""
 echo "[Junior Coding Agent ${AGENT_ID} finished]"
 WRAPPER
@@ -450,6 +446,7 @@ for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
 export AGENT_ID=$i
 exec bash '$SENTINEL_DIR/junior_coding_agent_body.sh'
 STUB
+    chmod +x "$SENTINEL_DIR/run_junior_${i}.sh"
 done
 
 # ── Senior Coding Agent (shared body, parameterised by $AGENT_ID) ────────────
@@ -502,7 +499,7 @@ while true; do
         echo ""
         echo "[Senior Coding Agent ${AGENT_ID}] HALT detected — waiting for Story Reviewer..."
         while [ -f "${STORIES_DIR}/HALT" ]; do sleep 5; done
-        sleep 2   # let renamed story files settle
+        sleep 2   # let renamed story files settle before resuming
         echo "[Senior Coding Agent ${AGENT_ID}] HALT cleared — resuming."
         echo ""
         continue
@@ -516,7 +513,6 @@ while true; do
     fi
 done
 
-touch "${SENTINEL_DIR}/senior_${AGENT_ID}.done"
 echo ""
 echo "[Senior Coding Agent ${AGENT_ID} finished]"
 WRAPPER
@@ -528,11 +524,12 @@ for i in $(seq 1 "$N_SENIOR_AGENTS"); do
 export AGENT_ID=$i
 exec bash '$SENTINEL_DIR/senior_coding_agent_body.sh'
 STUB
+    chmod +x "$SENTINEL_DIR/run_senior_${i}.sh"
 done
 
 # ── Story Orchestrator ────────────────────────────────────────────────────────
-# Watches stories/ for new STORY-NNN.md files, parses complexity and deps,
-# and renames them to STORY-NNN.[complexity].ready.md when deps are met.
+# Watches stories/ for bare STORY-NNN.md files, resolves dependencies, and
+# renames them to STORY-NNN.[complexity].ready.md when all deps are done.
 cat > "$SENTINEL_DIR/run_orchestrator.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -553,6 +550,7 @@ echo "[Story Orchestrator exited]"
 WRAPPER
 
 # ── Watchdog ──────────────────────────────────────────────────────────────────
+# Resets stale *.working.md files (idle > 10 min) back to *.ready.md.
 cat > "$SENTINEL_DIR/run_watchdog.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 printf '\033]0;Watchdog\007'
@@ -565,8 +563,8 @@ exec bash "${SCRIPT_DIR}/watchdog.sh"
 WRAPPER
 
 # ── Story Reviewer ────────────────────────────────────────────────────────────
-# Runs continuously — wakes on HALT, reviews with user, then waits again.
-# Exits cleanly when the orchestrator writes the pipeline_complete sentinel.
+# Runs continuously — wakes on HALT, triages failed stories with the user,
+# then waits again. Exits cleanly when pipeline_complete is written.
 cat > "$SENTINEL_DIR/run_story_reviewer.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -615,16 +613,8 @@ chmod +x \
     "$SENTINEL_DIR/run_watchdog.sh" \
     "$SENTINEL_DIR/run_story_reviewer.sh"
 
-for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
-    chmod +x "$SENTINEL_DIR/run_junior_${i}.sh"
-done
-
-for i in $(seq 1 "$N_SENIOR_AGENTS"); do
-    chmod +x "$SENTINEL_DIR/run_senior_${i}.sh"
-done
-
 # ─────────────────────────────────────────────────────────────────────────────
-# Launch ALL windows simultaneously
+# Launch all windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
 TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 6 ))
 echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 6 fixed agents)..."
@@ -654,19 +644,17 @@ fi
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Monitor — print status on change; runs until Ctrl+C
+# Monitor — print status whenever it changes, and every ~30s regardless.
+# Runs until Ctrl+C, which triggers _teardown via the trap below.
 # Coding agents poll indefinitely so the pipeline is open-ended: the BA may
-# write new stories at any time (e.g. after a design update) and agents will
-# pick them up automatically. Press Ctrl+C in this terminal to shut everything
-# down gracefully.
+# write new stories at any time and agents pick them up automatically.
 # ─────────────────────────────────────────────────────────────────────────────
 echo "Monitoring pipeline (press Ctrl+C to shut down the team)..."
 echo ""
 
+# Count story files in a given state. Pass "unprocessed" for bare STORY-NNN.md
+# files (no complexity/state suffix yet); or a state suffix like "ready"/"done".
 _count_stories() {
-    # _count_stories <state-suffix>
-    # state-suffix examples: "ready" "working" "done" "failed"
-    # For bare unprocessed stories use state-suffix "unprocessed"
     local state="$1"
     local count=0 f base
     if [[ "$state" == "unprocessed" ]]; then
@@ -683,9 +671,8 @@ _count_stories() {
     echo "$count"
 }
 
+# Print per-agent token totals from JSONL log files (inline Python for portability).
 _token_summary() {
-    # Print per-agent token totals from JSONL log files.
-    # Requires Python (already resolved above as $PYTHON).
     local tokens_dir="$SENTINEL_DIR/tokens"
     [ -d "$tokens_dir" ] || return 0
     shopt -s nullglob
@@ -764,10 +751,11 @@ print(f"    {'TOTAL':<20}  in={grand_total_inp:>8,}  out={grand_total_out:>7,}{g
 PYEOF
 }
 
+# On Ctrl+C / SIGTERM: signal all agents to exit, print final status and token report.
 _teardown() {
     echo ""
     echo "Shutting down team..."
-    touch "$SENTINEL_DIR/pipeline_complete"   # signals all agents to exit
+    touch "$SENTINEL_DIR/pipeline_complete"
     pkill -f "watchdog.sh" 2>/dev/null || true
     sleep 2
     echo ""
@@ -810,7 +798,7 @@ while true; do
         TOKEN_TICK=0
     fi
 
-    # Also refresh token summary every ~60 s even when story counts haven't changed
+    # Also refresh token summary every ~30s even when story counts haven't changed.
     TOKEN_TICK=$(( TOKEN_TICK + 1 ))
     if [ "$TOKEN_TICK" -ge 3 ]; then
         echo ""
