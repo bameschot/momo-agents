@@ -537,7 +537,7 @@ def main():
     grand_total = result["grand_total"]
 
     # Get Chart.js bundle
-    cache_dir = Path("workspace/.chartjs_cache")
+    cache_dir = Path(__file__).parent / ".chartjs_cache"
     chartjs_bundle = get_chartjs_bundle(cache_dir)
 
     # Render report components
@@ -600,7 +600,7 @@ def main():
     output_path = Path(output_filename)
 
     # Write HTML to file
-    output_path.write_text(html_content)
+    output_path.write_text(html_content, encoding="utf-8")
 
     # Print the path to stdout
     print(str(output_path))
