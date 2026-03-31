@@ -6,7 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-from agent_utilities import PROJECT_ROOT, load_role, resolve_path
+from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path
 from token_logger import log_usage, print_message
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -34,10 +34,15 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Path to JSONL file for token usage logging (optional)",
     )
+    parser.add_argument(
+        "--run-log",
+        default="",
+        help="Path to run-log.json file for pipeline event logging (optional)",
+    )
     return parser.parse_args()
 
 
-async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
+async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -68,10 +73,13 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
         log_usage(token_log, "pi", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
         print_message(message)
 
+    append_run_log(run_log, "project-initialiser", f"project initiated from: {design_path.name}")
+
 
 if __name__ == "__main__":
     args = _parse_args()
     design_path = resolve_path(args.design)
     workspace_dir = resolve_path(args.workspace_dir)
     token_log = Path(args.token_log) if args.token_log else None
-    anyio.run(run, design_path, workspace_dir, args.model, token_log)
+    run_log = Path(args.run_log) if args.run_log else None
+    anyio.run(run, design_path, workspace_dir, args.model, token_log, run_log)

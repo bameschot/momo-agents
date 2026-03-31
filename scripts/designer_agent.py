@@ -11,7 +11,7 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from agent_utilities import PROJECT_ROOT, load_role, resolve_path
+from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path
 from token_logger import log_usage
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -33,6 +33,11 @@ def _parse_args() -> argparse.Namespace:
         "--token-log",
         default="",
         help="Path to JSONL file for token usage logging (optional)",
+    )
+    parser.add_argument(
+        "--run-log",
+        default="",
+        help="Path to run-log.json file for pipeline event logging (optional)",
     )
     return parser.parse_args()
 
@@ -70,7 +75,7 @@ async def _stream_response(client: ClaudeSDKClient) -> tuple[str | None, dict | 
     return stop_reason, usage
 
 
-async def run(design_dir: Path, model: str, token_log: Path | None) -> None:
+async def run(design_dir: Path, model: str, token_log: Path | None, run_log: Path | None) -> None:
     design_dir.mkdir(parents=True, exist_ok=True)
 
     options = ClaudeAgentOptions(
@@ -104,6 +109,7 @@ async def run(design_dir: Path, model: str, token_log: Path | None) -> None:
                 print("[Designer session ended]")
                 break
 
+            before = set(design_dir.glob("*.new.md"))
             await client.query(user_input)
             stop_reason, usage = await _stream_response(client)
             log_usage(token_log, "designer", usage)
@@ -111,6 +117,9 @@ async def run(design_dir: Path, model: str, token_log: Path | None) -> None:
 
             # If agent wrote the design doc and finished naturally, offer to exit
             if stop_reason == "end_turn" and user_input.lower() == "write":
+                after = set(design_dir.glob("*.new.md"))
+                for new_file in sorted(after - before):
+                    append_run_log(run_log, "designer", f"design written: {new_file.name}")
                 print("\n[Design saved as .new.md — the Business Analyst will pick it up automatically.]")
                 print("[Type 'exit' to close or continue refining (type 'write' again to re-queue).]")
 
@@ -119,4 +128,5 @@ if __name__ == "__main__":
     args = _parse_args()
     design_dir = resolve_path(args.design_dir)
     token_log = Path(args.token_log) if args.token_log else None
-    anyio.run(run, design_dir, args.model, token_log)
+    run_log = Path(args.run_log) if args.run_log else None
+    anyio.run(run, design_dir, args.model, token_log, run_log)

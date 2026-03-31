@@ -190,6 +190,7 @@ _workspace_initialized() {
 # ─────────────────────────────────────────────────────────────────────────────
 mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens"
 rm -f "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
+touch "$SENTINEL_DIR/run-log.jsonl"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Write shared config — sourced by every wrapper script at runtime.
@@ -210,6 +211,7 @@ MODEL_PI='$MODEL_PI'
 MODEL_JUNIOR='$MODEL_JUNIOR'
 MODEL_SENIOR='$MODEL_SENIOR'
 MODEL_REVIEWER='$MODEL_REVIEWER'
+RUN_LOG='$SENTINEL_DIR/run-log.jsonl'
 CONFIG
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -261,7 +263,8 @@ echo ""
 "$PYTHON" "${SCRIPT_DIR}/scripts/designer_agent.py" \
     --model "${MODEL_DESIGNER}" \
     --design-dir "${WORKSPACE_DIR}/design" \
-    --token-log "${SENTINEL_DIR}/tokens/designer.jsonl"
+    --token-log "${SENTINEL_DIR}/tokens/designer.jsonl" \
+    --run-log "${RUN_LOG}"
 echo ""
 echo "[Designer Agent complete]"
 WRAPPER
@@ -303,7 +306,8 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_BA}" \
-            --token-log "${SENTINEL_DIR}/tokens/ba.jsonl"
+            --token-log "${SENTINEL_DIR}/tokens/ba.jsonl" \
+            --run-log "${RUN_LOG}"
 
         mv "$design_file" "$processed"
         echo ""
@@ -365,7 +369,8 @@ echo ""
     --design "${design_file}" \
     --workspace-dir "${WORKSPACE_DIR}" \
     --model "${MODEL_PI}" \
-    --token-log "${SENTINEL_DIR}/tokens/pi.jsonl"
+    --token-log "${SENTINEL_DIR}/tokens/pi.jsonl" \
+    --run-log "${RUN_LOG}"
 echo ""
 echo "[Project Initialiser Agent complete]"
 WRAPPER
@@ -405,7 +410,8 @@ while true; do
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_JUNIOR}" \
-        --token-log "${SENTINEL_DIR}/tokens/junior_${AGENT_ID}.jsonl"
+        --token-log "${SENTINEL_DIR}/tokens/junior_${AGENT_ID}.jsonl" \
+        --run-log "${RUN_LOG}"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -484,7 +490,8 @@ while true; do
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_SENIOR}" \
-        --token-log "${SENTINEL_DIR}/tokens/senior_${AGENT_ID}.jsonl"
+        --token-log "${SENTINEL_DIR}/tokens/senior_${AGENT_ID}.jsonl" \
+        --run-log "${RUN_LOG}"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit

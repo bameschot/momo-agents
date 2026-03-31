@@ -6,7 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-from agent_utilities import PROJECT_ROOT, load_role, resolve_path, wait_for_workspace
+from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
 from token_logger import log_usage, print_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -41,10 +41,15 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Path to JSONL file for token usage logging (optional)",
     )
+    parser.add_argument(
+        "--run-log",
+        default="",
+        help="Path to run-log.json file for pipeline event logging (optional)",
+    )
     return parser.parse_args()
 
 
-async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
+async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -80,9 +85,15 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         model=model,
     )
 
+    before = set(stories_dir.glob("STORY-*.md"))
+
     async for message in query(prompt=task, options=options):
         log_usage(token_log, "ba", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
         print_message(message)
+
+    after = set(stories_dir.glob("STORY-*.md"))
+    for story_file in sorted(after - before, key=lambda p: p.name):
+        append_run_log(run_log, "business-analyst", f"story created: {story_file.name}")
 
 
 if __name__ == "__main__":
@@ -91,4 +102,5 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir)
     workspace_dir = resolve_path(args.workspace_dir)
     token_log = Path(args.token_log) if args.token_log else None
-    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, token_log)
+    run_log = Path(args.run_log) if args.run_log else None
+    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, token_log, run_log)
