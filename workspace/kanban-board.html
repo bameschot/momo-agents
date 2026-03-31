@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A simple, single-file Kanban board with drag-and-drop and cookie persistence.">
+    <title>Kanban Board</title>
+    <style>
+        /* ========================================
+           CSS Custom Properties & Theming
+           ======================================== */
+        :root {
+            --color-primary: #2563eb;
+            --color-primary-dark: #1e40af;
+            --color-success: #10b981;
+            --color-warning: #f59e0b;
+            --color-danger: #ef4444;
+            --color-gray-50: #f9fafb;
+            --color-gray-100: #f3f4f6;
+            --color-gray-200: #e5e7eb;
+            --color-gray-300: #d1d5db;
+            --color-gray-400: #9ca3af;
+            --color-gray-500: #6b7280;
+            --color-gray-600: #4b5563;
+            --color-gray-700: #374151;
+            --color-gray-800: #1f2937;
+            --color-gray-900: #111827;
+
+            --bg-body: #ffffff;
+            --bg-card: #ffffff;
+            --bg-column: #f3f4f6;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-body: #111827;
+                --bg-card: #1f2937;
+                --bg-column: #0f1419;
+                --text-primary: #f9fafb;
+                --text-secondary: #d1d5db;
+                --border-color: #374151;
+            }
+        }
+
+        /* ========================================
+           Global Styles
+           ======================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text-primary);
+            background-color: var(--bg-body);
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        /* ========================================
+           Container & Layout
+           ======================================== */
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            max-width: 100%;
+        }
+
+        .header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background-color: var(--bg-body);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        /* ========================================
+           Warning Banner
+           ======================================== */
+        .warning-banner {
+            display: none;
+            padding: 0.75rem 1.5rem;
+            background-color: #fef3c7;
+            border-bottom: 1px solid #fcd34d;
+            color: #92400e;
+            font-size: 0.875rem;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .warning-banner.visible {
+            display: flex;
+        }
+
+        .warning-banner button {
+            background: none;
+            border: none;
+            color: #92400e;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0;
+        }
+
+        /* ========================================
+           Board Container
+           ======================================== */
+        .board {
+            display: flex;
+            flex: 1;
+            gap: 1.5rem;
+            padding: 1.5rem;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        /* ========================================
+           Column Styles
+           ======================================== */
+        .column {
+            flex: 0 0 calc(33.333% - 1rem);
+            min-width: 280px;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-column);
+            border-radius: 0.5rem;
+            padding: 1rem;
+        }
+
+        .column__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .column__title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .column__badge {
+            background-color: var(--color-gray-300);
+            color: var(--text-primary);
+            border-radius: 9999px;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .column__badge {
+                background-color: var(--color-gray-700);
+                color: var(--text-secondary);
+            }
+        }
+
+        .column__cards {
+            flex: 1;
+            list-style: none;
+            min-height: 2rem;
+        }
+
+        .column__footer {
+            margin-top: 1rem;
+        }
+
+        .btn-add-card {
+            width: 100%;
+            padding: 0.5rem 1rem;
+            background-color: var(--color-gray-200);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-add-card:hover {
+            background-color: var(--color-gray-300);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .btn-add-card {
+                background-color: var(--color-gray-700);
+                border-color: var(--color-gray-600);
+            }
+
+            .btn-add-card:hover {
+                background-color: var(--color-gray-600);
+            }
+        }
+
+        /* ========================================
+           Card Styles
+           ======================================== */
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-left: 4px solid transparent;
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            cursor: grab;
+            transition: box-shadow 0.2s, opacity 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .card:active {
+            cursor: grabbing;
+            opacity: 0.8;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .card--overdue {
+            border-left-color: var(--color-danger);
+        }
+
+        .card--dragging {
+            opacity: 0.5;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .card__title {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            word-break: break-word;
+        }
+
+        .card__description {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            word-break: break-word;
+        }
+
+        .card__meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            font-size: 0.75rem;
+        }
+
+        .card__priority {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            background-color: var(--color-gray-200);
+            color: var(--text-primary);
+        }
+
+        .card__priority--high {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .card__priority--medium {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+
+        .card__priority--low {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .card__priority--high {
+                background-color: #7f1d1d;
+                color: #fecaca;
+            }
+
+            .card__priority--medium {
+                background-color: #78350f;
+                color: #fcd34d;
+            }
+
+            .card__priority--low {
+                background-color: #15803d;
+                color: #86efac;
+            }
+        }
+
+        .card__date {
+            color: var(--text-secondary);
+        }
+
+        .card__actions {
+            display: none;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .card:hover .card__actions {
+            display: flex;
+        }
+
+        .btn-card-action {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0;
+            transition: color 0.2s;
+            flex: 1;
+            text-align: center;
+        }
+
+        .btn-card-action:hover {
+            color: var(--text-primary);
+        }
+
+        /* ========================================
+           Modal Styles
+           ======================================== */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.visible {
+            display: flex;
+        }
+
+        .modal__content {
+            background-color: var(--bg-body);
+            border-radius: 0.5rem;
+            padding: 2rem;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal__title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            background-color: var(--bg-card);
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .modal__actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1.5rem;
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--color-primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--color-primary-dark);
+        }
+
+        .btn-secondary {
+            background-color: var(--color-gray-200);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--color-gray-300);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .btn-secondary {
+                background-color: var(--color-gray-700);
+            }
+
+            .btn-secondary:hover {
+                background-color: var(--color-gray-600);
+            }
+        }
+
+        /* ========================================
+           Responsive Design
+           ======================================== */
+        @media (max-width: 600px) {
+            .board {
+                flex-direction: column;
+                gap: 1rem;
+                padding: 1rem;
+            }
+
+            .column {
+                flex: 0 0 auto;
+                min-width: unset;
+            }
+
+            .modal__content {
+                width: 95%;
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>Kanban Board</h1>
+        </header>
+
+        <!-- Warning Banner -->
+        <div class="warning-banner" id="warningBanner" aria-live="polite" aria-label="Warning message">
+            <span id="warningMessage">You have more than 20 cards — cookie storage may be limited.</span>
+            <button aria-label="Dismiss warning">✕</button>
+        </div>
+
+        <!-- Board -->
+        <main class="board" id="board">
+            <!-- To Do Column -->
+            <section class="column" data-column="todo">
+                <div class="column__header">
+                    <h2 class="column__title">To Do</h2>
+                    <span class="column__badge" aria-label="Card count">0</span>
+                </div>
+                <ul class="column__cards" aria-label="To Do cards" role="list">
+                    <!-- Cards will be rendered here -->
+                </ul>
+                <div class="column__footer">
+                    <button class="btn-add-card" aria-label="Add a new card to To Do">+ Add Card</button>
+                </div>
+            </section>
+
+            <!-- In Progress Column -->
+            <section class="column" data-column="inprogress">
+                <div class="column__header">
+                    <h2 class="column__title">In Progress</h2>
+                    <span class="column__badge" aria-label="Card count">0</span>
+                </div>
+                <ul class="column__cards" aria-label="In Progress cards" role="list">
+                    <!-- Cards will be rendered here -->
+                </ul>
+                <div class="column__footer">
+                    <button class="btn-add-card" aria-label="Add a new card to In Progress">+ Add Card</button>
+                </div>
+            </section>
+
+            <!-- Done Column -->
+            <section class="column" data-column="done">
+                <div class="column__header">
+                    <h2 class="column__title">Done</h2>
+                    <span class="column__badge" aria-label="Card count">0</span>
+                </div>
+                <ul class="column__cards" aria-label="Done cards" role="list">
+                    <!-- Cards will be rendered here -->
+                </ul>
+                <div class="column__footer">
+                    <button class="btn-add-card" aria-label="Add a new card to Done">+ Add Card</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Card Modal -->
+    <div class="modal" id="cardModal" role="dialog" aria-labelledby="modalTitle" aria-hidden="true">
+        <div class="modal__content">
+            <h2 class="modal__title" id="modalTitle">Create Card</h2>
+            <form id="cardForm">
+                <div class="form-group">
+                    <label for="cardTitle">Title <span aria-label="required">*</span></label>
+                    <input
+                        type="text"
+                        id="cardTitle"
+                        name="title"
+                        placeholder="Card title..."
+                        required
+                        aria-required="true"
+                    />
+                </div>
+
+                <div class="form-group">
+                    <label for="cardDescription">Description</label>
+                    <textarea
+                        id="cardDescription"
+                        name="description"
+                        placeholder="Optional description..."
+                    ></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="cardPriority">Priority</label>
+                    <select id="cardPriority" name="priority">
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="cardDueDate">Due Date</label>
+                    <input
+                        type="date"
+                        id="cardDueDate"
+                        name="dueDate"
+                    />
+                </div>
+
+                <div class="modal__actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="saveBtn">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+        // JavaScript functionality will be implemented in subsequent stories.
+        // This file currently provides the static HTML and CSS foundation.
+    </script>
+</body>
+</html>
