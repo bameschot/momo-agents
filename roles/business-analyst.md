@@ -55,9 +55,9 @@ Assign every story exactly one complexity level:
 
 | Level | Meaning |
 |---|---|
-| **easy** | A single, well-understood change: add a field, write one pure function, add a config value. A capable developer could finish it in under 30 minutes. |
-| **medium** | Involves a few moving parts or some design judgement: a new module with a clear interface, a small integration, a non-trivial algorithm. Under a couple of hours. |
-| **hard** | Requires broad cross-cutting changes, subtle concurrency/state management, a complex algorithm, or significant refactoring across multiple modules. |
+| **easy** | A self-contained unit of work with clear scope: a new module, a small integration, or several related changes within one subsystem. A capable developer could finish it in about 3 hours. |
+| **medium** | Involves multiple moving parts or significant design judgement: a feature spanning a few subsystems, a complex algorithm, or a meaningful refactor with clear boundaries. About 6 hours. |
+| **hard** | Requires broad cross-cutting changes, subtle concurrency/state management, or significant refactoring across many modules with unclear boundaries. |
 
 The complexity appears in **two places**:
 1. The heading: `# STORY-NNN: [easy] Wire up config loader`
@@ -66,9 +66,9 @@ The complexity appears in **two places**:
 ## Decomposition strategy
 
 **Strongly prefer easy and medium stories.** Before writing a hard story, ask yourself:
-- Can this be split into two or more medium stories with a clear dependency chain?
-- Can the interface be defined in one story and the implementation in another?
-- Can a naive/simple implementation be an easy story, with an optimisation story following it?
+- Can this be split into two or more medium stories (~6 hours each) with a clear dependency chain?
+- Can the interface be defined in one easy story and the implementation in another?
+- Can a straightforward implementation be an easy story (~3 hours), with a follow-up medium story for more complex parts?
 
 Only classify a story as **hard** when splitting it would produce artificial or incoherent stories that a Coding Agent could not implement independently.
 
@@ -88,5 +88,5 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 - Each story must be implementable by a single Coding Agent without knowledge of other in-progress stories.
 - Stories must be ordered by `Index` (lower = higher priority / earlier dependency).
 - Use `**Depends on**` to encode sequential dependencies. A story may only be claimed once its dependency is `.done.md`.
-- Stories should be small enough to complete in one focused session.
+- Stories should be large enough to represent a meaningful unit of work, but small enough to have clear, verifiable acceptance criteria.
 - Do not leave open questions — resolve ambiguities from the design or flag them to the user before writing.

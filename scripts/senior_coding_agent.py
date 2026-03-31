@@ -101,7 +101,7 @@ def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file
 
 
 async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
-    pipeline_complete = PROJECT_ROOT / ".sentinels" / "pipeline_complete"
+    pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
     await _wait_for_workspace(workspace_dir)
@@ -110,7 +110,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
     claude_md = (workspace_dir / "CLAUDE.md").read_text()
 
     options = ClaudeAgentOptions(
-        cwd=str(PROJECT_ROOT),
+        cwd=str(workspace_dir),
         system_prompt=_system_prompt(),
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",

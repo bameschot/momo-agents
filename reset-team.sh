@@ -5,7 +5,7 @@
 # What gets removed:
 #   stories/    — all story files (STORY-*.md in every state)
 #   design/     — all design documents
-#   .sentinels/ — all orchestrator sentinel files
+#   workspace/.sentinels/ — all orchestrator sentinel files
 #   workspace/  — all generated source code, tests, and CLAUDE.md
 #
 # Usage: ./reset-team.sh [--yes]
@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKSPACE_DIR="$SCRIPT_DIR/workspace"
 DESIGN_DIR="$WORKSPACE_DIR/design"
 STORIES_DIR="$WORKSPACE_DIR/stories"
-SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
+SENTINEL_DIR="$WORKSPACE_DIR/.sentinels"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Confirmation
@@ -34,7 +34,7 @@ echo ""
 echo "  This will permanently delete:"
 echo "    • All story files in       workspace/stories/"
 echo "    • All design documents in  workspace/design/"
-echo "    • All sentinel files in    .sentinels/"
+echo "    • All sentinel files in    workspace/.sentinels/"
 echo "    • All generated code in    workspace/  (src/, tests/, CLAUDE.md)"
 echo ""
 
@@ -86,9 +86,9 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 if [ -d "$SENTINEL_DIR" ] && [ "$(ls -A "$SENTINEL_DIR" 2>/dev/null)" ]; then
     rm -rf "$SENTINEL_DIR"
-    echo "  ✓ .sentinels/  cleared"
+    echo "  ✓ workspace/.sentinels/  cleared"
 else
-    echo "  – .sentinels/  already empty"
+    echo "  – workspace/.sentinels/  already empty"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

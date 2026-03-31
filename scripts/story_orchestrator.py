@@ -103,7 +103,7 @@ def _process_once(stories_dir: Path) -> int:
 
 
 def run(stories_dir: Path, poll_interval: int) -> None:
-    pipeline_complete = PROJECT_ROOT / ".sentinels" / "pipeline_complete"
+    pipeline_complete = stories_dir.parent / ".sentinels" / "pipeline_complete"
 
     print(f"[Story Orchestrator] Watching {stories_dir}")
     print(f"[Story Orchestrator] Poll interval: {poll_interval}s")

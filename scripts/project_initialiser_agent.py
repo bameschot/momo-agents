@@ -49,9 +49,8 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
         sys.exit(1)
 
     task = (
-        f"Project root: {PROJECT_ROOT}\n"
-        f"Design document: {design_path}\n"
-        f"Workspace directory: {workspace_dir}\n\n"
+        f"Project root: {workspace_dir}\n"
+        f"Design document: {design_path}\n\n"
         "Read the design document in full. Then:\n"
         f"1. Create {workspace_dir}/CLAUDE.md with build, test, and lint commands "
         "appropriate for the technology stack described in the design.\n"
@@ -63,7 +62,7 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
     )
 
     options = ClaudeAgentOptions(
-        cwd=str(PROJECT_ROOT),
+        cwd=str(workspace_dir),
         system_prompt=_system_prompt(),
         allowed_tools=["Read", "Write", "Bash", "Glob"],
         permission_mode="acceptEdits",

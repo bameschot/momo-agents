@@ -1,10 +1,10 @@
-"""bundle.py — packages the project workspace into a named zip file.
+"""bundle-workspace.py — packages the project workspace into a named zip file.
 
 Usage:
     python bundle-workspace.py [project_root] [--output <output_dir>]
 
 The zip file is named after the most recently modified design document found in
-<project_root>/design/, with all extensions stripped (e.g. my-feature.new.md → my-feature.zip).
+<project_root>/workspace/design/, with all extensions stripped (e.g. my-feature.new.md → my-feature.zip).
 """
 
 from __future__ import annotations
@@ -195,7 +195,7 @@ def resolve_zip_name(project_root: Path) -> str:
 
     Raises SystemExit with a clear message when no .md files are found.
     """
-    design_dir = project_root / "design"
+    design_dir = project_root / "workspace" / "design"
 
     # Find all .md files in design directory
     md_files = list(design_dir.glob("*.md"))
@@ -379,11 +379,12 @@ def bundle_workspace(args: argparse.Namespace, project_root: Path, output_dir: P
     """
     canonical_langs = resolve_languages(args.language) if args.language is not None else None
     zip_name = resolve_zip_name(project_root)
-    zip_path = output_dir / f"{zip_name}.zip"
+    zip_path = output_dir / f"{zip_name}-workspace.zip"
 
+    workspace_dir = project_root / "workspace"
     output_dir.mkdir(parents=True, exist_ok=True)
     rules = build_exclusion_rules(canonical_langs)
-    count = create_zip(project_root, zip_path, rules)
+    count = create_zip(workspace_dir, zip_path, rules)
     lang_label = ", ".join(canonical_langs) if canonical_langs is not None else "all"
     print(f"Created {zip_path}  [languages: {lang_label}]  ({count} files)")
 

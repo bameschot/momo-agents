@@ -95,7 +95,7 @@ async def _wait_for_ready_story(stories_dir: Path, pipeline_complete: Path) -> b
 
 
 async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
-    pipeline_complete = PROJECT_ROOT / ".sentinels" / "pipeline_complete"
+    pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
     await _wait_for_workspace(workspace_dir)
@@ -109,9 +109,8 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
         return
 
     task = (
-        f"Project root: {PROJECT_ROOT}\n"
-        f"Stories directory: {stories_dir}\n"
-        f"Workspace directory: {workspace_dir}\n\n"
+        f"Project root: {workspace_dir}\n"
+        f"Stories directory: {stories_dir}\n\n"
         "## Startup (do this once before the loop)\n"
         f"1. Read {workspace_dir}/CLAUDE.md and retain its build, test, and lint "
         "instructions for the entire session. Do not re-read it on each story.\n"
@@ -142,7 +141,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
     )
 
     options = ClaudeAgentOptions(
-        cwd=str(PROJECT_ROOT),
+        cwd=str(workspace_dir),
         system_prompt=_system_prompt(),
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",

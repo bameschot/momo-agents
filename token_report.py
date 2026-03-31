@@ -33,7 +33,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--tokens-dir",
-        default=".sentinels/tokens",
+        default=str(Path(__file__).parent / "workspace" / ".sentinels" / "tokens"),
         metavar="PATH",
         help="Path to directory containing *.jsonl token log files "
              "(default: .sentinels/tokens relative to CWD).",

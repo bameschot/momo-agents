@@ -78,7 +78,7 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     next_index = len(existing) + 1
 
     task = (
-        f"Project root: {PROJECT_ROOT}\n"
+        f"Project root: {workspace_dir}\n"
         f"Design document: {design_path}\n"
         f"Stories output directory: {stories_dir}\n"
         f"Next story number to use: {next_index:03d} (zero-padded three digits)\n\n"
@@ -88,13 +88,13 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         "Complexity rules (mandatory):\n"
         "- Assign every story a complexity of easy, medium, or hard.\n"
         "- Include the complexity label in both the heading and the **Complexity** field.\n"
-        "- Strongly prefer easy and medium stories. Split any hard story into smaller pieces "
+        "- Strongly prefer easy (~3 hours) and medium (~6 hours) stories. Split any hard story into smaller pieces "
         "unless doing so would make the resulting stories incoherent or non-implementable on their own.\n\n"
         "Do not leave open questions — resolve ambiguities from the design before writing."
     )
 
     options = ClaudeAgentOptions(
-        cwd=str(PROJECT_ROOT),
+        cwd=str(workspace_dir),
         system_prompt=_system_prompt(),
         allowed_tools=["Read", "Write", "Glob"],
         permission_mode="acceptEdits",

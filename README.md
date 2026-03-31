@@ -81,6 +81,11 @@ momo-agents/
 │   │   ├── STORY-005.hard.failed.md          ← failed; awaiting review
 │   │   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
 │   │   └── HALT                              ← sentinel: all Coding Agents must stop
+│   ├── .sentinels/            ← runtime coordination files (created by start-team.sh)
+│   │   ├── pipeline_complete      ← written on Ctrl+C; signals all agents to exit
+│   │   ├── config.sh              ← shared env vars sourced by wrapper scripts
+│   │   ├── tokens/                ← per-agent JSONL token usage logs
+│   │   └── run_*.sh               ← agent wrapper scripts
 │   ├── src/
 │   └── tests/
 ├── start-team.sh              ← launches all agents simultaneously
@@ -134,6 +139,14 @@ The BA agent uses design file **state encoded in the filename** — no mtime tra
 5. Sleep and repeat until `pipeline_complete` is written.
 
 Each story includes a `**Complexity**: easy | medium | hard` field and a `**Depends on**` field. Stories are written as bare `STORY-NNN.md` files; the Story Orchestrator assigns the `.ready` state.
+
+The BA **strongly prefers easy and medium stories** and only uses hard when splitting would produce artificial or incoherent units of work. Complexity levels reflect realistic effort:
+
+| Complexity | Effort | Meaning |
+|---|---|---|
+| **easy** | ~3 hours | Self-contained work with clear scope — a new module, a small integration, or several related changes within one subsystem |
+| **medium** | ~6 hours | Multiple moving parts or significant design judgement — a feature spanning a few subsystems, a non-trivial algorithm, or a meaningful refactor |
+| **hard** | > 6 hours | Broad cross-cutting changes, subtle concurrency/state management, or refactoring across many modules with unclear boundaries |
 
 | Filename | State | Meaning |
 |---|---|---|
@@ -298,7 +311,7 @@ All coordination is via atomic filesystem operations — no database, no message
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
 | Halt detection | Check for `workspace/stories/HALT` before and after implementation; exit immediately if found |
 | Workspace revert | Discard uncommitted changes on HALT detection |
-| Pipeline shutdown | `pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
+| Pipeline shutdown | `workspace/.sentinels/pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
 | Stale agent recovery | Watchdog resets `.[c].working.md` files idle > 10 minutes → `.[c].ready.md` |
 
 ---
@@ -403,11 +416,11 @@ Prints a live snapshot of how many stories are in each state:
 
 Press **Ctrl+C** in the `start-team.sh` terminal. This:
 
-1. Writes `.sentinels/pipeline_complete` — all agent windows exit cleanly.
+1. Writes `workspace/.sentinels/pipeline_complete` — all agent windows exit cleanly.
 2. Kills the watchdog process and closes all opened agent terminal windows.
 3. Prints a final per-agent token-usage summary and `status.sh` snapshot.
 4. Generates a self-contained HTML token usage report and writes it to `workspace/token-report_YYYY-MM-DD_HH-MM-SS.html`.
-5. Removes the `.sentinels/` directory.
+5. Removes the `workspace/.sentinels/` directory.
 
 The token report includes a per-agent breakdown of input, output, and cache tokens plus cost, and an interactive Chart.js timeline. Open it in any browser after the run.
 
@@ -430,7 +443,7 @@ rm -f workspace/stories/STORY-*.md workspace/stories/HALT
 |---|---|
 | `workspace/stories/` | All `STORY-*` files in every state and the `HALT` sentinel |
 | `workspace/design/` | All `*.md` design documents |
-| `.sentinels/` | Entire directory |
+| `workspace/.sentinels/` | Entire directory (wrapper scripts, tokens, sentinels) |
 | `workspace/` | All generated source code, tests, `CLAUDE.md`, and build artefacts |
 
 After a full reset, re-running `./start-team.sh <feature-name>` goes through the complete pipeline from scratch.

@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 WORKSPACE_DIR="$SCRIPT_DIR/workspace"
 DESIGN_DIR="$WORKSPACE_DIR/design"
 STORIES_DIR="$WORKSPACE_DIR/stories"
-SENTINEL_DIR="$SCRIPT_DIR/.sentinels"
+SENTINEL_DIR="$WORKSPACE_DIR/.sentinels"
 
 FEATURE="${1:-}"
 N_JUNIOR_AGENTS=2
