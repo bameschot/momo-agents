@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Token Usage Report</title>
+  <title>Pipeline Run Report</title>
   <style>
     body { font-family: sans-serif; margin: 2rem; }
-    h1 { margin-bottom: 1rem; }
+    h1 { margin-bottom: 0.25rem; }
+    h2 { margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
     table { border-collapse: collapse; width: 100%; }
     th, td { padding: 6px 12px; border: 1px solid #ccc; text-align: right; }
     th:first-child, td:first-child { text-align: left; }
@@ -16,23 +17,39 @@
   </style>
 </head>
 <body>
-  <h1>Token Usage Report</h1>
+  <h1>Pipeline Run Report</h1>
+  <h2>Run Log</h2>
+  <table>
+    <thead>
+      <tr><th>Timestamp</th><th>Agent</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+    <tr><td>2026-03-31T19:56:51.028554+00:00</td><td>designer</td><td>design written: kanban-board.new.md</td></tr>
+    <tr><td>2026-03-31T19:57:54.716085+00:00</td><td>project-initialiser</td><td>project initiated from: kanban-board.new.md</td></tr>
+    <tr><td>2026-03-31T20:01:30.127819+00:00</td><td>junior-coding-agent</td><td>story done: STORY-001.easy.done.md</td></tr>
+    </tbody>
+  </table>
+  <h2>Token Usage</h2>
   <table>
     <thead>
       <tr>
         <th>Agent</th>
         <th>Input Tokens</th>
         <th>Output Tokens</th>
-        <th>Cache Read Tokens</th>
-        <th>Cache Write Tokens</th>
+        <th>Cache Read</th>
+        <th>Cache Write</th>
         <th>Total Cost (USD)</th>
       </tr>
     </thead>
     <tbody>
-    <tr><td>designer</td><td>3</td><td>167</td><td>6,184</td><td>3,962</td><td>0.000000</td></tr>
+    <tr><td>ba</td><td>19</td><td>104</td><td>162,540</td><td>36,870</td><td>0.000000</td></tr>
+    <tr><td>designer</td><td>17</td><td>3,673</td><td>73,021</td><td>7,626</td><td>0.000000</td></tr>
+    <tr><td>junior_1</td><td>764</td><td>15,461</td><td>4,302,054</td><td>140,346</td><td>0.228416</td></tr>
+    <tr><td>junior_2</td><td>181</td><td>47</td><td>692,792</td><td>57,507</td><td>0.000000</td></tr>
+    <tr><td>pi</td><td>141</td><td>9,771</td><td>416,716</td><td>70,251</td><td>0.082031</td></tr>
     </tbody>
     <tfoot>
-    <tr><td><strong>Grand Total</strong></td><td>3</td><td>167</td><td>6,184</td><td>3,962</td><td>0.000000</td></tr>
+    <tr><td><strong>Grand Total</strong></td><td>1,122</td><td>29,056</td><td>5,647,123</td><td>312,600</td><td>0.310447</td></tr>
     </tfoot>
   </table>
   <div id="chart-container">
@@ -60,7 +77,7 @@
 //# sourceMappingURL=chart.umd.min.js.map
 </script>
 <script>
-const RAW_DATA = {"labels": ["2026-03-31T10:16:00Z"], "token_series": [{"label": "designer \u00b7 input_tokens", "data": [3]}, {"label": "designer \u00b7 output_tokens", "data": [167]}, {"label": "designer \u00b7 cache_read_tokens", "data": [6184]}, {"label": "designer \u00b7 cache_write_tokens", "data": [3962]}], "cost_series": [{"label": "designer \u00b7 cost_usd", "data": [0.0]}]};
+const RAW_DATA = {"labels": ["2026-03-31T19:49:00Z", "2026-03-31T19:51:00Z", "2026-03-31T19:54:00Z", "2026-03-31T19:55:00Z", "2026-03-31T19:56:00Z", "2026-03-31T19:57:00Z", "2026-03-31T19:58:00Z", "2026-03-31T19:59:00Z", "2026-03-31T20:00:00Z", "2026-03-31T20:01:00Z", "2026-03-31T20:02:00Z"], "token_series": [{"label": "ba \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 14, 2, 3, 0, 0, 0]}, {"label": "ba \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 64, 16, 24, 0, 0, 0]}, {"label": "ba \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 84930, 31044, 46566, 0, 0, 0]}, {"label": "ba \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 28485, 3354, 5031, 0, 0, 0]}, {"label": "designer \u00b7 input_tokens", "data": [3, 3, 3, 3, 5, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 output_tokens", "data": [167, 508, 411, 538, 2049, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cache_read_tokens", "data": [6184, 10146, 10346, 10937, 35408, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cache_write_tokens", "data": [3962, 200, 591, 439, 2434, 0, 0, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 195, 154, 415, 0]}, {"label": "junior_1 \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 51, 49, 15361, 0]}, {"label": "junior_1 \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 706145, 930873, 2665036, 0]}, {"label": "junior_1 \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 52832, 33835, 53679, 0]}, {"label": "junior_2 \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 132, 49]}, {"label": "junior_2 \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 10]}, {"label": "junior_2 \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 446226, 246566]}, {"label": "junior_2 \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 48611, 8896]}, {"label": "pi \u00b7 input_tokens", "data": [0, 0, 0, 0, 41, 100, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 output_tokens", "data": [0, 0, 0, 0, 9, 9762, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 81187, 335529, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 23854, 46397, 0, 0, 0, 0, 0]}], "cost_series": [{"label": "ba \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0, 0, 0]}, {"label": "designer \u00b7 cost_usd", "data": [0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.228416, 0]}, {"label": "junior_2 \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0]}, {"label": "pi \u00b7 cost_usd", "data": [0, 0, 0, 0, 0.0, 0.082031, 0, 0, 0, 0, 0]}]};
 
 (function () {
   var ctx = document.getElementById('tokenChart').getContext('2d');
@@ -73,18 +90,10 @@ const RAW_DATA = {"labels": ["2026-03-31T10:16:00Z"], "token_series": [{"label":
       })
     },
     options: {
-      plugins: {
-        title: { display: true, text: 'Token Usage Over Time' }
-      },
-      scales: {
-        y: { title: { display: true, text: 'Tokens' } }
-      }
+      plugins: { title: { display: true, text: 'Token Usage Over Time' } },
+      scales: { y: { title: { display: true, text: 'Tokens' } } }
     }
   });
-
-  // -----------------------------------------------------------------------
-  // Interactive controls
-  // -----------------------------------------------------------------------
 
   var currentView = 'tokens';
 
@@ -101,9 +110,6 @@ const RAW_DATA = {"labels": ["2026-03-31T10:16:00Z"], "token_series": [{"label":
     var toVal = document.getElementById('toPicker').value;
     var indices = [];
     RAW_DATA.labels.forEach(function(label, idx) {
-      // label format: YYYY-MM-DDTHH:MM:00Z
-      // picker format: YYYY-MM-DDTHH:MM
-      // Slice to first 16 chars for comparison
       var labelSlice = label.slice(0, 16);
       if (fromVal && labelSlice < fromVal) { return; }
       if (toVal && labelSlice > toVal) { return; }
@@ -122,7 +128,6 @@ const RAW_DATA = {"labels": ["2026-03-31T10:16:00Z"], "token_series": [{"label":
     renderChart(filteredLabels, filteredDatasets);
   }
 
-  // Toggle button
   document.getElementById('toggleBtn').addEventListener('click', function() {
     if (currentView === 'tokens') {
       currentView = 'cost';
@@ -138,22 +143,15 @@ const RAW_DATA = {"labels": ["2026-03-31T10:16:00Z"], "token_series": [{"label":
     applyFilter();
   });
 
-  // Date pickers
-  document.getElementById('fromPicker').addEventListener('change', function() {
-    applyFilter();
-  });
-  document.getElementById('toPicker').addEventListener('change', function() {
-    applyFilter();
-  });
-
-  // Reset button
+  document.getElementById('fromPicker').addEventListener('change', applyFilter);
+  document.getElementById('toPicker').addEventListener('change', applyFilter);
   document.getElementById('resetBtn').addEventListener('click', function() {
     document.getElementById('fromPicker').value = '';
     document.getElementById('toPicker').value = '';
     applyFilter();
   });
-
 })();
+
 </script>
 </body>
 </html>

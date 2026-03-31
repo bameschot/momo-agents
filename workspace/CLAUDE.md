@@ -1,147 +1,199 @@
-# Token Report Generator — Build & Test Guide
+# Kanban Board: Development Guide for Coding Agents
 
-## Project Overview
+## Overview
 
-A Python CLI tool that reads token usage logs from `.sentinels/tokens/*.jsonl`, aggregates the data, and generates a self-contained interactive HTML report with Chart.js visualizations.
+This project is a **single-file HTML application**. There is no build step, no bundler, and no external runtime dependencies. The entire application lives in `kanban-board.html` and works by opening it directly in a web browser.
 
-**Technology Stack:**
-- Language: Python 3.8+
-- Dependencies: stdlib only (json, argparse, datetime, pathlib, collections, urllib.request)
-- Charting: Chart.js (embedded inline in generated HTML)
-- Testing: pytest
-- Linting: ruff, pycodestyle (or similar lightweight linters compatible with stdlib-only projects)
+## Running the Application
 
----
-
-## Installation & Setup
-
-No package installation required — this project uses Python stdlib only.
-
-To set up the development environment:
-
+### Option 1: Direct File Open (Simplest)
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+open kanban-board.html
+# or on Linux:
+xdg-open kanban-board.html
 ```
 
-For development (linting and testing):
-
+### Option 2: Local HTTP Server (Recommended for Development)
 ```bash
-pip install pytest ruff
+# Using Python 3
+python3 -m http.server 8000
+
+# Using Python 2
+python -m SimpleHTTPServer 8000
+
+# Using Node.js (if available)
+npx http-server
 ```
+Then open `http://localhost:8000/kanban-board.html` in your browser.
 
----
-
-## Running the Tool
-
-```bash
-python token_report.py [--tokens-dir <path>]
-```
-
-**Arguments:**
-- `--tokens-dir <path>`: path to directory containing `*.jsonl` files (default: `.sentinels/tokens` relative to CWD)
-
-**Output:**
-- Generates `token-report_YYYY-MM-DD_HH-MM-SS.html` in the current working directory
-- Prints the path to the generated report on stdout
-- Warnings or errors (if any) are printed to stderr
-
-**Example:**
-
-```bash
-python token_report.py --tokens-dir .sentinels/tokens
-# Output: token-report_2026-03-31_14-30-45.html
-```
-
----
+**Note:** Using a local server ensures proper cookie handling and avoids browser security restrictions on file:// URLs.
 
 ## Testing
 
-Run the test suite with pytest:
+This project has no automated test suite. Testing is **manual and browser-based**:
 
+1. Open `kanban-board.html` in a modern browser (Chrome, Firefox, Safari, Edge).
+2. Test all interactive features:
+   - Create cards by clicking "+ Add Card"
+   - Edit cards by clicking the ✏️ icon
+   - Delete cards by clicking the 🗑️ icon
+   - Drag and drop cards between columns
+   - Verify data persists across page refresh (check browser DevTools > Application > Cookies)
+   - Test dark mode by toggling OS-level or browser-level dark mode preference
+   - Test responsive layout by resizing the browser window below 600px
+
+**Browser DevTools hints:**
+- View cookies: Inspect → Application → Cookies → file:// (or localhost:8000)
+- Clear cookies: Application → Cookies → Right-click → Delete
+- Errors: Console tab
+
+## Development Tools (Optional)
+
+The following tools can be installed for code quality but are **not required** for the application to function:
+
+### Linting & Formatting
 ```bash
-pytest
+# Install (one-time setup)
+npm install --save-dev eslint stylelint htmlhint prettier
+
+# Run linter
+npx eslint kanban-board.html  # Check inline <script> block
+npx stylelint kanban-board.html  # Check inline <style> block
+npx htmlhint kanban-board.html   # Check HTML structure
+
+# Format
+npx prettier --write kanban-board.html
 ```
 
-Or with verbose output:
+**Note:** These tools are optional and not required by the application.
 
-```bash
-pytest -v
+## Code Conventions
+
+### Inline Script Block (`<script>`)
+- Use strict mode: `'use strict';` at the top
+- Use ES6+ syntax (arrow functions, const/let, template literals)
+- All code in a single `<script>` block; no modules
+- Namespace core functions and state at the module level to avoid globals
+- Comments should explain the *why*, not the *what*
+
+### Inline Style Block (`<style>`)
+- Use CSS custom properties for theming (e.g., `--color-primary`, `--bg-card`)
+- Support dark mode via `@media (prefers-color-scheme: dark)` media query
+- Keep selectors simple and avoid deep nesting
+- Class names follow BEM convention (e.g., `.column__header`, `.card--overdue`)
+
+### HTML Structure
+- Semantic HTML5 (use `<main>`, `<section>`, `<article>`, etc.)
+- Use `aria-label` and `aria-hidden` for accessibility
+- Form controls must have associated `<label>` elements or `aria-label` attributes
+- IDs are only for JavaScript targeting; use classes for styling
+
+## Project Structure
+
+```
+workspace/
+├── kanban-board.html          # The entire application (single file)
+└── CLAUDE.md                  # This file
 ```
 
-**Test location:** `tests/` directory
-**Test discovery:** pytest will automatically discover `test_*.py` files
+## Data Model
+
+The entire board state is stored in a single JSON object in a browser cookie (`kanban_state`):
+
+```json
+{
+  "columns": {
+    "todo": {
+      "cards": [
+        {
+          "id": "uuid-v4-string",
+          "title": "string (required)",
+          "description": "string (optional)",
+          "priority": "high | medium | low",
+          "dueDate": "YYYY-MM-DD | null"
+        }
+      ]
+    },
+    "inprogress": { "cards": [] },
+    "done": { "cards": [] }
+  }
+}
+```
+
+### State Management
+- **Load on startup:** `loadState()` reads the cookie and populates the board. Falls back to empty columns if the cookie doesn't exist.
+- **Save on every change:** `saveState(state)` serialises the state to JSON and writes it to the `kanban_state` cookie.
+- **Re-render:** `renderBoard(state)` clears and rebuilds all DOM nodes from state.
+
+### UUID Generation
+- Use `crypto.randomUUID()` for card IDs (modern browsers).
+- Fallback to a simple timestamp-based shim for older browsers if needed.
+
+### Cookie Storage Limits
+- Browser cookies are typically limited to 4 KB per domain.
+- If the serialised state exceeds **3 800 bytes**, warn the user.
+- If card count exceeds **20**, show a dismissible warning banner.
+
+## SortableJS Embedding
+
+The Sortable.js library must be embedded inline in the `<script>` block (no external dependencies). The source is available at https://github.com/SortableJS/Sortable.
+
+Key usage:
+```javascript
+new Sortable(columnElement, {
+  group: 'cards',
+  animation: 150,
+  onEnd: function(evt) {
+    // Handle card movement between columns
+    saveState(state);
+  }
+});
+```
+
+## Browser Support
+
+- Modern evergreen browsers (Chrome, Firefox, Safari, Edge)
+- ES6+ syntax required (no IE support)
+- `crypto.randomUUID()` available (fallback for older browsers if needed)
+- Supports `@media (prefers-color-scheme: dark)`
+
+## Agent Exclusion List
+
+Coding Agents must **never read from or write to** these paths:
+
+```
+# Dependency management (if npm is used for dev tools)
+node_modules/
+package-lock.json
+
+# Editor & IDE artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Browser & development caches
+.cache/
+*.log
+```
+
+**Note:** These exclusions only apply if development tools are installed. The core application has no dependencies and no build artifacts.
+
+## Quick Start for Coding Agents
+
+1. Open `kanban-board.html` in a text editor.
+2. All code (HTML, CSS, JS) is in a single file; edit inline.
+3. Save the file.
+4. Refresh the browser to see changes.
+5. Test interactively in the browser.
+6. No build step, no npm install required to run the application.
 
 ---
 
-## Linting & Formatting
-
-**Run linting checks:**
-
-```bash
-ruff check token_report.py tests/
-```
-
-**Auto-format code (if using ruff format):**
-
-```bash
-ruff format token_report.py tests/
-```
-
-Or use standard Python formatting tools (black, autopep8, etc.):
-
-```bash
-black token_report.py tests/
-# or
-autopep8 --in-place token_report.py tests/
-```
-
-**PEP 8 compliance check:**
-
-```bash
-pycodestyle token_report.py tests/
-```
-
----
-
-## Environment Variables
-
-None required. The tool operates entirely on the filesystem.
-
----
-
-## Project Conventions
-
-1. **Code style:** PEP 8; max line length 100 characters
-2. **Docstrings:** All functions and modules must have docstrings explaining purpose, parameters, and return values
-3. **Error handling:**
-   - Invalid JSON lines in JSONL files: log a warning to stderr and skip the line
-   - Missing tokens directory: log an error to stderr and exit with code 1
-   - No `.jsonl` files found: log an error to stderr and exit with code 1
-4. **Data model:** Follow the structures defined in the design document (raw records, aggregated minute buckets)
-5. **HTML output:** Self-contained; Chart.js must be embedded inline (cached from CDN on first run, or provided locally)
-6. **Testing:** Unit tests for each component (loader, aggregator, HTML generator); integration test for end-to-end execution
-7. **Output format:** `token-report_YYYY-MM-DD_HH-MM-SS.html` (no colons in timestamp for Windows compatibility)
-
----
-
-## Quick Reference
-
-| Task | Command |
-|---|---|
-| Run tool | `python token_report.py [--tokens-dir <path>]` |
-| Run tests | `pytest` |
-| Lint code | `ruff check .` |
-| Format code | `ruff format .` |
-| Install dev dependencies | `pip install pytest ruff` |
-| Enter virtual environment | `source .venv/bin/activate` |
-| Exit virtual environment | `deactivate` |
-
----
-
-## Notes
-
-- **No external dependencies:** This tool uses only Python stdlib, making it portable and lightweight.
-- **Chart.js caching:** The tool downloads Chart.js from the CDN and caches it locally at `./.chartjs_cache/chart.umd.min.js` on first run. Subsequent runs use the cached version.
-- **Offline support:** Once the HTML report is generated, it requires no internet connection to view or interact with.
-- **File safety:** Output filename uses underscores instead of colons to ensure compatibility with Windows filesystems.
+**Last Updated:** 2026-03-31
+**Technology Stack:** HTML5 + CSS3 + Vanilla JavaScript (ES6+) + SortableJS (inlined)

@@ -2,10 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Token Usage Report</title>
+  <title>Pipeline Run Report</title>
   <style>
     body { font-family: sans-serif; margin: 2rem; }
-    h1 { margin-bottom: 1rem; }
+    h1 { margin-bottom: 0.25rem; }
+    h2 { margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px solid #ccc; padding-bottom: 0.25rem; }
     table { border-collapse: collapse; width: 100%; }
     th, td { padding: 6px 12px; border: 1px solid #ccc; text-align: right; }
     th:first-child, td:first-child { text-align: left; }
@@ -16,28 +17,49 @@
   </style>
 </head>
 <body>
-  <h1>Token Usage Report</h1>
+  <h1>Pipeline Run Report</h1>
+  <h2>Run Log</h2>
+  <table>
+    <thead>
+      <tr><th>Timestamp</th><th>Agent</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+    <tr><td>2026-03-31T19:56:51.028554+00:00</td><td>designer</td><td>design written: kanban-board.new.md</td></tr>
+    <tr><td>2026-03-31T19:57:54.716085+00:00</td><td>project-initialiser</td><td>project initiated from: kanban-board.new.md</td></tr>
+    <tr><td>2026-03-31T20:01:30.127819+00:00</td><td>junior-coding-agent</td><td>story done: STORY-001.easy.done.md</td></tr>
+    <tr><td>2026-03-31T20:03:23.371237+00:00</td><td>junior-coding-agent</td><td>story done: STORY-002.easy.done.md</td></tr>
+    <tr><td>2026-03-31T20:07:24.255950+00:00</td><td>senior-coding-agent</td><td>story done: STORY-003.medium.done.md</td></tr>
+    <tr><td>2026-03-31T20:09:32.380914+00:00</td><td>senior-coding-agent</td><td>story done: STORY-004.medium.done.md</td></tr>
+    <tr><td>2026-03-31T20:11:07.317310+00:00</td><td>business-analyst</td><td>story created: STORY-001.easy.done.md</td></tr>
+    <tr><td>2026-03-31T20:11:07.317779+00:00</td><td>business-analyst</td><td>story created: STORY-002.easy.done.md</td></tr>
+    <tr><td>2026-03-31T20:11:07.317869+00:00</td><td>business-analyst</td><td>story created: STORY-003.medium.done.md</td></tr>
+    <tr><td>2026-03-31T20:11:07.317927+00:00</td><td>business-analyst</td><td>story created: STORY-004.medium.done.md</td></tr>
+    <tr><td>2026-03-31T20:11:07.317977+00:00</td><td>business-analyst</td><td>story created: STORY-005.easy.ready.md</td></tr>
+    <tr><td>2026-03-31T20:14:29.603508+00:00</td><td>junior-coding-agent</td><td>story done: STORY-005.easy.done.md</td></tr>
+    </tbody>
+  </table>
+  <h2>Token Usage</h2>
   <table>
     <thead>
       <tr>
         <th>Agent</th>
         <th>Input Tokens</th>
         <th>Output Tokens</th>
-        <th>Cache Read Tokens</th>
-        <th>Cache Write Tokens</th>
+        <th>Cache Read</th>
+        <th>Cache Write</th>
         <th>Total Cost (USD)</th>
       </tr>
     </thead>
     <tbody>
-    <tr><td>ba</td><td>26</td><td>7,227</td><td>235,954</td><td>52,528</td><td>0.175272</td></tr>
-    <tr><td>designer</td><td>3</td><td>163</td><td>10,146</td><td>0</td><td>0.000000</td></tr>
-    <tr><td>junior_1</td><td>1,129</td><td>15,990</td><td>4,933,078</td><td>176,120</td><td>0.250961</td></tr>
-    <tr><td>junior_2</td><td>2,199</td><td>32,211</td><td>14,498,514</td><td>229,402</td><td>0.660137</td></tr>
-    <tr><td>pi</td><td>33</td><td>9,499</td><td>412,794</td><td>43,851</td><td>0.251912</td></tr>
-    <tr><td>senior_1</td><td>100</td><td>19,077</td><td>3,077,261</td><td>112,962</td><td>0.795517</td></tr>
+    <tr><td>ba</td><td>25</td><td>7,927</td><td>218,989</td><td>46,924</td><td>0.172000</td></tr>
+    <tr><td>designer</td><td>17</td><td>3,673</td><td>73,021</td><td>7,626</td><td>0.000000</td></tr>
+    <tr><td>junior_1</td><td>2,349</td><td>40,164</td><td>14,953,458</td><td>324,810</td><td>0.749406</td></tr>
+    <tr><td>junior_2</td><td>658</td><td>14,815</td><td>3,316,812</td><td>186,187</td><td>0.189480</td></tr>
+    <tr><td>pi</td><td>141</td><td>9,771</td><td>416,716</td><td>70,251</td><td>0.082031</td></tr>
+    <tr><td>senior_1</td><td>139</td><td>19,574</td><td>2,924,387</td><td>242,927</td><td>0.977212</td></tr>
     </tbody>
     <tfoot>
-    <tr><td><strong>Grand Total</strong></td><td>3,490</td><td>84,167</td><td>23,167,747</td><td>614,863</td><td>2.133799</td></tr>
+    <tr><td><strong>Grand Total</strong></td><td>3,329</td><td>95,924</td><td>21,903,383</td><td>878,725</td><td>2.170129</td></tr>
     </tfoot>
   </table>
   <div id="chart-container">
@@ -65,7 +87,7 @@
 //# sourceMappingURL=chart.umd.min.js.map
 </script>
 <script>
-const RAW_DATA = {"labels": ["2026-03-31T10:21:00Z", "2026-03-31T10:22:00Z", "2026-03-31T10:23:00Z", "2026-03-31T10:24:00Z", "2026-03-31T10:25:00Z", "2026-03-31T10:26:00Z", "2026-03-31T10:27:00Z", "2026-03-31T10:28:00Z", "2026-03-31T10:29:00Z", "2026-03-31T10:30:00Z", "2026-03-31T10:31:00Z", "2026-03-31T10:32:00Z", "2026-03-31T10:33:00Z", "2026-03-31T10:34:00Z", "2026-03-31T10:35:00Z"], "token_series": [{"label": "ba \u00b7 input_tokens", "data": [0, 15, 3, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "ba \u00b7 output_tokens", "data": [0, 54, 30, 7143, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "ba \u00b7 cache_read_tokens", "data": [0, 104190, 46845, 84919, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "ba \u00b7 cache_write_tokens", "data": [0, 26625, 5016, 20887, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 input_tokens", "data": [3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 output_tokens", "data": [163, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cache_read_tokens", "data": [10146, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 input_tokens", "data": [0, 0, 0, 176, 0, 0, 97, 105, 112, 259, 380, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 output_tokens", "data": [0, 0, 0, 3430, 0, 0, 349, 1044, 1918, 67, 9182, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 cache_read_tokens", "data": [0, 0, 0, 504292, 0, 0, 267593, 387237, 465471, 1322166, 1986319, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 cache_write_tokens", "data": [0, 0, 0, 46900, 0, 0, 22525, 16428, 32991, 22135, 35141, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 input_tokens", "data": [0, 0, 0, 363, 245, 259, 273, 280, 779, 0, 0, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 output_tokens", "data": [0, 0, 0, 112, 73, 71, 78, 104, 31773, 0, 0, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 cache_read_tokens", "data": [0, 0, 0, 1275391, 1231796, 1642226, 2075451, 2559318, 5714332, 0, 0, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 cache_write_tokens", "data": [0, 0, 0, 52184, 21921, 21648, 30824, 24378, 78447, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 input_tokens", "data": [9, 6, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 output_tokens", "data": [36, 121, 9342, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cache_read_tokens", "data": [43887, 94624, 274283, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cache_write_tokens", "data": [16056, 4404, 23391, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 12, 2, 12, 55]}, {"label": "senior_1 \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 132, 116, 18, 118, 18693]}, {"label": "senior_1 \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 177744, 316043, 62852, 471325, 2049297]}, {"label": "senior_1 \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 30045, 20347, 1854, 14184, 46532]}], "cost_series": [{"label": "ba \u00b7 cost_usd", "data": [0, 0.0, 0.0, 0.175272, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cost_usd", "data": [0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 cost_usd", "data": [0, 0, 0, 0.044094, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.206867, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 cost_usd", "data": [0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.660137, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cost_usd", "data": [0.0, 0.0, 0.251912, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.795517]}]};
+const RAW_DATA = {"labels": ["2026-03-31T19:49:00Z", "2026-03-31T19:51:00Z", "2026-03-31T19:54:00Z", "2026-03-31T19:55:00Z", "2026-03-31T19:56:00Z", "2026-03-31T19:57:00Z", "2026-03-31T19:58:00Z", "2026-03-31T19:59:00Z", "2026-03-31T20:00:00Z", "2026-03-31T20:01:00Z", "2026-03-31T20:02:00Z", "2026-03-31T20:03:00Z", "2026-03-31T20:04:00Z", "2026-03-31T20:05:00Z", "2026-03-31T20:06:00Z", "2026-03-31T20:07:00Z", "2026-03-31T20:08:00Z", "2026-03-31T20:09:00Z", "2026-03-31T20:10:00Z", "2026-03-31T20:11:00Z", "2026-03-31T20:12:00Z", "2026-03-31T20:13:00Z", "2026-03-31T20:14:00Z"], "token_series": [{"label": "ba \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 14, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0]}, {"label": "ba \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 64, 16, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7823, 0, 0, 0]}, {"label": "ba \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 84930, 31044, 46566, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56449, 0, 0, 0]}, {"label": "ba \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 28485, 3354, 5031, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10054, 0, 0, 0]}, {"label": "designer \u00b7 input_tokens", "data": [3, 3, 3, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 output_tokens", "data": [167, 508, 411, 538, 2049, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cache_read_tokens", "data": [6184, 10146, 10346, 10937, 35408, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "designer \u00b7 cache_write_tokens", "data": [3962, 200, 591, 439, 2434, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 195, 154, 415, 0, 0, 0, 0, 0, 0, 0, 0, 197, 280, 231, 294, 583]}, {"label": "junior_1 \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 51, 49, 15361, 0, 0, 0, 0, 0, 0, 0, 0, 58, 100, 79, 92, 24374]}, {"label": "junior_1 \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 706145, 930873, 2665036, 0, 0, 0, 0, 0, 0, 0, 0, 694953, 1535435, 1668597, 2518961, 4233458]}, {"label": "junior_1 \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 52832, 33835, 53679, 0, 0, 0, 0, 0, 0, 0, 0, 32433, 27472, 23922, 38397, 62240]}, {"label": "junior_2 \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 132, 210, 226, 0, 0, 0, 90, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 33, 14721, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 446226, 1254525, 1354074, 0, 0, 0, 261987, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_2 \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 48611, 42215, 34719, 0, 0, 0, 60642, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 input_tokens", "data": [0, 0, 0, 0, 41, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 output_tokens", "data": [0, 0, 0, 0, 9, 9762, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 81187, 335529, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 23854, 46397, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 input_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 7, 10, 18, 48, 11, 33, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 output_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 48, 52, 124, 130, 13144, 162, 5914, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 cache_read_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 60213, 134881, 342883, 366895, 790088, 318236, 911191, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 cache_write_tokens", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15006, 43469, 19258, 22756, 102724, 7446, 32268, 0, 0, 0, 0, 0]}], "cost_series": [{"label": "ba \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.172, 0, 0, 0]}, {"label": "designer \u00b7 cost_usd", "data": [0.0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "junior_1 \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.228416, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.52099]}, {"label": "junior_2 \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.18948, 0, 0, 0, 0.0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "pi \u00b7 cost_usd", "data": [0, 0, 0, 0, 0.0, 0.082031, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]}, {"label": "senior_1 \u00b7 cost_usd", "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.548844, 0.0, 0.428368, 0, 0, 0, 0, 0]}]};
 
 (function () {
   var ctx = document.getElementById('tokenChart').getContext('2d');
@@ -78,18 +100,10 @@ const RAW_DATA = {"labels": ["2026-03-31T10:21:00Z", "2026-03-31T10:22:00Z", "20
       })
     },
     options: {
-      plugins: {
-        title: { display: true, text: 'Token Usage Over Time' }
-      },
-      scales: {
-        y: { title: { display: true, text: 'Tokens' } }
-      }
+      plugins: { title: { display: true, text: 'Token Usage Over Time' } },
+      scales: { y: { title: { display: true, text: 'Tokens' } } }
     }
   });
-
-  // -----------------------------------------------------------------------
-  // Interactive controls
-  // -----------------------------------------------------------------------
 
   var currentView = 'tokens';
 
@@ -106,9 +120,6 @@ const RAW_DATA = {"labels": ["2026-03-31T10:21:00Z", "2026-03-31T10:22:00Z", "20
     var toVal = document.getElementById('toPicker').value;
     var indices = [];
     RAW_DATA.labels.forEach(function(label, idx) {
-      // label format: YYYY-MM-DDTHH:MM:00Z
-      // picker format: YYYY-MM-DDTHH:MM
-      // Slice to first 16 chars for comparison
       var labelSlice = label.slice(0, 16);
       if (fromVal && labelSlice < fromVal) { return; }
       if (toVal && labelSlice > toVal) { return; }
@@ -127,7 +138,6 @@ const RAW_DATA = {"labels": ["2026-03-31T10:21:00Z", "2026-03-31T10:22:00Z", "20
     renderChart(filteredLabels, filteredDatasets);
   }
 
-  // Toggle button
   document.getElementById('toggleBtn').addEventListener('click', function() {
     if (currentView === 'tokens') {
       currentView = 'cost';
@@ -143,22 +153,15 @@ const RAW_DATA = {"labels": ["2026-03-31T10:21:00Z", "2026-03-31T10:22:00Z", "20
     applyFilter();
   });
 
-  // Date pickers
-  document.getElementById('fromPicker').addEventListener('change', function() {
-    applyFilter();
-  });
-  document.getElementById('toPicker').addEventListener('change', function() {
-    applyFilter();
-  });
-
-  // Reset button
+  document.getElementById('fromPicker').addEventListener('change', applyFilter);
+  document.getElementById('toPicker').addEventListener('change', applyFilter);
   document.getElementById('resetBtn').addEventListener('click', function() {
     document.getElementById('fromPicker').value = '';
     document.getElementById('toPicker').value = '';
     applyFilter();
   });
-
 })();
+
 </script>
 </body>
 </html>

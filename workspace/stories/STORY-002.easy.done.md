@@ -1,38 +1,34 @@
-# STORY-002: easy Data Loader
+# STORY-002: easy State Manager & Board Initialisation
 
 **Index**: 2
 **Complexity**: easy
-**Design ref**: workspace/design/token-report.new.md
+**Design ref**: workspace/design/kanban-board.processed.md | workspace/design/kanban-board.new.md
 **Depends on**: STORY-001
 
 ## Context
-The data loader is responsible for discovering all `*.jsonl` files under the tokens directory, deriving agent names from filenames, and parsing each line into a structured record dict. Robustness is a key requirement: invalid JSON lines must not crash the tool; they are skipped with a warning to stderr. The loader also enforces the requirement that at least one `.jsonl` file is present (exit code 1 otherwise).
+Adds the JavaScript state layer: reading and writing the `kanban_state` cookie, a UUID generator, and `renderBoard()` which rebuilds the DOM from the state object. After this story the board is interactive enough to show persisted card data across page refreshes, even though card creation and drag-and-drop are not yet wired up.
 
 ## Acceptance Criteria
-- [ ] `load_records(tokens_dir: Path) -> list[dict]` is implemented in `workspace/token_report.py`, replacing the stub from STORY-001.
-- [ ] All `*.jsonl` files in `tokens_dir` are discovered (non-recursive is sufficient; all files are at the top level per the design).
-- [ ] Agent name is derived from the filename stem (e.g. `designer.jsonl` → `"designer"`).
-- [ ] Each valid JSON line produces a record dict with keys: `ts`, `agent`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`.
-- [ ] Blank lines are silently skipped.
-- [ ] Lines that fail `json.loads()` are skipped and a warning is printed to stderr identifying the file and line number.
-- [ ] If no `*.jsonl` files are found in `tokens_dir`, the function prints an error to stderr and the tool exits with code 1.
-- [ ] Function has a docstring.
-- [ ] Code passes `ruff check token_report.py` with no errors.
+- [ ] On page load, `loadState()` reads the `kanban_state` cookie. If the cookie is absent or its JSON is malformed, the function returns a valid default state with three empty columns (`todo`, `inprogress`, `done`).
+- [ ] `saveState(state)` serialises the state object to JSON, URL-encodes it, and writes it to `document.cookie` as `kanban_state=<value>; path=/; SameSite=Lax`. No expiry attribute is set (session cookie).
+- [ ] `renderBoard(state)` clears the three column card-list elements and re-populates them from `state.columns`. Each rendered card shows at minimum its title; full card visual detail (priority badge, overdue border, etc.) is added in STORY-003.
+- [ ] Each column's card count badge updates to reflect the current number of cards after every `renderBoard()` call.
+- [ ] `generateId()` returns a UUID string. It uses `crypto.randomUUID()` when available and falls back to a timestamp-based shim (e.g. `Date.now().toString(36) + Math.random().toString(36).slice(2)`) for older browsers.
+- [ ] `DOMContentLoaded` handler calls `loadState()` then `renderBoard()`, so the board is populated immediately on page open.
+- [ ] If a previously saved cookie is present, refreshing the page restores all cards to their correct columns.
+- [ ] The entire implementation is contained within the single `<script>` block in `kanban-board.html`; `'use strict';` appears at the top.
 
 ## Implementation Hints
-- Use `pathlib.Path.glob("*.jsonl")` to discover files.
-- Iterate with `enumerate(f, 1)` to get 1-based line numbers for warnings.
-- Use `json.loads(line.strip())` inside a `try/except json.JSONDecodeError`.
-- After parsing, inject `"agent": path.stem` into each record dict.
-- Numeric fields (`input_tokens`, etc.) should be cast to `int`/`float` if they arrive as the wrong type — the design guarantees the schema but defensive casting is fine.
-- If no files are found, call `sys.exit(1)` after printing to stderr; this keeps error handling consistent with the CLI entry point.
+- Keep state in a module-level variable (`let state = loadState();`) rather than re-reading the cookie on every render.
+- Cookie parsing: `document.cookie` returns all cookies as `key=value; key2=value2`. Split on `'; '`, find the entry starting with `kanban_state=`, then `decodeURIComponent()` the value before `JSON.parse()`.
+- Wrap `JSON.parse` in a `try/catch` so a corrupted cookie never crashes the app.
+- `renderBoard` should iterate `['todo', 'inprogress', 'done']` in order and use `document.getElementById` (or a column lookup map) to find the correct `<ul>` element for each column.
+- Card elements created by `renderBoard` need a `data-card-id` and `data-column-id` attribute — these are used by CRUD and drag-and-drop handlers in later stories.
 
 ## Test Requirements
-Create `tests/test_loader.py`.
-
-- **Valid data**: given a temporary directory with two `.jsonl` files (each containing several valid records), assert that `load_records` returns the correct number of records, agent names match filename stems, and all expected fields are present.
-- **Invalid lines skipped**: a file containing one valid line and one malformed JSON line; assert only the valid record is returned and a warning was printed to stderr.
-- **No files found**: calling `load_records` on an empty temporary directory causes the process to exit with code 1 (test via `subprocess` or `pytest.raises(SystemExit)`).
+- Opening `kanban-board.html` with no existing cookie renders three empty columns with badge `0`.
+- Manually setting `document.cookie = 'kanban_state=...'` in the browser console (with a valid JSON payload) and refreshing the page shows the saved cards in the correct columns.
+- Setting the cookie to invalid JSON (e.g. `'{'`) and refreshing the page shows three empty columns without a JavaScript error in the console.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->

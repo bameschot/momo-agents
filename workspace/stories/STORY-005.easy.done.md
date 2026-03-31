@@ -1,34 +1,34 @@
-# STORY-005: easy Chart.js Bundle Fetcher and Cache
+# STORY-005: easy Card Limit & Cookie Size Warnings
 
 **Index**: 5
 **Complexity**: easy
-**Design ref**: workspace/design/token-report.new.md
-**Depends on**: STORY-001
+**Design ref**: workspace/design/kanban-board.processed.md | workspace/design/kanban-board.new.md
+**Depends on**: STORY-003
 
 ## Context
-The generated HTML report must be fully self-contained (no internet connection required after generation). This is achieved by embedding the Chart.js UMD bundle verbatim inside a `<script>` tag. To avoid re-downloading on every run, the bundle is cached locally at `workspace/.chartjs_cache/chart.umd.min.js`. This story implements that fetch-and-cache mechanism.
+Adds two safety warnings to protect users from hitting browser cookie limits. A dismissible banner alerts when the total card count exceeds 20, and a separate inline message warns when the serialised cookie payload nears the 4 KB browser limit. Both warnings are driven entirely by `saveState()` so they fire automatically on every mutation.
 
 ## Acceptance Criteria
-- [ ] `get_chartjs_bundle(cache_dir: Path) -> str` is implemented in `workspace/token_report.py`, replacing the stub from STORY-001.
-- [ ] If `cache_dir / "chart.umd.min.js"` exists, its contents are read and returned without making any network request.
-- [ ] If the cached file does not exist, the function downloads Chart.js from `https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.min.js` using `urllib.request.urlopen`, saves the content to `cache_dir / "chart.umd.min.js"` (creating `cache_dir` if needed), and returns the content as a string.
-- [ ] The returned value is the full JS source as a UTF-8 decoded string.
-- [ ] The default `cache_dir` used by `main()` is `Path("workspace/.chartjs_cache")` (relative to CWD).
-- [ ] Function has a docstring.
-- [ ] Code passes `ruff check token_report.py` with no errors.
+- [ ] After every call to `saveState(state)`, the total card count across all three columns is computed.
+- [ ] If the total card count exceeds **20**, the warning banner element (already present in the DOM from STORY-001) becomes visible, displaying the message: *"You have more than 20 cards — cookie storage may be limited."*
+- [ ] The warning banner includes a dismiss ("×") button. Clicking it hides the banner for the current session (the banner is not shown again until the next `saveState` call that still finds count > 20, meaning it reappears if the user adds another card while still over the limit).
+- [ ] When the total card count drops back to **20 or fewer**, the warning banner is hidden automatically by the next `saveState` call — no manual dismissal required.
+- [ ] After every `saveState(state)` call, the byte length of the serialised JSON is checked. If it exceeds **3 800 bytes**, an additional warning message (distinct from the card-count banner, e.g. an inline paragraph below the board) is shown: *"Cookie storage is nearly full. Remove some cards to avoid data loss."*
+- [ ] The cookie size warning disappears automatically when the payload drops back to 3 800 bytes or fewer.
+- [ ] Neither warning is shown on initial page load if the conditions are not met.
 
 ## Implementation Hints
-- Use `urllib.request.urlopen(url).read()` then `.decode("utf-8")`.
-- Use `cache_dir.mkdir(parents=True, exist_ok=True)` before writing.
-- Write the file in binary mode (`"wb"`) after encoding back to UTF-8, or in text mode after decoding.
-- Keep the CDN URL as a module-level constant so it is easy to update.
-- The cache path `.chartjs_cache/chart.umd.min.js` is listed in `.gitignore` by convention — no need to create that file, just document it in a comment.
+- Centralise both checks in a `checkWarnings(state, serialisedJson)` function called at the end of `saveState`. Pass the already-serialised string so you avoid double-serialising.
+- Byte length: `new Blob([serialisedJson]).size` gives the accurate UTF-8 byte count (important if card text contains non-ASCII characters); `serialisedJson.length` is a safe approximation for ASCII-only content and simpler to implement.
+- The banner dismiss sets a module-level `bannerDismissed` flag. `checkWarnings` skips showing the banner if `bannerDismissed` is `true` AND the count is still the same or lower than when dismissed. Reset the flag if the count increases (a new card was added).
+- Simpler alternative: reset `bannerDismissed = false` on every `saveState` call, then check it in order: if count > 20 and not dismissed → show banner. This means the banner reappears after every new save if still over 20 and not dismissed in this call cycle — which is acceptable per the design.
+- The cookie size warning element can be a `<p id="cookie-size-warning">` placed just below the `.board` container; toggle `hidden` attribute or a CSS class.
+- Ensure warning elements have `role="alert"` or `aria-live="polite"` so screen readers announce them.
 
 ## Test Requirements
-Create `tests/test_chartjs_cache.py`.
-
-- **Cache hit**: write a fake JS string to a temporary cache file; call `get_chartjs_bundle` with that directory; assert the returned string equals the fake content and no network request was made (monkeypatch `urllib.request.urlopen` to raise if called).
-- **Cache miss**: call `get_chartjs_bundle` with an empty temporary directory (monkeypatching `urllib.request.urlopen` to return a fake JS bytes response); assert the returned string equals the fake content and the cache file was created with the correct content.
+- Adding a 21st card triggers the card-count warning banner. Clicking "×" dismisses it. Deleting a card (dropping count to 20) hides the banner automatically.
+- Filling cards with long descriptions until the serialised JSON exceeds 3 800 bytes causes the cookie size warning to appear. Deleting cards until the payload is back under 3 800 bytes makes the warning disappear.
+- On fresh page load with fewer than 20 cards and a small cookie payload, neither warning is visible.
 
 ---
 <!-- Coding Agent appends timestamped failure notes below this line -->
