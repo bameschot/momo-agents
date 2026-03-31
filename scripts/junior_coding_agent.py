@@ -1,4 +1,4 @@
-"""Junior Coding Agent — claims and implements easy stories from stories/."""
+"""Junior Coding Agent — claims and implements easy stories one at a time."""
 import argparse
 import anyio
 from pathlib import Path
@@ -38,38 +38,42 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _unclaimed_ready_stories(stories_dir: Path) -> list[Path]:
-    """Return STORY-NNN.easy.ready.md files, sorted by story number."""
-    return sorted(
-        stories_dir.glob("STORY-*.easy.ready.md"),
-        key=lambda p: p.name,
+def _claim_story(stories_dir: Path) -> Path | None:
+    """Atomically claim the lowest-numbered easy .ready story.
+
+    Renames STORY-NNN.easy.ready.md → STORY-NNN.easy.working.md.
+    Returns the working path on success, None if nothing could be claimed.
+    """
+    candidates = sorted(stories_dir.glob("STORY-*.easy.ready.md"), key=lambda p: p.name)
+    for candidate in candidates:
+        working = candidate.with_name(candidate.name.replace(".ready.md", ".working.md"))
+        try:
+            candidate.rename(working)
+            return working
+        except OSError:
+            continue
+    return None
+
+
+def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file: Path) -> str:
+    return (
+        f"Story: {story_path}\n"
+        f"Workspace: {workspace_dir}\n"
+        f"HALT file: {halt_file}\n\n"
+        f"## workspace/CLAUDE.md\n\n{claude_md}\n\n"
+        "## Task\n"
+        "1. Read the story file.\n"
+        "2. Read the design doc(s) from the story's **Design ref** field "
+        "(two paths separated by ' | ' — read whichever exist).\n"
+        "3. Note the '## Agent Exclusion List' in CLAUDE.md above — never read from or "
+        "write to those paths.\n"
+        "4. Implement the acceptance criteria.\n"
+        "5. Run tests and linter per CLAUDE.md.\n"
+        f"6. Check {halt_file} — if found, perform the halt procedure.\n"
+        "7. Success → rename .easy.working.md → .easy.done.md, commit.\n"
+        f"8. Failure → create {halt_file}, rename .easy.working.md → "
+        ".easy.failed.md, perform halt procedure."
     )
-
-
-async def _wait_for_ready_story(stories_dir: Path, pipeline_complete: Path) -> bool:
-    """Poll until at least one unclaimed easy.ready story exists. Returns False on HALT/pipeline_complete."""
-    halt_file = stories_dir / "HALT"
-    printed = False
-    while True:
-        if halt_file.exists():
-            print("[Junior Coding Agent] HALT detected while waiting — exiting.")
-            return False
-
-        if pipeline_complete.exists():
-            print("[Junior Coding Agent] Pipeline complete sentinel detected — exiting.")
-            return False
-
-        if _unclaimed_ready_stories(stories_dir):
-            return True
-
-        if not printed:
-            print(
-                f"[Junior Coding Agent] No ready easy stories available. "
-                f"Polling every {POLL_INTERVAL}s..."
-            )
-            printed = True
-
-        await anyio.sleep(POLL_INTERVAL)
 
 
 async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
@@ -78,54 +82,41 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
 
     await wait_for_workspace(workspace_dir, "Junior Coding Agent", POLL_INTERVAL)
 
-    if not await _wait_for_ready_story(stories_dir, pipeline_complete):
-        print("[Junior Coding Agent] No easy stories to process — exiting.")
-        return
-
-    task = (
-        f"Project root: {workspace_dir}\n"
-        f"Stories directory: {stories_dir}\n\n"
-        "## Startup (do this once before the loop)\n"
-        f"1. Read {workspace_dir}/CLAUDE.md and retain its build, test, and lint "
-        "instructions for the entire session. Do not re-read it on each story.\n"
-        "2. Note the '## Agent Exclusion List' section of CLAUDE.md — these folders and file "
-        "patterns must never be read from or written to. Retain this list and treat every "
-        "path in it as off-limits for the entire session.\n\n"
-        "## Coding loop\n"
-        f"3. Check for {halt_file} — exit immediately if it exists.\n"
-        f"4. Scan {stories_dir} for files matching STORY-NNN.easy.ready.md. "
-        "These have already been validated as ready to implement by the Story Orchestrator.\n"
-        "5. Sort candidates by story number (ascending). Pick the lowest-numbered one.\n"
-        "6. Atomically claim it by renaming STORY-NNN.easy.ready.md → STORY-NNN.easy.working.md. "
-        "If the rename fails (race with another agent), try the next candidate. "
-        "If none can be claimed, exit.\n"
-        "7. Read the story file fully.\n"
-        "8. Read the design document(s) listed in the story's **Design ref** field for context. "
-        "The field lists two possible paths separated by ' | ' — read whichever file(s) exist.\n"
-        "9. Implement the story's acceptance criteria inside the workspace directory. "
-        "Do not read from or write to paths in the exclusion list.\n"
-        "10. Run tests and linter using the instructions you retained from CLAUDE.md on startup.\n"
-        f"11. Before committing, check for {halt_file} again — if found, perform the "
-        "halt procedure (discard uncommitted changes, rename .easy.working.md back to "
-        ".easy.ready.md, exit).\n"
-        "12. On success: rename STORY-NNN.easy.working.md → STORY-NNN.easy.done.md, "
-        "commit workspace changes, loop to step 3.\n"
-        f"13. On failure: create {halt_file}, rename STORY-NNN.easy.working.md → "
-        "STORY-NNN.easy.failed.md, perform halt procedure, exit."
-    )
+    # Read workspace/CLAUDE.md once for the lifetime of this process.
+    claude_md = (workspace_dir / "CLAUDE.md").read_text()
 
     options = ClaudeAgentOptions(
         cwd=str(workspace_dir),
         system_prompt=load_role("junior-coding-agent"),
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",
-        max_turns=1000,
+        max_turns=300,
         model=model,
     )
 
-    async for message in query(prompt=task, options=options):
-        log_usage(token_log, "junior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
-        print_message(message)
+    while True:
+        if halt_file.exists():
+            print("[Junior Coding Agent] HALT detected — exiting.")
+            return
+        if pipeline_complete.exists():
+            print("[Junior Coding Agent] Pipeline complete — exiting.")
+            return
+
+        story_path = _claim_story(stories_dir)
+        if story_path is None:
+            print(
+                f"[Junior Coding Agent] No easy.ready stories available — "
+                f"polling every {POLL_INTERVAL}s..."
+            )
+            await anyio.sleep(POLL_INTERVAL)
+            continue
+
+        print(f"[Junior Coding Agent] Claimed {story_path.name} — starting fresh session.")
+        task = _build_task(story_path, workspace_dir, claude_md, halt_file)
+
+        async for message in query(prompt=task, options=options):
+            log_usage(token_log, "junior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
+            print_message(message)
 
 
 if __name__ == "__main__":

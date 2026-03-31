@@ -194,13 +194,14 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 5. When the session ends, loop back to step 1.
 
 **Per-story LLM session** (one `query()` call per story):
-1. Read the story file fully.
-2. Using the `workspace/CLAUDE.md` content provided in the task, identify generated/vendored/tooling folders to avoid reading.
-3. Implement the acceptance criteria in `workspace/`.
-4. Run tests and linter as instructed in `workspace/CLAUDE.md`.
-5. Check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
-6. **On success**: rename `.working.md` → `.done.md`, commit workspace changes.
-7. **On failure**: create `workspace/stories/HALT`, rename `.working.md` → `.failed.md`, perform halt procedure. No retries.
+1. Read the story file.
+2. Read the design document(s) listed in the story's **Design ref** field — both possible paths are listed separated by ` | `; read whichever exist.
+3. Note the `## Agent Exclusion List` in `workspace/CLAUDE.md` — never read from or write to those paths.
+4. Implement the acceptance criteria in `workspace/`.
+5. Run tests and linter as instructed in `workspace/CLAUDE.md`.
+6. Check for `workspace/stories/HALT` before committing. If found, perform the halt procedure.
+7. **On success**: rename `.working.md` → `.done.md`, commit workspace changes.
+8. **On failure**: create `workspace/stories/HALT`, rename `.working.md` → `.failed.md`, perform halt procedure. No retries.
 
 ---
 
@@ -239,7 +240,7 @@ The complexity segment is preserved so the story can be immediately re-claimed w
 
 **Index**: N                        ← priority order; lower = worked first
 **Complexity**: easy | medium | hard ← assigned by BA; used by orchestrator and agents
-**Design ref**: workspace/design/<feature>.md
+**Design ref**: workspace/design/<feature>.processed.md | workspace/design/<feature>.new.md
 **Depends on**: STORY-NNN | none
 
 ## Context
