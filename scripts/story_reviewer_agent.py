@@ -56,7 +56,7 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
     print(f"[Story Reviewer] Found {len(failed_stories)} failed story(s) to review.")
 
     task = (
-        f"Project root: {PROJECT_ROOT}\n"
+        f"Project root: {stories_dir.parent}\n"
         f"Stories directory: {stories_dir}\n"
         f"HALT file: {halt_file}\n"
         f"Failed stories: {', '.join(s.name for s in failed_stories)}\n\n"
@@ -81,7 +81,7 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
     )
 
     options = ClaudeAgentOptions(
-        cwd=str(PROJECT_ROOT),
+        cwd=str(stories_dir.parent),
         system_prompt=_system_prompt(),
         allowed_tools=["AskUserQuestion", "Read", "Write", "Glob", "Bash"],
         permission_mode="default",

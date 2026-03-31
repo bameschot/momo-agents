@@ -6,6 +6,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+from agent_utilities import wait_for_workspace
 from token_logger import log_usage, print_message
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -50,32 +51,16 @@ def _system_prompt() -> str:
     return (ROLES_DIR / "business-analyst.md").read_text()
 
 
-async def _wait_for_workspace(workspace_dir: Path) -> None:
-    """Block until workspace_dir/CLAUDE.md exists (scaffolding agent has finished)."""
-    claude_md = workspace_dir / "CLAUDE.md"
-    if claude_md.exists():
-        return
-    print(
-        f"[Business Analyst Agent] Waiting for scaffolding to complete "
-        f"({claude_md}) — polling every {POLL_INTERVAL}s..."
-    )
-    while not claude_md.exists():
-        await anyio.sleep(POLL_INTERVAL)
-    print("[Business Analyst Agent] Workspace ready — starting story decomposition.")
-
-
 async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
 
-    await _wait_for_workspace(workspace_dir)
+    await wait_for_workspace(workspace_dir, "Business Analyst Agent", POLL_INTERVAL)
 
     stories_dir.mkdir(parents=True, exist_ok=True)
 
-    # Determine the next story number by counting existing story files.
-    existing = sorted(stories_dir.glob("STORY-*.md"))
-    next_index = len(existing) + 1
+    next_index = len(list(stories_dir.glob("STORY-*.md"))) + 1
 
     task = (
         f"Project root: {workspace_dir}\n"

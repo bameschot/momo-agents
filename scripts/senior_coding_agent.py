@@ -5,6 +5,7 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+from agent_utilities import wait_for_workspace
 from token_logger import log_usage, print_message
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -63,20 +64,6 @@ def _claim_story(stories_dir: Path) -> Path | None:
     return None
 
 
-async def _wait_for_workspace(workspace_dir: Path) -> None:
-    """Block until workspace_dir/CLAUDE.md exists (scaffolding agent has finished)."""
-    claude_md = workspace_dir / "CLAUDE.md"
-    if claude_md.exists():
-        return
-    print(
-        f"[Senior Coding Agent] Waiting for scaffolding to complete "
-        f"({claude_md}) — polling every {POLL_INTERVAL}s..."
-    )
-    while not claude_md.exists():
-        await anyio.sleep(POLL_INTERVAL)
-    print("[Senior Coding Agent] Workspace ready — proceeding.")
-
-
 def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file: Path) -> str:
     """Build a focused single-story task prompt."""
     return (
@@ -104,7 +91,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
-    await _wait_for_workspace(workspace_dir)
+    await wait_for_workspace(workspace_dir, "Senior Coding Agent", POLL_INTERVAL)
 
     # Read workspace/CLAUDE.md once for the lifetime of this process.
     claude_md = (workspace_dir / "CLAUDE.md").read_text()

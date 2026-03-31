@@ -54,11 +54,6 @@ def _dependencies(fields: dict[str, str]) -> list[str]:
     return re.findall(r"STORY-\d+", raw, re.IGNORECASE)
 
 
-def _is_done(stories_dir: Path, story_id: str) -> bool:
-    """True when any STORY-NNN.[complexity].done.md exists for this story id."""
-    return any(stories_dir.glob(f"{story_id.upper()}.*.done.md"))
-
-
 def _unprocessed_stories(stories_dir: Path) -> list[Path]:
     """Bare STORY-NNN.md files not yet assigned a complexity+state by the orchestrator."""
     return sorted(
@@ -69,6 +64,7 @@ def _unprocessed_stories(stories_dir: Path) -> list[Path]:
 
 def _process_once(stories_dir: Path) -> int:
     """Evaluate all unprocessed stories and mark eligible ones as ready. Returns count marked."""
+    done_ids = {p.name.split(".")[0].upper() for p in stories_dir.glob("STORY-*.done.md")}
     marked = 0
     for story_path in _unprocessed_stories(stories_dir):
         fields = _parse_fields(story_path)
@@ -82,7 +78,7 @@ def _process_once(stories_dir: Path) -> int:
             continue
 
         deps = _dependencies(fields)
-        unmet = [dep for dep in deps if not _is_done(stories_dir, dep)]
+        unmet = [dep for dep in deps if dep.upper() not in done_ids]
         if unmet:
             print(
                 f"  [Orchestrator] Waiting — {story_path.name} "

@@ -1,11 +1,11 @@
 """Junior Coding Agent — claims and implements easy stories from stories/."""
 import argparse
-import re
 import anyio
 from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+from agent_utilities import wait_for_workspace
 from token_logger import log_usage, print_message
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -53,24 +53,10 @@ def _unclaimed_ready_stories(stories_dir: Path) -> list[Path]:
     )
 
 
-async def _wait_for_workspace(workspace_dir: Path) -> None:
-    """Block until workspace_dir/CLAUDE.md exists (scaffolding agent has finished)."""
-    claude_md = workspace_dir / "CLAUDE.md"
-    if claude_md.exists():
-        return
-    print(
-        f"[Junior Coding Agent] Waiting for scaffolding to complete "
-        f"({claude_md}) — polling every {POLL_INTERVAL}s..."
-    )
-    while not claude_md.exists():
-        await anyio.sleep(POLL_INTERVAL)
-    print("[Junior Coding Agent] Workspace ready — proceeding.")
-
-
 async def _wait_for_ready_story(stories_dir: Path, pipeline_complete: Path) -> bool:
     """Poll until at least one unclaimed easy.ready story exists. Returns False on HALT/pipeline_complete."""
     halt_file = stories_dir / "HALT"
-    last_status = ""
+    printed = False
     while True:
         if halt_file.exists():
             print("[Junior Coding Agent] HALT detected while waiting — exiting.")
@@ -83,13 +69,12 @@ async def _wait_for_ready_story(stories_dir: Path, pipeline_complete: Path) -> b
         if _unclaimed_ready_stories(stories_dir):
             return True
 
-        status = "waiting for easy.ready stories"
-        if status != last_status:
+        if not printed:
             print(
                 f"[Junior Coding Agent] No ready easy stories available. "
                 f"Polling every {POLL_INTERVAL}s..."
             )
-            last_status = status
+            printed = True
 
         await anyio.sleep(POLL_INTERVAL)
 
@@ -98,11 +83,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
-    await _wait_for_workspace(workspace_dir)
-
-    if halt_file.exists():
-        print("[Junior Coding Agent] HALT file detected on startup — exiting immediately.")
-        return
+    await wait_for_workspace(workspace_dir, "Junior Coding Agent", POLL_INTERVAL)
 
     if not await _wait_for_ready_story(stories_dir, pipeline_complete):
         print("[Junior Coding Agent] No easy stories to process — exiting.")
