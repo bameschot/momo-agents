@@ -37,9 +37,9 @@ def _parse_args() -> argparse.Namespace:
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
-        "--token-log",
+        "--tokens-log-dir",
         default="",
-        help="Path to JSONL file for token usage logging (optional)",
+        help="Directory for token usage JSONL logs; file is named <agent-name>.jsonl (optional)",
     )
     parser.add_argument(
         "--run-log",
@@ -54,7 +54,8 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None, agent_name: str) -> None:
+async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str) -> None:
+    token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -107,5 +108,6 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir)
     workspace_dir = resolve_path(args.workspace_dir)
     token_log = Path(args.token_log) if args.token_log else None
+    tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, token_log, run_log, args.agent_name)
+    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name)

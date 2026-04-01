@@ -9,7 +9,7 @@ single-page HTML report with:
     Chart.js timeline
 
 Usage:
-    python run_report.py [--run-log <path>] [--tokens-dir <path>] [--output-dir <path>]
+    python run_report.py [--run-log <path>] [--tokens-log-dir <path>] [--output-dir <path>]
 
 Output:
     <output-dir>/run-report_YYYY-MM-DD_HH-MM-SS.html
@@ -41,7 +41,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to the run-log.jsonl file (default: workspace/.sentinels/run-log.jsonl).",
     )
     parser.add_argument(
-        "--tokens-dir",
+        "--tokens-log-dir",
         default=str(Path(__file__).parent / "workspace" / ".sentinels" / "tokens"),
         metavar="PATH",
         help="Path to directory containing *.jsonl token log files "
@@ -84,16 +84,16 @@ def load_run_log(run_log_path: Path) -> list[dict]:
 # 3. Token Data Loader
 # ---------------------------------------------------------------------------
 
-def load_token_records(tokens_dir: Path) -> list[dict]:
-    """Walk tokens_dir and return a flat list of token usage records.
+def load_token_records(tokens_log_dir: Path) -> list[dict]:
+    """Walk tokens_log_dir and return a flat list of token usage records.
 
     Returns an empty list (rather than exiting) so the report can still be
     generated even when no token logs exist yet.
     """
-    if not tokens_dir.exists():
+    if not tokens_log_dir.exists():
         return []
     records = []
-    for jsonl_file in sorted(tokens_dir.glob("*.jsonl")):
+    for jsonl_file in sorted(tokens_log_dir.glob("*.jsonl")):
         agent_name = jsonl_file.stem
         with open(jsonl_file, encoding="utf-8") as f:
             for line in f:
@@ -440,11 +440,11 @@ def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str) -> str:
 def main() -> None:
     args = parse_args()
     run_log_path = Path(args.run_log)
-    tokens_dir = Path(args.tokens_dir)
+    tokens_log_dir = Path(args.tokens_log_dir)
     output_dir = Path(args.output_dir)
 
     run_log_entries = load_run_log(run_log_path)
-    token_records = load_token_records(tokens_dir)
+    token_records = load_token_records(tokens_log_dir)
 
     if not run_log_entries and not token_records:
         print("Error: no run log entries and no token records found.", file=sys.stderr)

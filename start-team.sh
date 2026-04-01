@@ -263,7 +263,7 @@ echo ""
 "$PYTHON" "${SCRIPT_DIR}/scripts/designer_agent.py" \
     --model "${MODEL_DESIGNER}" \
     --design-dir "${WORKSPACE_DIR}/design" \
-    --token-log "${SENTINEL_DIR}/tokens/designer.jsonl" \
+    --tokens-log-dir "${SENTINEL_DIR}/tokens" \
     --run-log "${RUN_LOG}" \
     --agent-name "designer"
 echo ""
@@ -307,7 +307,7 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_BA}" \
-            --token-log "${SENTINEL_DIR}/tokens/ba.jsonl" \
+            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
             --run-log "${RUN_LOG}" \
             --agent-name "business-analyst"
 
@@ -371,7 +371,7 @@ echo ""
     --design "${design_file}" \
     --workspace-dir "${WORKSPACE_DIR}" \
     --model "${MODEL_PI}" \
-    --token-log "${SENTINEL_DIR}/tokens/pi.jsonl" \
+    --tokens-log-dir "${SENTINEL_DIR}/tokens" \
     --run-log "${RUN_LOG}" \
     --agent-name "project-initialiser"
 echo ""
@@ -413,7 +413,7 @@ while true; do
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_JUNIOR}" \
-        --token-log "${SENTINEL_DIR}/tokens/junior_${AGENT_ID}.jsonl" \
+        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
         --run-log "${RUN_LOG}" \
         --agent-name "junior-coding-agent-${AGENT_ID}"
     EXIT_CODE=$?
@@ -494,7 +494,7 @@ while true; do
         --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_SENIOR}" \
-        --token-log "${SENTINEL_DIR}/tokens/senior_${AGENT_ID}.jsonl" \
+        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
         --run-log "${RUN_LOG}" \
         --agent-name "senior-coding-agent-${AGENT_ID}"
     EXIT_CODE=$?
@@ -782,7 +782,7 @@ _teardown() {
     echo "  Generating run report..."
     report_path=$("$PYTHON" "$SCRIPT_DIR/run_report.py" \
         --run-log "$SENTINEL_DIR/run-log.jsonl" \
-        --tokens-dir "$SENTINEL_DIR/tokens" \
+        --tokens-log-dir "$SENTINEL_DIR/tokens" \
         --output-dir "$WORKSPACE_DIR" 2>/dev/null) && \
         echo "  Run report written → $report_path" || \
         echo "  (Run report skipped — no log data)"
