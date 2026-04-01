@@ -264,7 +264,8 @@ echo ""
     --model "${MODEL_DESIGNER}" \
     --design-dir "${WORKSPACE_DIR}/design" \
     --token-log "${SENTINEL_DIR}/tokens/designer.jsonl" \
-    --run-log "${RUN_LOG}"
+    --run-log "${RUN_LOG}" \
+    --agent-name "designer"
 echo ""
 echo "[Designer Agent complete]"
 WRAPPER
@@ -307,7 +308,8 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_BA}" \
             --token-log "${SENTINEL_DIR}/tokens/ba.jsonl" \
-            --run-log "${RUN_LOG}"
+            --run-log "${RUN_LOG}" \
+            --agent-name "business-analyst"
 
         mv "$design_file" "$processed"
         echo ""
@@ -370,7 +372,8 @@ echo ""
     --workspace-dir "${WORKSPACE_DIR}" \
     --model "${MODEL_PI}" \
     --token-log "${SENTINEL_DIR}/tokens/pi.jsonl" \
-    --run-log "${RUN_LOG}"
+    --run-log "${RUN_LOG}" \
+    --agent-name "project-initialiser"
 echo ""
 echo "[Project Initialiser Agent complete]"
 WRAPPER
@@ -411,7 +414,8 @@ while true; do
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_JUNIOR}" \
         --token-log "${SENTINEL_DIR}/tokens/junior_${AGENT_ID}.jsonl" \
-        --run-log "${RUN_LOG}"
+        --run-log "${RUN_LOG}" \
+        --agent-name "junior-coding-agent-${AGENT_ID}"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -491,7 +495,8 @@ while true; do
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_SENIOR}" \
         --token-log "${SENTINEL_DIR}/tokens/senior_${AGENT_ID}.jsonl" \
-        --run-log "${RUN_LOG}"
+        --run-log "${RUN_LOG}" \
+        --agent-name "senior-coding-agent-${AGENT_ID}"
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit

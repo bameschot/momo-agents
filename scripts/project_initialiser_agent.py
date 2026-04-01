@@ -39,10 +39,15 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Path to run-log.json file for pipeline event logging (optional)",
     )
+    parser.add_argument(
+        "--agent-name",
+        default="project-initialiser",
+        help="Name used to identify this agent in logs (default: project-initialiser)",
+    )
     return parser.parse_args()
 
 
-async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None) -> None:
+async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None, agent_name: str) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -73,7 +78,7 @@ async def run(design_path: Path, workspace_dir: Path, model: str, token_log: Pat
         log_usage(token_log, "pi", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
         print_message(message)
 
-    append_run_log(run_log, "project-initialiser", f"project initiated from: {design_path.name}")
+    append_run_log(run_log, agent_name, f"project initiated from: {design_path.name}")
 
 
 if __name__ == "__main__":
@@ -82,4 +87,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     token_log = Path(args.token_log) if args.token_log else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, design_path, workspace_dir, args.model, token_log, run_log)
+    anyio.run(run, design_path, workspace_dir, args.model, token_log, run_log, args.agent_name)

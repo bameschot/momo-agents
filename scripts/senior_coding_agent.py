@@ -40,6 +40,11 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Path to run-log.json file for pipeline event logging (optional)",
     )
+    parser.add_argument(
+        "--agent-name",
+        default="senior-coding-agent",
+        help="Name used to identify this agent in logs (default: senior-coding-agent)",
+    )
     return parser.parse_args()
 
 
@@ -84,11 +89,11 @@ def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file
     )
 
 
-async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None) -> None:
+async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Path | None, run_log: Path | None, agent_name: str) -> None:
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
-    await wait_for_workspace(workspace_dir, "Senior Coding Agent", POLL_INTERVAL)
+    await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
 
     # Read workspace/CLAUDE.md once for the lifetime of this process.
     claude_md = (workspace_dir / "CLAUDE.md").read_text()
@@ -104,22 +109,19 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
 
     while True:
         if halt_file.exists():
-            print("[Senior Coding Agent] HALT detected — exiting.")
+            print(f"[{agent_name}] HALT detected — exiting.")
             return
         if pipeline_complete.exists():
-            print("[Senior Coding Agent] Pipeline complete — exiting.")
+            print(f"[{agent_name}] Pipeline complete — exiting.")
             return
 
         story_path = _claim_story(stories_dir)
         if story_path is None:
-            print(
-                f"[Senior Coding Agent] No medium/hard.ready stories available — "
-                f"polling every {POLL_INTERVAL}s..."
-            )
+            print(f"[{agent_name}] No medium/hard.ready stories available — polling every {POLL_INTERVAL}s...")
             await anyio.sleep(POLL_INTERVAL)
             continue
 
-        print(f"[Senior Coding Agent] Claimed {story_path.name} — starting fresh session.")
+        print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.")
         task = _build_task(story_path, workspace_dir, claude_md, halt_file)
 
         async for message in query(prompt=task, options=options):
@@ -130,9 +132,9 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, token_log: Pat
         done_path = story_path.with_name(stem + ".done.md")
         failed_path = story_path.with_name(stem + ".failed.md")
         if done_path.exists():
-            append_run_log(run_log, "senior-coding-agent", f"story done: {done_path.name}")
+            append_run_log(run_log, agent_name, f"story done: {done_path.name}")
         elif failed_path.exists():
-            append_run_log(run_log, "senior-coding-agent", f"story failed: {failed_path.name}")
+            append_run_log(run_log, agent_name, f"story failed: {failed_path.name}")
 
 
 if __name__ == "__main__":
@@ -141,4 +143,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     token_log = Path(args.token_log) if args.token_log else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, stories_dir, workspace_dir, args.model, token_log, run_log)
+    anyio.run(run, stories_dir, workspace_dir, args.model, token_log, run_log, args.agent_name)

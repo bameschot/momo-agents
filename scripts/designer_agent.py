@@ -39,6 +39,11 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Path to run-log.json file for pipeline event logging (optional)",
     )
+    parser.add_argument(
+        "--agent-name",
+        default="designer",
+        help="Name used to identify this agent in logs (default: designer)",
+    )
     return parser.parse_args()
 
 
@@ -75,7 +80,7 @@ async def _stream_response(client: ClaudeSDKClient) -> tuple[str | None, dict | 
     return stop_reason, usage
 
 
-async def run(design_dir: Path, model: str, token_log: Path | None, run_log: Path | None) -> None:
+async def run(design_dir: Path, model: str, token_log: Path | None, run_log: Path | None, agent_name: str) -> None:
     design_dir.mkdir(parents=True, exist_ok=True)
 
     options = ClaudeAgentOptions(
@@ -119,7 +124,7 @@ async def run(design_dir: Path, model: str, token_log: Path | None, run_log: Pat
             if stop_reason == "end_turn" and user_input.lower() == "write":
                 after = set(design_dir.glob("*.new.md"))
                 for new_file in sorted(after - before):
-                    append_run_log(run_log, "designer", f"design written: {new_file.name}")
+                    append_run_log(run_log, agent_name, f"design written: {new_file.name}")
                 print("\n[Design saved as .new.md — the Business Analyst will pick it up automatically.]")
                 print("[Type 'exit' to close or continue refining (type 'write' again to re-queue).]")
 
@@ -129,4 +134,4 @@ if __name__ == "__main__":
     design_dir = resolve_path(args.design_dir)
     token_log = Path(args.token_log) if args.token_log else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, design_dir, args.model, token_log, run_log)
+    anyio.run(run, design_dir, args.model, token_log, run_log, args.agent_name)
