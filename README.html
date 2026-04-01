@@ -467,23 +467,27 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
 <hr>
 <h2 id="running-the-pipeline">Running the pipeline</h2>
 <h3 id="start-the-full-team">Start the full team</h3>
-<pre><code class="language-bash">./start-team.sh &lt;feature-name&gt; [options]</code></pre>
+<pre><code class="language-bash">./start-team.sh --workspace &lt;path&gt; [options]</code></pre>
 <p>Opens every agent simultaneously in its own named terminal window and monitors the pipeline in the current terminal until you press <strong>Ctrl+C</strong>.</p>
-<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--junior-agents N</code></td><td>Number of parallel Junior Coding Agents (easy stories)</td><td><code>2</code></td></tr><tr><td><code>--senior-agents N</code></td><td>Number of parallel Senior Coding Agents (medium/hard stories)</td><td><code>1</code></td></tr><tr><td><code>--model-designer M</code></td><td>Claude model for the Designer</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-ba M</code></td><td>Claude model for the Business Analyst</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-pi M</code></td><td>Claude model for the Project Initialiser</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-junior M</code></td><td>Claude model for Junior Coding Agents</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-senior M</code></td><td>Claude model for Senior Coding Agents</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-reviewer M</code></td><td>Claude model for the Story Reviewer</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table></div>
+<p><code>&lt;path&gt;</code> is the workspace directory where all generated artefacts live. It can be anywhere on the filesystem — inside or outside the <code>momo-agents</code> repo. If the directory does not exist, <code>start-team.sh</code> will offer to create it and initialise a git repository inside it.</p>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--workspace &lt;path&gt;</code></td><td>Path to the workspace directory (required)</td><td>—</td></tr><tr><td><code>--junior-agents N</code></td><td>Number of parallel Junior Coding Agents (easy stories)</td><td><code>2</code></td></tr><tr><td><code>--senior-agents N</code></td><td>Number of parallel Senior Coding Agents (medium/hard stories)</td><td><code>1</code></td></tr><tr><td><code>--model-designer M</code></td><td>Claude model for the Designer</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-ba M</code></td><td>Claude model for the Business Analyst</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-pi M</code></td><td>Claude model for the Project Initialiser</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-junior M</code></td><td>Claude model for Junior Coding Agents</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-senior M</code></td><td>Claude model for Senior Coding Agents</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-reviewer M</code></td><td>Claude model for the Story Reviewer</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table></div>
 <p><strong>Agent windows opened:</strong></p>
-<div class="table-wrapper"><table><thead><tr><th>Window</th><th>Agent</th><th>Notes</th></tr></thead><tbody><tr><td><code>🎨 Designer Agent</code></td><td>Interactive design session</td><td>Type requirements; <code>write</code> saves the design</td></tr><tr><td><code>🏗️ Project Initialiser</code></td><td>Workspace scaffolder</td><td>Runs once; skips if workspace already populated</td></tr><tr><td><code>📋 Business Analyst</code></td><td>Design watcher</td><td>Polls <code>workspace/design/</code> every 5 s; waits for <code>workspace/CLAUDE.md</code></td></tr><tr><td><code>🎯 Story Orchestrator</code></td><td>Readiness manager</td><td>Continuously marks stories ready as deps complete</td></tr><tr><td><code>🐕 Watchdog</code></td><td>Stale story reset</td><td>Resets stories idle &gt; 10 min back to <code>.ready.md</code></td></tr><tr><td><code>🔍 Story Reviewer</code></td><td>Failed-story triage</td><td>Wakes on HALT; interactive with you</td></tr><tr><td><code>🟢 Junior Coding Agent N</code></td><td>Easy story implementation</td><td>Waits for <code>workspace/CLAUDE.md</code>; polls for <code>*.easy.ready.md</code></td></tr><tr><td><code>🔵 Senior Coding Agent N</code></td><td>Medium/hard story implementation</td><td>Waits for <code>workspace/CLAUDE.md</code>; polls for <code>*.medium/hard.ready.md</code></td></tr></tbody></table></div>
+<div class="table-wrapper"><table><thead><tr><th>Window</th><th>Agent</th><th>Notes</th></tr></thead><tbody><tr><td><code>🎨 Designer Agent</code></td><td>Interactive design session</td><td>Type requirements; <code>write</code> saves the design</td></tr><tr><td><code>🏗️ Project Initialiser</code></td><td>Workspace scaffolder</td><td>Runs once; skips if workspace already populated</td></tr><tr><td><code>📋 Business Analyst</code></td><td>Design watcher</td><td>Polls <code>&lt;workspace&gt;/design/</code> every 5 s; waits for <code>&lt;workspace&gt;/CLAUDE.md</code></td></tr><tr><td><code>🎯 Story Orchestrator</code></td><td>Readiness manager</td><td>Continuously marks stories ready as deps complete</td></tr><tr><td><code>🐕 Watchdog</code></td><td>Stale story reset</td><td>Resets stories idle &gt; 10 min back to <code>.ready.md</code></td></tr><tr><td><code>🔍 Story Reviewer</code></td><td>Failed-story triage</td><td>Wakes on HALT; interactive with you</td></tr><tr><td><code>🟢 Junior Coding Agent N</code></td><td>Easy story implementation</td><td>Waits for <code>&lt;workspace&gt;/CLAUDE.md</code>; polls for <code>*.easy.ready.md</code></td></tr><tr><td><code>🔵 Senior Coding Agent N</code></td><td>Medium/hard story implementation</td><td>Waits for <code>&lt;workspace&gt;/CLAUDE.md</code>; polls for <code>*.medium/hard.ready.md</code></td></tr></tbody></table></div>
 <p><strong>Examples:</strong></p>
 <pre><code class="language-bash"># Default — 2 junior agents, 1 senior agent
-./start-team.sh my-feature
+./start-team.sh --workspace /path/to/my-project
+
+# Relative paths are resolved from the current directory
+./start-team.sh --workspace ../my-project
 
 # Scale up for a large backlog
-./start-team.sh my-feature --junior-agents 4 --senior-agents 2
+./start-team.sh --workspace /path/to/my-project --junior-agents 4 --senior-agents 2
 
 # Use opus for design, keep defaults elsewhere
-./start-team.sh my-feature --model-designer claude-opus-4-6
+./start-team.sh --workspace /path/to/my-project --model-designer claude-opus-4-6
 
 # --flag=value form also works
-./start-team.sh my-feature --junior-agents=3 --model-junior=claude-sonnet-4-6</code></pre>
+./start-team.sh --workspace=/path/to/my-project --junior-agents=3 --model-junior=claude-sonnet-4-6</code></pre>
 <h3 id="monitor-progress">Monitor progress</h3>
 <pre><code class="language-bash">./status.sh</code></pre>
 <p>Prints a live snapshot of how many stories are in each state:</p>
@@ -496,18 +500,18 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
   HALT           no</code></pre>
 <h3 id="shut-down">Shut down</h3>
 <p>Press <strong>Ctrl+C</strong> in the <code>start-team.sh</code> terminal. This:</p>
-<ol><li>Writes <code>workspace/.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process and closes all opened agent terminal windows.</li><li>Prints a final per-agent token-usage summary and <code>status.sh</code> snapshot.</li><li>Generates a self-contained HTML run report and writes it to <code>workspace/run-report_YYYY-MM-DD_HH-MM-SS.html</code>.</li><li>Removes the <code>workspace/.sentinels/</code> directory.</li></ol>
+<ol><li>Writes <code>&lt;workspace&gt;/.sentinels/pipeline_complete</code> — all agent windows exit cleanly.</li><li>Kills the watchdog process and closes all opened agent terminal windows.</li><li>Prints a final per-agent token-usage summary and <code>status.sh</code> snapshot.</li><li>Generates a self-contained HTML run report and writes it to <code>&lt;workspace&gt;/run-report_YYYY-MM-DD_HH-MM-SS.html</code>.</li><li>Removes the <code>&lt;workspace&gt;/.sentinels/</code> directory.</li></ol>
 <p>The run report (generated by <code>run_report.py</code>) contains two sections:</p>
 <ul><li><strong>Run Log</strong> — every pipeline event recorded by agents (design written, project initiated, story created, story done/failed), ordered chronologically.</li><li><strong>Token Usage</strong> — per-agent breakdown of input, output, and cache tokens plus cost, with an interactive Chart.js timeline.</li></ul>
 <p>Open it in any browser after the run.</p>
 <h3 id="reset">Reset</h3>
 <p><strong>Reset stories only</strong> (keep generated code):</p>
-<pre><code class="language-bash">rm -f workspace/stories/STORY-*.md workspace/stories/HALT</code></pre>
+<pre><code class="language-bash">rm -f &lt;workspace&gt;/stories/STORY-*.md &lt;workspace&gt;/stories/HALT</code></pre>
 <p><strong>Full reset</strong> — wipe everything generated:</p>
 <pre><code class="language-bash">./reset-team.sh        # interactive — asks for confirmation
 ./reset-team.sh --yes  # non-interactive</code></pre>
-<div class="table-wrapper"><table><thead><tr><th>Path</th><th>What gets deleted</th></tr></thead><tbody><tr><td><code>workspace/stories/</code></td><td>All <code>STORY-*</code> files in every state and the <code>HALT</code> sentinel</td></tr><tr><td><code>workspace/design/</code></td><td>All <code>*.md</code> design documents</td></tr><tr><td><code>workspace/.sentinels/</code></td><td>Entire directory (wrapper scripts, tokens, sentinels)</td></tr><tr><td><code>workspace/</code></td><td>All generated source code, tests, <code>CLAUDE.md</code>, and build artefacts</td></tr></tbody></table></div>
-<p>After a full reset, re-running <code>./start-team.sh &lt;feature-name&gt;</code> goes through the complete pipeline from scratch.</p>
+<div class="table-wrapper"><table><thead><tr><th>Path</th><th>What gets deleted</th></tr></thead><tbody><tr><td><code>&lt;workspace&gt;/stories/</code></td><td>All <code>STORY-*</code> files in every state and the <code>HALT</code> sentinel</td></tr><tr><td><code>&lt;workspace&gt;/design/</code></td><td>All <code>*.md</code> design documents</td></tr><tr><td><code>&lt;workspace&gt;/.sentinels/</code></td><td>Entire directory (wrapper scripts, tokens, sentinels)</td></tr><tr><td><code>&lt;workspace&gt;/</code></td><td>All generated source code, tests, <code>CLAUDE.md</code>, and build artefacts</td></tr></tbody></table></div>
+<p>After a full reset, re-running <code>./start-team.sh --workspace &lt;path&gt;</code> goes through the complete pipeline from scratch.</p>
 <hr>
 <h2 id="running-agents-individually">Running agents individually</h2>
 <p>Each agent can also be invoked directly:</p>
@@ -539,7 +543,7 @@ python scripts/senior_coding_agent.py \
 # Story Reviewer
 python scripts/story_reviewer_agent.py \
   --model claude-sonnet-4-6</code></pre>
-<p>All path arguments default to the standard locations inside the repo root.</p>
+<p>All path arguments default to <code>workspace/</code> relative to the <code>momo-agents</code> repo root when running agents individually. Pass <code>--workspace-dir &lt;path&gt;</code> to point them at any workspace directory.</p>
 <hr>
 <h2 id="development">Development</h2>
 <pre><code class="language-bash"># Lint
