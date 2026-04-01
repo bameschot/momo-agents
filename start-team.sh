@@ -2,7 +2,7 @@
 # start-team.sh — opens ALL agents simultaneously, each in its own console window.
 # Agents self-coordinate via the filesystem; no window needs to wait for another.
 #
-# Usage: ./start-team.sh <feature-name> [options]
+# Usage: ./start-team.sh --workspace <path> [options]
 #        Options: [--junior-agents N] [--senior-agents N]
 #                 [--model-designer M] [--model-ba M] [--model-pi M]
 #                 [--model-junior M] [--model-senior M] [--model-reviewer M]
@@ -15,18 +15,15 @@
 set -euo pipefail
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Paths
+# Paths — only the script's own location is known at this point.
+# WORKSPACE_DIR and its subdirs are resolved after argument parsing.
 # ─────────────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-WORKSPACE_DIR="$SCRIPT_DIR/workspace"
-DESIGN_DIR="$WORKSPACE_DIR/design"
-STORIES_DIR="$WORKSPACE_DIR/stories"
-SENTINEL_DIR="$WORKSPACE_DIR/.sentinels"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Defaults
 # ─────────────────────────────────────────────────────────────────────────────
-FEATURE="${1:-}"
+WORKSPACE_DIR=""
 N_JUNIOR_AGENTS=2
 N_SENIOR_AGENTS=1
 
@@ -48,6 +45,8 @@ MODEL_REVIEWER="$DEFAULT_MODEL"
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
+        --workspace=*)      WORKSPACE_DIR="${args[$i]#*=}" ;;
+        --workspace)        WORKSPACE_DIR="${args[$((i + 1))]:-}" ;;
         --junior-agents=*)  N_JUNIOR_AGENTS="${args[$i]#*=}" ;;
         --junior-agents)    N_JUNIOR_AGENTS="${args[$((i + 1))]:-2}" ;;
         --senior-agents=*)  N_SENIOR_AGENTS="${args[$i]#*=}" ;;
@@ -67,10 +66,12 @@ for ((i = 0; i < ${#args[@]}; i++)); do
     esac
 done
 
-if [ -z "$FEATURE" ]; then
-    echo "Usage: $0 <feature-name> [options]"
+if [ -z "$WORKSPACE_DIR" ]; then
+    echo "Usage: $0 --workspace <path> [options]"
     echo ""
-    echo "  feature-name          Short kebab-case name for the feature to build"
+    echo "  --workspace <path>    Path to the workspace directory (required)."
+    echo "                        Can be anywhere on the filesystem."
+    echo "                        Created automatically (with git init) if it does not exist."
     echo ""
     echo "  --junior-agents N     Junior Coding Agents to spawn — handle easy stories    (default: 2)"
     echo "  --senior-agents N     Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
@@ -82,6 +83,44 @@ if [ -z "$FEATURE" ]; then
     echo "  --model-reviewer M    Model for Story Reviewer      (default: $DEFAULT_MODEL)"
     exit 1
 fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Workspace — resolve to absolute path, create if needed, validate git repo
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Resolve relative paths against the caller's working directory
+if [[ "$WORKSPACE_DIR" != /* ]]; then
+    WORKSPACE_DIR="$(pwd)/$WORKSPACE_DIR"
+fi
+
+if [ ! -d "$WORKSPACE_DIR" ]; then
+    echo ""
+    echo "  Workspace '${WORKSPACE_DIR}' does not exist."
+    read -rp "  Create it? [y/N] " _ws_answer
+    echo ""
+    if [[ "${_ws_answer:-}" =~ ^[Yy]$ ]]; then
+        mkdir -p "$WORKSPACE_DIR"
+        git -C "$WORKSPACE_DIR" init --quiet
+        echo ".sentinels/" > "$WORKSPACE_DIR/.gitignore"
+        echo "  Workspace created and git repository initialised: ${WORKSPACE_DIR}"
+        echo ""
+    else
+        echo "  Aborting — workspace directory is required."
+        exit 1
+    fi
+elif [ ! -d "$WORKSPACE_DIR/.git" ]; then
+    echo ""
+    echo "  Warning: workspace '${WORKSPACE_DIR}' exists but is not a git repository."
+    echo "  Coding agents that commit changes may fail."
+    echo "  Run: git init '${WORKSPACE_DIR}'"
+    echo ""
+fi
+
+# Derive subdirectory paths and display name from the workspace
+FEATURE="$(basename "$WORKSPACE_DIR")"
+DESIGN_DIR="$WORKSPACE_DIR/design"
+STORIES_DIR="$WORKSPACE_DIR/stories"
+SENTINEL_DIR="$WORKSPACE_DIR/.sentinels"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Python — prefer .venv, fall back to system python3 / python
@@ -262,7 +301,7 @@ echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
 "$PYTHON" "${SCRIPT_DIR}/scripts/designer_agent.py" \
     --model "${MODEL_DESIGNER}" \
-    --design-dir "${WORKSPACE_DIR}/design" \
+    --workspace-dir "${WORKSPACE_DIR}" \
     --tokens-log-dir "${SENTINEL_DIR}/tokens" \
     --run-log "${RUN_LOG}" \
     --agent-name "designer"

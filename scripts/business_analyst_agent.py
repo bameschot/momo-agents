@@ -23,13 +23,13 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stories-dir",
-        default=str(PROJECT_ROOT / "workspace" / "stories"),
-        help="Directory where story files are written (default: <project-root>/workspace/stories)",
+        default="",
+        help="Directory where story files are written (default: <workspace-dir>/stories)",
     )
     parser.add_argument(
         "--workspace-dir",
-        default=str(PROJECT_ROOT / "workspace"),
-        help="Directory containing the workspace (default: <project-root>/workspace)",
+        default="workspace",
+        help="Path to the workspace directory (default: workspace/ relative to project root)",
     )
     parser.add_argument(
         "--model",
@@ -105,9 +105,8 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
 if __name__ == "__main__":
     args = _parse_args()
     design_path = resolve_path(args.design)
-    stories_dir = resolve_path(args.stories_dir)
     workspace_dir = resolve_path(args.workspace_dir)
-    token_log = Path(args.token_log) if args.token_log else None
+    stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
     anyio.run(run, design_path, stories_dir, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name)

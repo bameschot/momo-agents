@@ -45,6 +45,7 @@ You run **once**, before any Coding Agent is spawned. You prepare the `workspace
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
+   - if the workspace is a git repository also include, or ammend an existing .gitignore file approporiate for the techstack
 
 5. Do **not** implement any business logic from the stories.
 6. Do **not** modify anything outside `workspace/`.

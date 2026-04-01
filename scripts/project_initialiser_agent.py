@@ -21,8 +21,8 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--workspace-dir",
-        default=str(PROJECT_ROOT / "workspace"),
-        help="Directory to scaffold the project into (default: <project-root>/workspace)",
+        default="workspace",
+        help="Path to the workspace directory (default: workspace/ relative to project root)",
     )
     parser.add_argument(
         "--model",
@@ -54,7 +54,7 @@ async def run(design_path: Path, workspace_dir: Path, model: str, tokens_log_dir
         sys.exit(1)
 
     task = (
-        f"Project root: {workspace_dir}\n"
+        f"Workspace: {workspace_dir}\n"
         f"Design document: {design_path}\n\n"
         "Read the design document in full. Then:\n"
         f"1. Create {workspace_dir}/CLAUDE.md with build, test, and lint commands "

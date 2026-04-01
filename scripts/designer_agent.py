@@ -20,9 +20,9 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Designer Agent")
     parser.add_argument(
-        "--design-dir",
-        default=str(PROJECT_ROOT / "workspace" / "design"),
-        help="Directory where design documents are written (default: <project-root>/workspace/design)",
+        "--workspace-dir",
+        default="workspace",
+        help="Path to the workspace directory (default: workspace/ relative to project root)",
     )
     parser.add_argument(
         "--model",
@@ -49,7 +49,6 @@ def _parse_args() -> argparse.Namespace:
 
 def _initial_prompt(design_dir: Path) -> str:
     return (
-        f"Project root: {PROJECT_ROOT}\n"
         f"Design output directory: {design_dir}\n\n"
         "Begin the design session. Greet the user and ask what they want to build. "
         "Ask clarifying questions freely until you have a complete, unambiguous picture "
@@ -80,8 +79,9 @@ async def _stream_response(client: ClaudeSDKClient) -> tuple[str | None, dict | 
     return stop_reason, usage
 
 
-async def run(design_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str) -> None:
+async def run(workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
+    design_dir = workspace_dir / "design"
     design_dir.mkdir(parents=True, exist_ok=True)
 
     options = ClaudeAgentOptions(
@@ -132,7 +132,7 @@ async def run(design_dir: Path, model: str, tokens_log_dir: Path | None, run_log
 
 if __name__ == "__main__":
     args = _parse_args()
-    design_dir = resolve_path(args.design_dir)
+    workspace_dir = resolve_path(args.workspace_dir)
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, design_dir, args.model, tokens_log_dir, run_log, args.agent_name)
+    anyio.run(run, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name)
