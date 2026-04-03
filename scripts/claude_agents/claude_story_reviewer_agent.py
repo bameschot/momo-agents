@@ -1,8 +1,12 @@
 """Story Reviewer Agent — triages .failed.md stories with the user and resets them."""
-import argparse
-import anyio
 import sys
 from pathlib import Path
+
+# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import argparse
+import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 

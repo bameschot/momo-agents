@@ -3,9 +3,11 @@
 # Agents self-coordinate via the filesystem; no window needs to wait for another.
 #
 # Usage: ./start-team.sh --workspace <path> [options]
-#        Options: [--junior-agents N] [--senior-agents N]
+#        Options: [--agent-type claude|ollama]
+#                 [--junior-agents N] [--senior-agents N]
 #                 [--model-designer M] [--model-ba M] [--model-pi M]
 #                 [--model-junior M] [--model-senior M] [--model-reviewer M]
+#                 [--ollama-host URL]
 #
 # Supported terminal environments (auto-detected in priority order):
 #   macOS   : Terminal.app via osascript
@@ -24,20 +26,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Defaults
 # ─────────────────────────────────────────────────────────────────────────────
 WORKSPACE_DIR=""
+AGENT_TYPE="claude"
+OLLAMA_HOST="http://localhost:11434"
 N_JUNIOR_AGENTS=2
 N_SENIOR_AGENTS=1
 
-DEFAULT_MODEL="claude-sonnet-4-6"
-DEFAULT_JUNIOR_MODEL="claude-haiku-4-5-20251001"
-DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
-DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
-
-MODEL_DESIGNER="$DEFAULT_MODEL"
-MODEL_BA="$DEFAULT_MODEL"
-MODEL_PI="$DEFAULT_PI_MODEL"
-MODEL_JUNIOR="$DEFAULT_JUNIOR_MODEL"
-MODEL_SENIOR="$DEFAULT_SENIOR_MODEL"
-MODEL_REVIEWER="$DEFAULT_MODEL"
+# Model placeholders — finalised after arg parsing once AGENT_TYPE is known.
+MODEL_DESIGNER=""
+MODEL_BA=""
+MODEL_PI=""
+MODEL_JUNIOR=""
+MODEL_SENIOR=""
+MODEL_REVIEWER=""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
@@ -47,48 +47,83 @@ for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
         --workspace=*)      WORKSPACE_DIR="${args[$i]#*=}" ;;
         --workspace)        WORKSPACE_DIR="${args[$((i + 1))]:-}" ;;
+        --agent-type=*)     AGENT_TYPE="${args[$i]#*=}" ;;
+        --agent-type)       AGENT_TYPE="${args[$((i + 1))]:-claude}" ;;
+        --ollama-host=*)    OLLAMA_HOST="${args[$i]#*=}" ;;
+        --ollama-host)      OLLAMA_HOST="${args[$((i + 1))]:-http://localhost:11434}" ;;
         --junior-agents=*)  N_JUNIOR_AGENTS="${args[$i]#*=}" ;;
         --junior-agents)    N_JUNIOR_AGENTS="${args[$((i + 1))]:-2}" ;;
         --senior-agents=*)  N_SENIOR_AGENTS="${args[$i]#*=}" ;;
         --senior-agents)    N_SENIOR_AGENTS="${args[$((i + 1))]:-1}" ;;
         --model-designer=*) MODEL_DESIGNER="${args[$i]#*=}" ;;
-        --model-designer)   MODEL_DESIGNER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-designer)   MODEL_DESIGNER="${args[$((i + 1))]:-}" ;;
         --model-ba=*)       MODEL_BA="${args[$i]#*=}" ;;
-        --model-ba)         MODEL_BA="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-ba)         MODEL_BA="${args[$((i + 1))]:-}" ;;
         --model-pi=*)       MODEL_PI="${args[$i]#*=}" ;;
-        --model-pi)         MODEL_PI="${args[$((i + 1))]:-$DEFAULT_PI_MODEL}" ;;
+        --model-pi)         MODEL_PI="${args[$((i + 1))]:-}" ;;
         --model-junior=*)   MODEL_JUNIOR="${args[$i]#*=}" ;;
-        --model-junior)     MODEL_JUNIOR="${args[$((i + 1))]:-$DEFAULT_JUNIOR_MODEL}" ;;
+        --model-junior)     MODEL_JUNIOR="${args[$((i + 1))]:-}" ;;
         --model-senior=*)   MODEL_SENIOR="${args[$i]#*=}" ;;
-        --model-senior)     MODEL_SENIOR="${args[$((i + 1))]:-$DEFAULT_SENIOR_MODEL}" ;;
+        --model-senior)     MODEL_SENIOR="${args[$((i + 1))]:-}" ;;
         --model-reviewer=*) MODEL_REVIEWER="${args[$i]#*=}" ;;
-        --model-reviewer)   MODEL_REVIEWER="${args[$((i + 1))]:-$DEFAULT_MODEL}" ;;
+        --model-reviewer)   MODEL_REVIEWER="${args[$((i + 1))]:-}" ;;
     esac
 done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validate agent type and apply model defaults
+# ─────────────────────────────────────────────────────────────────────────────
+if [ "$AGENT_TYPE" = "claude" ]; then
+    _DEFAULT_MODEL="claude-sonnet-4-6"
+    _DEFAULT_JUNIOR_MODEL="claude-haiku-4-5-20251001"
+    _DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
+    _DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
+elif [ "$AGENT_TYPE" = "ollama" ]; then
+    _DEFAULT_MODEL="qwen2.5-coder"
+    _DEFAULT_JUNIOR_MODEL="qwen2.5-coder"
+    _DEFAULT_SENIOR_MODEL="qwen2.5-coder"
+    _DEFAULT_PI_MODEL="qwen2.5-coder"
+else
+    echo "Error: --agent-type must be 'claude' or 'ollama', got: '$AGENT_TYPE'" >&2
+    exit 1
+fi
+
+MODEL_DESIGNER="${MODEL_DESIGNER:-$_DEFAULT_MODEL}"
+MODEL_BA="${MODEL_BA:-$_DEFAULT_MODEL}"
+MODEL_PI="${MODEL_PI:-$_DEFAULT_PI_MODEL}"
+MODEL_JUNIOR="${MODEL_JUNIOR:-$_DEFAULT_JUNIOR_MODEL}"
+MODEL_SENIOR="${MODEL_SENIOR:-$_DEFAULT_SENIOR_MODEL}"
+MODEL_REVIEWER="${MODEL_REVIEWER:-$_DEFAULT_MODEL}"
 
 if [ -z "$WORKSPACE_DIR" ]; then
     echo "Usage: $0 --workspace <path> [options]"
     echo ""
-    echo "  --workspace <path>    Path to the workspace directory (required)."
-    echo "                        Can be anywhere on the filesystem."
-    echo "                        Created automatically (with git init) if it does not exist."
+    echo "  --workspace <path>      Path to the workspace directory (required)."
+    echo "                          Created automatically (with git init) if it does not exist."
     echo ""
-    echo "  --junior-agents N     Junior Coding Agents to spawn — handle easy stories    (default: 2)"
-    echo "  --senior-agents N     Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
-    echo "  --model-designer M    Model for Designer Agent      (default: $DEFAULT_MODEL)"
-    echo "  --model-ba M          Model for Business Analyst    (default: $DEFAULT_MODEL)"
-    echo "  --model-pi M          Model for Project Initialiser (default: $DEFAULT_PI_MODEL)"
-    echo "  --model-junior M      Model for Junior Coding Agents (default: $DEFAULT_JUNIOR_MODEL)"
-    echo "  --model-senior M      Model for Senior Coding Agents (default: $DEFAULT_SENIOR_MODEL)"
-    echo "  --model-reviewer M    Model for Story Reviewer      (default: $DEFAULT_MODEL)"
+    echo "  --agent-type TYPE       Agent backend: 'claude' (default) or 'ollama'."
+    echo "  --ollama-host URL       Ollama API base URL (default: http://localhost:11434)."
+    echo "                          Only used when --agent-type ollama."
+    echo ""
+    echo "  --junior-agents N       Junior Coding Agents to spawn — handle easy stories    (default: 2)"
+    echo "  --senior-agents N       Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
+    echo ""
+    echo "  --model-designer M      Model for Designer Agent"
+    echo "  --model-ba M            Model for Business Analyst"
+    echo "  --model-pi M            Model for Project Initialiser"
+    echo "  --model-junior M        Model for Junior Coding Agents"
+    echo "  --model-senior M        Model for Senior Coding Agents"
+    echo "  --model-reviewer M      Model for Story Reviewer"
+    echo ""
+    echo "  claude defaults:  designer/ba/reviewer=$_DEFAULT_MODEL"
+    echo "                    junior=$_DEFAULT_JUNIOR_MODEL  senior=$_DEFAULT_SENIOR_MODEL  pi=$_DEFAULT_PI_MODEL"
+    echo "  ollama defaults:  all agents=qwen2.5-coder"
     exit 1
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Workspace — resolve to absolute path, create if needed, validate git repo
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Resolve relative paths against the caller's working directory
 if [[ "$WORKSPACE_DIR" != /* ]]; then
     WORKSPACE_DIR="$(pwd)/$WORKSPACE_DIR"
 fi
@@ -209,7 +244,6 @@ APPLESCRIPT
             fi
             ;;
         none)
-            # No terminal available — run in background and log to file
             local log="$SENTINEL_DIR/${title// /_}.log"
             bash "$script" >"$log" 2>&1 &
             echo "  [no terminal] logging → $log"
@@ -243,6 +277,8 @@ DESIGN_DIR='$DESIGN_DIR'
 WORKSPACE_DIR='$WORKSPACE_DIR'
 SENTINEL_DIR='$SENTINEL_DIR'
 PYTHON='$PYTHON'
+AGENT_TYPE='$AGENT_TYPE'
+OLLAMA_HOST='$OLLAMA_HOST'
 ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
 MODEL_DESIGNER='$MODEL_DESIGNER'
 MODEL_BA='$MODEL_BA'
@@ -263,6 +299,10 @@ echo "║           momo-agents  ·  start-team             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "  Feature        : $FEATURE"
+echo "  Agent Type     : $AGENT_TYPE"
+if [ "$AGENT_TYPE" = "ollama" ]; then
+    echo "  Ollama Host    : $OLLAMA_HOST"
+fi
 echo "  Junior Agents  : $N_JUNIOR_AGENTS  (easy stories — $MODEL_JUNIOR)"
 echo "  Senior Agents  : $N_SENIOR_AGENTS  (medium + hard stories — $MODEL_SENIOR)"
 echo "  Python         : $PYTHON"
@@ -297,14 +337,27 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║        Designer Agent            ║"
 echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE}"
+echo "  Model : ${MODEL_DESIGNER}"
+echo ""
 echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
-"$PYTHON" "${SCRIPT_DIR}/scripts/designer_agent.py" \
-    --model "${MODEL_DESIGNER}" \
-    --workspace-dir "${WORKSPACE_DIR}" \
-    --tokens-log-dir "${SENTINEL_DIR}/tokens" \
-    --run-log "${RUN_LOG}" \
-    --agent-name "designer"
+if [ "$AGENT_TYPE" = "ollama" ]; then
+    "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_designer_agent.py" \
+        --model "${MODEL_DESIGNER}" \
+        --ollama-host "${OLLAMA_HOST}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "ollama-designer"
+else
+    "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_designer_agent.py" \
+        --model "${MODEL_DESIGNER}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "designer"
+fi
 echo ""
 echo "[Designer Agent complete]"
 WRAPPER
@@ -325,6 +378,9 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║      Business Analyst Agent      ║"
 echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE}"
+echo "  Model : ${MODEL_BA}"
+echo ""
 echo "Watching ${DESIGN_DIR}/ for *.new.md files..."
 echo ""
 
@@ -341,14 +397,26 @@ while true; do
 
         echo "[Business Analyst] New design: ${feature} — decomposing into stories..."
         echo ""
-        "$PYTHON" "${SCRIPT_DIR}/scripts/business_analyst_agent.py" \
-            --design "$design_file" \
-            --stories-dir "${STORIES_DIR}" \
-            --workspace-dir "${WORKSPACE_DIR}" \
-            --model "${MODEL_BA}" \
-            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
-            --run-log "${RUN_LOG}" \
-            --agent-name "business-analyst"
+        if [ "$AGENT_TYPE" = "ollama" ]; then
+            "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_business_analyst_agent.py" \
+                --design "$design_file" \
+                --stories-dir "${STORIES_DIR}" \
+                --workspace-dir "${WORKSPACE_DIR}" \
+                --model "${MODEL_BA}" \
+                --ollama-host "${OLLAMA_HOST}" \
+                --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+                --run-log "${RUN_LOG}" \
+                --agent-name "ollama-business-analyst"
+        else
+            "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_business_analyst_agent.py" \
+                --design "$design_file" \
+                --stories-dir "${STORIES_DIR}" \
+                --workspace-dir "${WORKSPACE_DIR}" \
+                --model "${MODEL_BA}" \
+                --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+                --run-log "${RUN_LOG}" \
+                --agent-name "business-analyst"
+        fi
 
         mv "$design_file" "$processed"
         echo ""
@@ -363,7 +431,7 @@ WRAPPER
 
 # ── Project Initialiser ───────────────────────────────────────────────────────
 # Skips when workspace/CLAUDE.md already exists.
-# Otherwise waits for the first *.new.md design file, then scaffolds — exactly once.
+# Waits for the first *.new.md design file, then scaffolds — exactly once.
 cat > "$SENTINEL_DIR/run_pi.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -376,6 +444,9 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║    Project Initialiser Agent     ║"
 echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE}"
+echo "  Model : ${MODEL_PI}"
+echo ""
 
 if [ -f "${WORKSPACE_DIR}/CLAUDE.md" ]; then
     echo "workspace/CLAUDE.md already exists — skipping scaffold step."
@@ -406,13 +477,24 @@ done
 echo "Design file found: ${design_file}"
 echo "Scaffolding workspace..."
 echo ""
-"$PYTHON" "${SCRIPT_DIR}/scripts/project_initialiser_agent.py" \
-    --design "${design_file}" \
-    --workspace-dir "${WORKSPACE_DIR}" \
-    --model "${MODEL_PI}" \
-    --tokens-log-dir "${SENTINEL_DIR}/tokens" \
-    --run-log "${RUN_LOG}" \
-    --agent-name "project-initialiser"
+if [ "$AGENT_TYPE" = "ollama" ]; then
+    "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_project_initialiser_agent.py" \
+        --design "${design_file}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_PI}" \
+        --ollama-host "${OLLAMA_HOST}" \
+        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "ollama-project-initialiser"
+else
+    "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_project_initialiser_agent.py" \
+        --design "${design_file}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_PI}" \
+        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "project-initialiser"
+fi
 echo ""
 echo "[Project Initialiser Agent complete]"
 WRAPPER
@@ -433,8 +515,11 @@ printf "\033]0;Junior Coding Agent ${AGENT_ID} [easy]\007"
 echo "╔══════════════════════════════════╗"
 echo "║   Junior Coding Agent ${AGENT_ID} [easy]  ║"
 echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE}"
+echo "  Model : ${MODEL_JUNIOR}"
+echo ""
 echo "Handles: easy stories"
-echo "Waiting for Project Initialiser to create workspace/CLAUDE.md..."
+echo "Waiting for workspace/CLAUDE.md..."
 
 while [ ! -f "${WORKSPACE_DIR}/CLAUDE.md" ]; do sleep 3; done
 
@@ -448,13 +533,24 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    "${PYTHON}" "${SCRIPT_DIR}/scripts/junior_coding_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
-        --workspace-dir "${WORKSPACE_DIR}" \
-        --model "${MODEL_JUNIOR}" \
-        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
-        --run-log "${RUN_LOG}" \
-        --agent-name "junior-coding-agent-${AGENT_ID}"
+    if [ "$AGENT_TYPE" = "ollama" ]; then
+        "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_junior_coding_agent.py" \
+            --stories-dir "${STORIES_DIR}" \
+            --workspace-dir "${WORKSPACE_DIR}" \
+            --model "${MODEL_JUNIOR}" \
+            --ollama-host "${OLLAMA_HOST}" \
+            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --run-log "${RUN_LOG}" \
+            --agent-name "ollama-junior-coding-agent-${AGENT_ID}"
+    else
+        "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_junior_coding_agent.py" \
+            --stories-dir "${STORIES_DIR}" \
+            --workspace-dir "${WORKSPACE_DIR}" \
+            --model "${MODEL_JUNIOR}" \
+            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --run-log "${RUN_LOG}" \
+            --agent-name "junior-coding-agent-${AGENT_ID}"
+    fi
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -514,8 +610,11 @@ printf "\033]0;Senior Coding Agent ${AGENT_ID} [medium/hard]\007"
 echo "╔══════════════════════════════════════╗"
 echo "║  Senior Coding Agent ${AGENT_ID} [medium/hard]  ║"
 echo "╚══════════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE}"
+echo "  Model : ${MODEL_SENIOR}"
+echo ""
 echo "Handles: medium and hard stories"
-echo "Waiting for Project Initialiser to create workspace/CLAUDE.md..."
+echo "Waiting for workspace/CLAUDE.md..."
 
 while [ ! -f "${WORKSPACE_DIR}/CLAUDE.md" ]; do sleep 3; done
 
@@ -529,13 +628,24 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    "${PYTHON}" "${SCRIPT_DIR}/scripts/senior_coding_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
-        --workspace-dir "${WORKSPACE_DIR}" \
-        --model "${MODEL_SENIOR}" \
-        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
-        --run-log "${RUN_LOG}" \
-        --agent-name "senior-coding-agent-${AGENT_ID}"
+    if [ "$AGENT_TYPE" = "ollama" ]; then
+        "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_senior_coding_agent.py" \
+            --stories-dir "${STORIES_DIR}" \
+            --workspace-dir "${WORKSPACE_DIR}" \
+            --model "${MODEL_SENIOR}" \
+            --ollama-host "${OLLAMA_HOST}" \
+            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --run-log "${RUN_LOG}" \
+            --agent-name "ollama-senior-coding-agent-${AGENT_ID}"
+    else
+        "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_senior_coding_agent.py" \
+            --stories-dir "${STORIES_DIR}" \
+            --workspace-dir "${WORKSPACE_DIR}" \
+            --model "${MODEL_SENIOR}" \
+            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --run-log "${RUN_LOG}" \
+            --agent-name "senior-coding-agent-${AGENT_ID}"
+    fi
     EXIT_CODE=$?
 
     # Orchestrator wrote pipeline_complete — clean exit
@@ -581,6 +691,7 @@ done
 # ── Story Orchestrator ────────────────────────────────────────────────────────
 # Watches stories/ for bare STORY-NNN.md files, resolves dependencies, and
 # renames them to STORY-NNN.[complexity].ready.md when all deps are done.
+# Agent-type agnostic — operates purely on the filesystem.
 cat > "$SENTINEL_DIR/run_orchestrator.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -594,7 +705,7 @@ echo "║      Story Orchestrator          ║"
 echo "╚══════════════════════════════════╝"
 echo "Watches stories/ — marks stories ready when dependencies are met."
 echo ""
-"${PYTHON}" "${SCRIPT_DIR}/scripts/story_orchestrator.py" \
+"${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_orchestrator.py" \
     --stories-dir "${STORIES_DIR}"
 echo ""
 echo "[Story Orchestrator exited]"
@@ -628,6 +739,9 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║       Story Reviewer Agent       ║"
 echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE}"
+echo "  Model : ${MODEL_REVIEWER}"
+echo ""
 echo "Watching for HALT file..."
 echo ""
 
@@ -644,10 +758,19 @@ while true; do
 
     echo "[Story Reviewer] HALT detected — starting review session..."
     echo ""
-    "${PYTHON}" "${SCRIPT_DIR}/scripts/story_reviewer_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
-        --model "${MODEL_REVIEWER}" \
-        --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl"
+    if [ "$AGENT_TYPE" = "ollama" ]; then
+        "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_story_reviewer_agent.py" \
+            --stories-dir "${STORIES_DIR}" \
+            --model "${MODEL_REVIEWER}" \
+            --ollama-host "${OLLAMA_HOST}" \
+            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --agent-name "ollama-story-reviewer"
+    else
+        "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_reviewer_agent.py" \
+            --stories-dir "${STORIES_DIR}" \
+            --model "${MODEL_REVIEWER}" \
+            --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl"
+    fi
     echo ""
     echo "[Story Reviewer] Session complete — resuming watch."
     echo ""

@@ -4,10 +4,15 @@ Filename convention managed by this utility:
   STORY-NNN.md                        newly written by BA, not yet evaluated
   STORY-NNN.[easy|medium|hard].ready.md   deps met — ready to be claimed by a coding agent
 """
+import sys
+from pathlib import Path
+
+# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import argparse
 import re
 import time
-from pathlib import Path
 
 from agent_utilities import PROJECT_ROOT, resolve_path
 

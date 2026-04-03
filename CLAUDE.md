@@ -19,15 +19,24 @@ momo-agents/
 ├── LICENSE                 # MIT License
 ├── pyproject.toml          # Project metadata and dependencies
 ├── scripts/                # Python agent and utility implementations
-│   ├── designer_agent.py             # Interactive design session → workspace/design/<feature>.md
-│   ├── business_analyst_agent.py     # Decomposes design into story files
-│   ├── project_initialiser_agent.py  # Scaffolds workspace/ from design; writes workspace/CLAUDE.md
-│   ├── story_orchestrator.py         # Non-LLM utility; marks stories ready when deps are met
-│   ├── junior_coding_agent.py        # Claims and implements easy stories
-│   ├── senior_coding_agent.py        # Claims and implements medium/hard stories
-│   ├── story_reviewer_agent.py       # Triages failed stories with user
-│   ├── agent_utilities.py            # Shared agent helpers
-│   └── token_logger.py               # Shared JSONL token-usage logger
+│   ├── agent_utilities.py          # Shared helpers (path resolution, run-log, workspace wait)
+│   ├── token_logger.py             # Shared JSONL token-usage logger and console printer
+│   ├── claude_agents/              # Agents backed by the Claude Agent SDK
+│   │   ├── claude_designer_agent.py             # Interactive design session → workspace/design/<feature>.md
+│   │   ├── claude_business_analyst_agent.py     # Decomposes design doc into story files
+│   │   ├── claude_project_initialiser_agent.py  # Scaffolds workspace/ from design; writes workspace/CLAUDE.md
+│   │   ├── claude_story_orchestrator.py         # Non-LLM utility; marks stories ready when deps are met
+│   │   ├── claude_junior_coding_agent.py        # Claims and implements easy stories
+│   │   ├── claude_senior_coding_agent.py        # Claims and implements medium/hard stories
+│   │   └── claude_story_reviewer_agent.py       # Triages failed stories with user
+│   └── ollama_agents/              # Agents backed by a local Ollama instance
+│       ├── ollama_utilities.py                      # Shared tool defs, ToolExecutor, and agent loops
+│       ├── ollama_designer_agent.py                 # Interactive design session (chat loop)
+│       ├── ollama_business_analyst_agent.py         # Decomposes design doc into story files
+│       ├── ollama_project_initialiser_agent.py      # Scaffolds workspace/ from design doc
+│       ├── ollama_junior_coding_agent.py            # Claims and implements easy stories
+│       ├── ollama_senior_coding_agent.py            # Claims and implements medium/hard stories
+│       └── ollama_story_reviewer_agent.py           # Triages failed stories with user
 ├── roles/                  # System prompt files (one per LLM agent)
 │   ├── designer.md
 │   ├── business-analyst.md
@@ -59,6 +68,7 @@ momo-agents/
 | Type checker    | mypy                                             |
 | Test runner     | pytest                                           |
 | AI backend      | Claude Agent SDK (`claude-agent-sdk`)            |
+| Local AI backend| Ollama (`ollama>=0.4`) — optional extra          |
 
 ## Development Setup
 
@@ -74,6 +84,9 @@ source .venv/bin/activate   # Linux/macOS
 # Install the project with dev dependencies
 uv pip install -e ".[dev]"
 
+# Install the Ollama extra (required for ollama_* agents)
+uv pip install -e ".[ollama]"
+
 # Run linter
 ruff check .
 ruff format .
@@ -81,17 +94,31 @@ ruff format .
 # Run type checker
 mypy scripts/
 
-# Run the full pipeline
-./start-team.sh <feature-name>
+# Run the full pipeline (Claude backend — default)
+./start-team.sh --workspace workspace/my-feature
 
-# Run an agent directly
-python scripts/designer_agent.py
-python scripts/business_analyst_agent.py --design workspace/design/my-feature.new.md
-python scripts/project_initialiser_agent.py --design workspace/design/my-feature.new.md
-python scripts/story_orchestrator.py
-python scripts/junior_coding_agent.py
-python scripts/senior_coding_agent.py
-python scripts/story_reviewer_agent.py
+# Run the full pipeline (Ollama backend)
+./start-team.sh --workspace workspace/my-feature --agent-type ollama
+./start-team.sh --workspace workspace/my-feature --agent-type ollama --ollama-host http://localhost:11434 --model-junior qwen2.5-coder --model-senior qwen2.5-coder
+
+# Run an agent directly (Claude backend)
+python scripts/claude_agents/claude_designer_agent.py
+python scripts/claude_agents/claude_business_analyst_agent.py --design workspace/design/my-feature.new.md
+python scripts/claude_agents/claude_project_initialiser_agent.py --design workspace/design/my-feature.new.md
+python scripts/claude_agents/claude_story_orchestrator.py
+python scripts/claude_agents/claude_junior_coding_agent.py
+python scripts/claude_agents/claude_senior_coding_agent.py
+python scripts/claude_agents/claude_story_reviewer_agent.py
+
+# Run an agent directly (Ollama backend — requires a running Ollama instance)
+python scripts/ollama_agents/ollama_designer_agent.py --model qwen2.5-coder
+python scripts/ollama_agents/ollama_business_analyst_agent.py --design workspace/design/my-feature.new.md
+python scripts/ollama_agents/ollama_project_initialiser_agent.py --design workspace/design/my-feature.new.md
+python scripts/ollama_agents/ollama_junior_coding_agent.py
+python scripts/ollama_agents/ollama_senior_coding_agent.py
+python scripts/ollama_agents/ollama_story_reviewer_agent.py
+# Override host:  --ollama-host http://192.168.1.10:11434
+# Override model: --model llama3.1
 
 # Check pipeline status
 ./status.sh

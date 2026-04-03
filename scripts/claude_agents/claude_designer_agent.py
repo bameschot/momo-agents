@@ -1,7 +1,12 @@
 """Designer Agent — interactive multi-turn Q&A session that produces design/<feature>.new.md."""
+import sys
+from pathlib import Path
+
+# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import argparse
 import anyio
-from pathlib import Path
 
 from claude_agent_sdk import (
     AssistantMessage,

@@ -2,6 +2,8 @@
 claude-agent-sdk
 anyio
 
+ollama
+
 # Dev dependencies
 pytest
 ruff

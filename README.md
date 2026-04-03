@@ -1,6 +1,6 @@
 # momo-agents
 
-A multi-agent coding pipeline powered by the Claude Agent SDK. A team of specialised agents collaborate over the filesystem to take a feature idea from concept through to working, tested code — without human intervention between steps.
+A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline).
 
 ---
 
@@ -44,7 +44,23 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `workspace/stories/*.failed.md` | `workspace/stories/` |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `workspace/stories/` | `workspace/stories/` |
 
-Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
+Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `claude_story_orchestrator.py` makes no LLM calls.
+
+---
+
+## AI backends
+
+### Claude (default)
+
+Uses the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk). Requires an Anthropic API key. Each agent script lives in `scripts/claude_agents/`.
+
+### Ollama (local)
+
+Uses a locally running [Ollama](https://ollama.com) instance. No API key required — models run entirely on your machine. Each agent script lives in `scripts/ollama_agents/` and shares common tool infrastructure from `scripts/ollama_agents/ollama_utilities.py`.
+
+The Ollama agents implement their own agentic tool-call loop (Ollama uses the OpenAI function-call format rather than the Claude Agent SDK). The same six tools are available to every Ollama agent: `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep`. The Story Reviewer additionally has `ask_user` for interactive triage.
+
+Recommended models with reliable tool use: `qwen2.5-coder`, `llama3.1`, `mistral-small3.1`.
 
 ---
 
@@ -52,23 +68,38 @@ Each LLM agent reads its system prompt from the corresponding file in `roles/` a
 
 ```
 momo-agents/
-├── scripts/                   ← Python agent and utility implementations
-│   ├── designer_agent.py
-│   ├── business_analyst_agent.py
-│   ├── project_initialiser_agent.py
-│   ├── story_orchestrator.py      ← non-LLM utility; marks stories ready
-│   ├── junior_coding_agent.py     ← claims easy stories
-│   ├── senior_coding_agent.py     ← claims medium/hard stories
-│   ├── story_reviewer_agent.py
-│   ├── agent_utilities.py         ← shared helpers (run-log writer, path utils)
-│   └── token_logger.py            ← shared JSONL token-usage logger
+├── scripts/
+│   ├── agent_utilities.py         ← shared helpers (path utils, run-log writer, workspace wait)
+│   ├── token_logger.py            ← shared JSONL token-usage logger and console printer
+│   ├── claude_agents/             ← agents backed by the Claude Agent SDK
+│   │   ├── claude_designer_agent.py
+│   │   ├── claude_business_analyst_agent.py
+│   │   ├── claude_project_initialiser_agent.py
+│   │   ├── claude_story_orchestrator.py       ← non-LLM; marks stories ready
+│   │   ├── claude_junior_coding_agent.py      ← claims easy stories
+│   │   ├── claude_senior_coding_agent.py      ← claims medium/hard stories
+│   │   └── claude_story_reviewer_agent.py
+│   └── ollama_agents/             ← agents backed by a local Ollama instance
+│       ├── ollama_utilities.py            ← shared tool defs, ToolExecutor, agent loops
+│       ├── ollama_designer_agent.py
+│       ├── ollama_business_analyst_agent.py
+│       ├── ollama_project_initialiser_agent.py
+│       ├── ollama_junior_coding_agent.py
+│       ├── ollama_senior_coding_agent.py
+│       └── ollama_story_reviewer_agent.py
 ├── roles/                     ← system prompt files (one per LLM agent)
 │   ├── designer.md
 │   ├── business-analyst.md
 │   ├── project-initialiser.md
 │   ├── junior-coding-agent.md
 │   ├── senior-coding-agent.md
-│   └── story-reviewer.md
+│   ├── story-reviewer.md
+│   ├── ollama-designer.md
+│   ├── ollama-business-analyst.md
+│   ├── ollama-project-initialiser.md
+│   ├── ollama-junior-coding-agent.md
+│   ├── ollama-senior-coding-agent.md
+│   └── ollama-story-reviewer.md
 ├── workspace/                 ← all generated artefacts
 │   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
 │   ├── design/                ← Designer Agent outputs
@@ -103,7 +134,7 @@ momo-agents/
 
 ### Designer
 
-The Designer runs as a genuine multi-turn conversation backed by `ClaudeSDKClient`. A single SDK session persists for the entire conversation, preserving full context across turns.
+The Designer runs as a multi-turn conversation. A single session persists for the entire interaction, preserving full context across turns.
 
 1. Agent greets the user and asks what they want to build.
 2. Asks clarifying questions — technology stack, constraints, integrations, non-functional requirements — until it has a complete picture.
@@ -120,7 +151,7 @@ The Designer runs as a genuine multi-turn conversation backed by `ClaudeSDKClien
 Runs once automatically when the workspace is empty. Its primary output — `workspace/CLAUDE.md` — is the **start gate** for the Business Analyst and all Coding Agents.
 
 1. Reads the design document and determines the correct tech-stack scaffolding (language, runtime, frameworks, tooling).
-2. Creates `workspace/CLAUDE.md` with precise, runnable build, test, and lint commands for the identified stack.
+2. Creates `workspace/CLAUDE.md` with precise, runnable build, test, and lint commands for the identified stack, including an **Agent Exclusion List** section.
 3. Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.
 4. Does **not** implement any story logic.
 
@@ -178,10 +209,10 @@ Default poll interval: 5 seconds (configurable via `--poll-interval`).
 
 Two tiers handle stories by complexity:
 
-| Agent | Handles | Default model |
-|---|---|---|
-| **Junior Coding Agent** | `easy` stories | `claude-haiku-4-5-20251001` |
-| **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` |
+| Agent | Handles | Claude default model | Ollama default model |
+|---|---|---|---|
+| **Junior Coding Agent** | `easy` stories | `claude-haiku-4-5-20251001` | `qwen2.5-coder` |
+| **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` | `qwen2.5-coder` |
 
 Both agents follow the same structure: **Python owns the outer loop; a fresh LLM session is started for every story.** This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.
 
@@ -193,10 +224,10 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 1. Check for `workspace/stories/HALT` or `pipeline_complete` sentinel — exit if either exists.
 2. Atomically claim the lowest-numbered `.ready.md` story of the correct complexity tier by renaming it to `.working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
 3. If no story can be claimed, sleep 60 s and retry.
-4. Start a **fresh `query()` session** for the claimed story, passing the story path and the pre-read `workspace/CLAUDE.md` content directly in the task prompt.
+4. Start a **fresh session** for the claimed story, passing the story path and the pre-read `workspace/CLAUDE.md` content directly in the task prompt.
 5. When the session ends, loop back to step 1.
 
-**Per-story LLM session** (one `query()` call per story):
+**Per-story LLM session**:
 1. Read the story file.
 2. Read the design document(s) listed in the story's **Design ref** field — both possible paths are listed separated by ` | `; read whichever exist.
 3. Note the `## Agent Exclusion List` in `workspace/CLAUDE.md` — never read from or write to those paths.
@@ -326,7 +357,8 @@ All coordination is via atomic filesystem operations — no database, no message
 
 - Python 3.11+
 - [`uv`](https://github.com/astral-sh/uv) (recommended) or `pip`
-- An Anthropic API key
+- **Claude backend**: an Anthropic API key
+- **Ollama backend**: a running [Ollama](https://ollama.com) instance with at least one model pulled (e.g. `ollama pull qwen2.5-coder`)
 
 ### Install
 
@@ -342,8 +374,12 @@ source .venv/bin/activate      # Linux / macOS
 # 3. Install the project and its dependencies
 uv pip install -e ".[dev]"
 
-# 4. Add your API key
+# 4a. Claude backend — add your API key
 echo "ANTHROPIC_API_KEY=your_key_here" > .env
+
+# 4b. Ollama backend — install the extra and pull a model
+uv pip install -e ".[ollama]"
+ollama pull qwen2.5-coder
 ```
 
 ---
@@ -356,21 +392,34 @@ echo "ANTHROPIC_API_KEY=your_key_here" > .env
 ./start-team.sh --workspace <path> [options]
 ```
 
-Opens every agent simultaneously in its own named terminal window and monitors the pipeline in the current terminal until you press **Ctrl+C**.
+Opens every agent simultaneously in its own named terminal window and monitors the pipeline in the current terminal until you press **Ctrl+C**. Each agent window prints its **mode** and **model** at startup so you can confirm configuration at a glance.
 
 `<path>` is the workspace directory where all generated artefacts live. It can be anywhere on the filesystem — inside or outside the `momo-agents` repo. If the directory does not exist, `start-team.sh` will offer to create it and initialise a git repository inside it.
 
 | Flag | Description | Default |
 |---|---|---|
 | `--workspace <path>` | Path to the workspace directory (required) | — |
+| `--agent-type TYPE` | AI backend: `claude` or `ollama` | `claude` |
+| `--ollama-host URL` | Ollama API base URL (Ollama mode only) | `http://localhost:11434` |
 | `--junior-agents N` | Number of parallel Junior Coding Agents (easy stories) | `2` |
 | `--senior-agents N` | Number of parallel Senior Coding Agents (medium/hard stories) | `1` |
-| `--model-designer M` | Claude model for the Designer | `claude-sonnet-4-6` |
-| `--model-ba M` | Claude model for the Business Analyst | `claude-sonnet-4-6` |
-| `--model-pi M` | Claude model for the Project Initialiser | `claude-haiku-4-5-20251001` |
-| `--model-junior M` | Claude model for Junior Coding Agents | `claude-haiku-4-5-20251001` |
-| `--model-senior M` | Claude model for Senior Coding Agents | `claude-sonnet-4-6` |
-| `--model-reviewer M` | Claude model for the Story Reviewer | `claude-sonnet-4-6` |
+| `--model-designer M` | Model for the Designer | see defaults below |
+| `--model-ba M` | Model for the Business Analyst | see defaults below |
+| `--model-pi M` | Model for the Project Initialiser | see defaults below |
+| `--model-junior M` | Model for Junior Coding Agents | see defaults below |
+| `--model-senior M` | Model for Senior Coding Agents | see defaults below |
+| `--model-reviewer M` | Model for the Story Reviewer | see defaults below |
+
+**Model defaults:**
+
+| Agent | `--agent-type claude` | `--agent-type ollama` |
+|---|---|---|
+| Designer | `claude-sonnet-4-6` | `qwen2.5-coder` |
+| Business Analyst | `claude-sonnet-4-6` | `qwen2.5-coder` |
+| Project Initialiser | `claude-haiku-4-5-20251001` | `qwen2.5-coder` |
+| Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen2.5-coder` |
+| Senior Coding Agent | `claude-sonnet-4-6` | `qwen2.5-coder` |
+| Story Reviewer | `claude-sonnet-4-6` | `qwen2.5-coder` |
 
 **Agent windows opened:**
 
@@ -388,8 +437,22 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 **Examples:**
 
 ```bash
-# Default — 2 junior agents, 1 senior agent
+# Claude backend — 2 junior agents, 1 senior agent (defaults)
 ./start-team.sh --workspace /path/to/my-project
+
+# Ollama backend — all agents use local qwen2.5-coder
+./start-team.sh --workspace /path/to/my-project --agent-type ollama
+
+# Ollama on a remote host
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --ollama-host http://192.168.1.10:11434
+
+# Ollama with a specific model per agent tier
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --model-junior qwen2.5-coder \
+  --model-senior llama3.1
 
 # Relative paths are resolved from the current directory
 ./start-team.sh --workspace ../my-project
@@ -397,11 +460,8 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 # Scale up for a large backlog
 ./start-team.sh --workspace /path/to/my-project --junior-agents 4 --senior-agents 2
 
-# Use opus for design, keep defaults elsewhere
+# Use a different model for design only (Claude)
 ./start-team.sh --workspace /path/to/my-project --model-designer claude-opus-4-6
-
-# --flag=value form also works
-./start-team.sh --workspace=/path/to/my-project --junior-agents=3 --model-junior=claude-sonnet-4-6
 ```
 
 ### Monitor progress
@@ -466,37 +526,69 @@ After a full reset, re-running `./start-team.sh --workspace <path>` goes through
 
 ## Running agents individually
 
-Each agent can also be invoked directly:
+### Claude backend
 
 ```bash
 # Designer (interactive)
-python scripts/designer_agent.py --model claude-sonnet-4-6
+python scripts/claude_agents/claude_designer_agent.py --model claude-sonnet-4-6
 
 # Project Initialiser
-python scripts/project_initialiser_agent.py \
+python scripts/claude_agents/claude_project_initialiser_agent.py \
   --design workspace/design/my-feature.new.md \
   --model claude-sonnet-4-6
 
 # Business Analyst (waits for workspace/CLAUDE.md before starting)
-python scripts/business_analyst_agent.py \
+python scripts/claude_agents/claude_business_analyst_agent.py \
   --design workspace/design/my-feature.new.md \
   --workspace-dir workspace \
   --model claude-sonnet-4-6
 
-# Story Orchestrator
-python scripts/story_orchestrator.py
+# Story Orchestrator (no LLM — agent-type agnostic)
+python scripts/claude_agents/claude_story_orchestrator.py
 
 # Junior Coding Agent (easy stories; waits for workspace/CLAUDE.md)
-python scripts/junior_coding_agent.py \
+python scripts/claude_agents/claude_junior_coding_agent.py \
   --model claude-haiku-4-5-20251001
 
 # Senior Coding Agent (medium/hard stories; waits for workspace/CLAUDE.md)
-python scripts/senior_coding_agent.py \
+python scripts/claude_agents/claude_senior_coding_agent.py \
   --model claude-sonnet-4-6
 
 # Story Reviewer
-python scripts/story_reviewer_agent.py \
+python scripts/claude_agents/claude_story_reviewer_agent.py \
   --model claude-sonnet-4-6
+```
+
+### Ollama backend
+
+```bash
+# Designer (interactive)
+python scripts/ollama_agents/ollama_designer_agent.py --model qwen2.5-coder
+
+# Project Initialiser
+python scripts/ollama_agents/ollama_project_initialiser_agent.py \
+  --design workspace/design/my-feature.new.md \
+  --model qwen2.5-coder
+
+# Business Analyst
+python scripts/ollama_agents/ollama_business_analyst_agent.py \
+  --design workspace/design/my-feature.new.md \
+  --workspace-dir workspace \
+  --model qwen2.5-coder
+
+# Junior Coding Agent (easy stories)
+python scripts/ollama_agents/ollama_junior_coding_agent.py --model qwen2.5-coder
+
+# Senior Coding Agent (medium/hard stories)
+python scripts/ollama_agents/ollama_senior_coding_agent.py --model qwen2.5-coder
+
+# Story Reviewer
+python scripts/ollama_agents/ollama_story_reviewer_agent.py --model qwen2.5-coder
+
+# Override Ollama host for any agent:
+python scripts/ollama_agents/ollama_junior_coding_agent.py \
+  --model llama3.1 \
+  --ollama-host http://192.168.1.10:11434
 ```
 
 All path arguments default to `workspace/` relative to the `momo-agents` repo root when running agents individually. Pass `--workspace-dir <path>` to point them at any workspace directory.

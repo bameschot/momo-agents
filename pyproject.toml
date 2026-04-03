@@ -18,6 +18,9 @@ dev = [
     "ruff",
     "mypy",
 ]
+ollama = [
+    "ollama>=0.4",
+]
 
 [tool.ruff]
 line-length = 100
