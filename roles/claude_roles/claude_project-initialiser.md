@@ -45,7 +45,8 @@ The design document path is provided in the task prompt. Read it before doing an
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
-   - if the workspace is a git repository also include, or ammend an existing .gitignore file approporiate for the techstack
+   - If the workspace is not already a git repository, initialise one with `git init`
+   - Include or amend an existing `.gitignore` file appropriate for the tech stack
 
 5. Do **not** implement any business logic from the stories.
 6. Do **not** write files outside the workspace root.

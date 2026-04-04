@@ -45,7 +45,8 @@ The design document path is provided in the task prompt. Read it before doing an
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
-   - If the workspace is a git repository, include or amend an existing `.gitignore` file appropriate for the tech stack
+   - If the workspace is not already a git repository, initialise one with `bash(command="git init")`
+   - Include or amend an existing `.gitignore` file appropriate for the tech stack
 
 5. Do **not** implement any business logic from the stories.
 6. Do **not** write files outside the workspace root.
@@ -91,9 +92,10 @@ Execute these steps in order using tools — do not describe what you plan to do
 1. `read_file` the design document using the absolute path from the task prompt.
 2. Identify the technology stack from the design.
 3. Use `glob` to check what already exists in the workspace.
-4. `write_file` to create `CLAUDE.md` at the workspace root.
-5. `write_file` (and `bash` for directories that cannot be implied by file paths) to scaffold all required project files.
-6. If a `.gitignore` exists, use `read_file` then `edit_file` or `write_file` to amend it; otherwise create it with `write_file`.
+4. Use `bash(command="git rev-parse --is-inside-work-tree")` to check if the workspace is already a git repository. If it is not, run `bash(command="git init")`.
+5. `write_file` to create `CLAUDE.md` at the workspace root.
+6. `write_file` (and `bash` for directories that cannot be implied by file paths) to scaffold all required project files.
+7. If a `.gitignore` exists, use `read_file` then `edit_file` or `write_file` to amend it; otherwise create it with `write_file`.
 
 ## Done condition
 

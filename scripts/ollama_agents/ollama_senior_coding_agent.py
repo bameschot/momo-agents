@@ -136,13 +136,6 @@ async def run(
             agent_name=agent_name,
             token_log=token_log,
             system_prompt=system_prompt,
-            continuation_prompt=(
-                "Continue implementing the story. Use the available tools to make progress. "
-                "When all acceptance criteria are met and tests pass, rename the story file "
-                "from .working.md to .done.md and commit. "
-                "If the implementation cannot succeed, create the HALT file, rename to .failed.md, "
-                "and perform the halt procedure. Do not describe what you plan to do — use tools directly."
-            ),
         )
 
         stem = story_path.name.replace(".working.md", "")

@@ -501,8 +501,6 @@ async def run_agent_loop(
     token_log: Path | None,
     max_turns: int = MAX_TURNS,
     system_prompt: str = "",
-    continuation_prompt: str = "",
-    max_continuations: int = 3,
 ) -> None:
     """Drive a task-oriented agentic loop.
 
@@ -515,18 +513,10 @@ async def run_agent_loop(
     index 0 of *messages* before the first call so the full history remains
     in one list throughout the loop.
 
-    If *continuation_prompt* is provided, a text-only response (no tool calls)
-    is treated as a mid-task pause rather than completion: the prompt is
-    appended as a new user message and the loop continues. This handles local
-    models that emit a planning/summary turn before using tools. After
-    *max_continuations* consecutive text-only turns the loop exits regardless.
-
     *messages* is mutated in place so callers can inspect the full history.
     """
     if system_prompt:
         messages.insert(0, Message(role="system", content=system_prompt))
-
-    consecutive_text_turns = 0
 
     for turn in range(max_turns):
         response = await client.chat(
@@ -544,24 +534,11 @@ async def run_agent_loop(
         if not msg.tool_calls:
             # Check whether the model embedded tool call JSON in plain text
             if _handle_text_tool_calls(msg, messages, executor, agent_name, tools):
-                consecutive_text_turns = 0
                 continue
 
-            if continuation_prompt and consecutive_text_turns < max_continuations:
-                consecutive_text_turns += 1
-                print(
-                    f"[{agent_name}] Turn {turn + 1}: no tool calls"
-                    f" — nudging model to continue"
-                    f" (attempt {consecutive_text_turns}/{max_continuations}).",
-                    flush=True,
-                )
-                messages.append(msg)
-                messages.append(Message(role="user", content=continuation_prompt))
-                continue
             print(f"[{agent_name}] Turn {turn + 1}: done (no tool calls).", flush=True)
             return
 
-        consecutive_text_turns = 0
         messages.append(msg)
         _handle_tool_calls(msg, messages, executor, agent_name)
 
