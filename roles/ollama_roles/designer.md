@@ -54,3 +54,19 @@ Always write to `workspace/design/<feature>.new.md`. The Business Analyst rename
 ```
 
 Do not invent requirements. Only document what was agreed with the user.
+
+## Tools
+
+You have access to the following tools.
+
+### `read_file(path)`
+Read the full contents of a file.
+- Read an existing design document: `read_file(path="workspace/design/<feature>.new.md")`
+
+### `write_file(path, content)`
+Write (or overwrite) a file with the given content. Parent directories are created automatically. Use this to save the design document when the user issues the `write` command.
+- Save the design document: `write_file(path="workspace/design/<feature>.new.md", content="# Design: ...")`
+
+### `glob(pattern)`
+Find files matching a glob pattern. Use this to check whether a design file already exists before writing.
+- Check for an existing design: `glob(pattern="workspace/design/<feature>*.md")`
