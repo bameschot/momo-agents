@@ -21,11 +21,11 @@ momo-agents/
 ├── scripts/                # Python agent and utility implementations
 │   ├── agent_utilities.py          # Shared helpers (path resolution, run-log, workspace wait)
 │   ├── token_logger.py             # Shared JSONL token-usage logger and console printer
+│   ├── story_orchestrator.py               # Non-LLM utility; shared by all agent types; marks stories ready when deps are met
 │   ├── claude_agents/              # Agents backed by the Claude Agent SDK
 │   │   ├── claude_designer_agent.py             # Interactive design session → workspace/design/<feature>.md
 │   │   ├── claude_business_analyst_agent.py     # Decomposes design doc into story files
 │   │   ├── claude_project_initialiser_agent.py  # Scaffolds workspace/ from design; writes workspace/CLAUDE.md
-│   │   ├── claude_story_orchestrator.py         # Non-LLM utility; marks stories ready when deps are met
 │   │   ├── claude_junior_coding_agent.py        # Claims and implements easy stories
 │   │   ├── claude_senior_coding_agent.py        # Claims and implements medium/hard stories
 │   │   └── claude_story_reviewer_agent.py       # Triages failed stories with user
@@ -113,7 +113,7 @@ mypy scripts/
 python scripts/claude_agents/claude_designer_agent.py
 python scripts/claude_agents/claude_business_analyst_agent.py --design workspace/design/my-feature.new.md
 python scripts/claude_agents/claude_project_initialiser_agent.py --design workspace/design/my-feature.new.md
-python scripts/claude_agents/claude_story_orchestrator.py
+python scripts/story_orchestrator.py
 python scripts/claude_agents/claude_junior_coding_agent.py
 python scripts/claude_agents/claude_senior_coding_agent.py
 python scripts/claude_agents/claude_story_reviewer_agent.py

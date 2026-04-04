@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 # Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent))
 
 import argparse
 import re

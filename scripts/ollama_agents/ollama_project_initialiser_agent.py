@@ -52,7 +52,8 @@ def _build_task(design_path: Path, workspace_dir: Path) -> str:
         "directory layout, configuration files, empty entry points, and dependency "
         "manifests with required packages listed.\n"
         "Do not implement any story logic — only the skeleton that lets Coding Agents "
-        "start implementing immediately."
+        "start implementing immediately.\n"
+        "After scaffolding is done stop immediately\n"
     )
 
 

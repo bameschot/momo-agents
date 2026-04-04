@@ -79,10 +79,10 @@ if [ "$AGENT_TYPE" = "claude" ]; then
     _DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
     _DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
 elif [ "$AGENT_TYPE" = "ollama" ]; then
-    _DEFAULT_MODEL="devstral-small-2"
-    _DEFAULT_JUNIOR_MODEL="devstral-small-2"
-    _DEFAULT_SENIOR_MODEL="devstral-small-2"
-    _DEFAULT_PI_MODEL="devstral-small-2"
+    _DEFAULT_MODEL="qwen3.5:9b"
+    _DEFAULT_JUNIOR_MODEL="qwen3.5:9b"
+    _DEFAULT_SENIOR_MODEL="qwen3.5:9b"
+    _DEFAULT_PI_MODEL="qwen3.5:9b"
 else
     echo "Error: --agent-type must be 'claude' or 'ollama', got: '$AGENT_TYPE'" >&2
     exit 1
@@ -705,7 +705,7 @@ echo "║      Story Orchestrator          ║"
 echo "╚══════════════════════════════════╝"
 echo "Watches stories/ — marks stories ready when dependencies are met."
 echo ""
-"${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_orchestrator.py" \
+"${PYTHON}" "${SCRIPT_DIR}/scripts/story_orchestrator.py" \
     --stories-dir "${STORIES_DIR}"
 echo ""
 echo "[Story Orchestrator exited]"

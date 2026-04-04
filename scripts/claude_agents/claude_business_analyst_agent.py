@@ -105,6 +105,12 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     for story_file in sorted(after - before, key=lambda p: p.name):
         append_run_log(run_log, agent_name, f"story created: {story_file.name}")
 
+    if design_path.name.endswith(".new.md"):
+        processed_path = design_path.with_name(design_path.name.replace(".new.md", ".processed.md"))
+        design_path.rename(processed_path)
+        print(f"[{agent_name}] Design marked as processed: {processed_path.name}", flush=True)
+        append_run_log(run_log, agent_name, f"design processed: {processed_path.name}")
+
 
 if __name__ == "__main__":
     args = _parse_args()
