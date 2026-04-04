@@ -70,7 +70,10 @@ The Ollama agents implement their own agentic tool-call loop (`run_agent_loop` i
 
 Each Ollama agent has its own role file in `roles/` (`ollama-*.md`) that documents every tool by name, its parameters, and concrete call examples — this is important because local models cannot infer tool behaviour from context the way large cloud models can.
 
-**Continuation prompts**: Local models often emit a text-only planning turn between tool calls (e.g. after reading a design document, before writing story files). The agent loop detects these text-only responses and re-prompts the model with a task-specific continuation message rather than exiting prematurely. Up to three consecutive text-only turns are tolerated before the loop accepts the response as a genuine completion.
+**Robustness features** — `ollama_utilities.py` implements two mechanisms to cope with common local-model failure modes:
+
+- **Text-embedded tool call detection**: some models output tool call JSON as plain text rather than using the structured function-call mechanism. Both `run_agent_loop` and `run_chat_loop` scan every text-only response for JSON objects matching a known tool name, execute any found, and feed the results back to the model — exactly as if a structured call had been made.
+- **Continuation prompts**: models sometimes emit a text-only planning turn between steps (e.g. after reading a design document, before writing files). When no tool call — structured or text-embedded — is found, the agent loop re-prompts the model with a task-specific continuation message rather than exiting prematurely. Up to three consecutive text-only turns are tolerated before the loop accepts the response as a genuine completion. Both mechanisms apply to every agent that uses `run_agent_loop`; the designer's `run_chat_loop` applies text-embedded detection only (the interactive prompt handles the "no tool call" case).
 
 **Recommended models** (reliable tool calling is the critical factor):
 
@@ -102,7 +105,7 @@ momo-agents/
 │   │   ├── claude_senior_coding_agent.py      ← claims medium/hard stories
 │   │   └── claude_story_reviewer_agent.py
 │   └── ollama_agents/             ← agents backed by a local Ollama instance
-│       ├── ollama_utilities.py            ← shared tool defs, ToolExecutor, agent loops
+│       ├── ollama_utilities.py            ← shared tool defs, ToolExecutor, agent loops, text-tool-call fallback
 │       ├── ollama_designer_agent.py
 │       ├── ollama_business_analyst_agent.py
 │       ├── ollama_project_initialiser_agent.py
@@ -239,7 +242,7 @@ Two tiers handle stories by complexity:
 
 Both agents follow the same structure: **Python owns the outer loop; a fresh LLM session is started for every story.** This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.
 
-For the **Ollama backend**, each coding agent passes a continuation prompt to the agent loop. If the model produces a text-only response mid-session (a common pattern with local models that plan before acting), the loop re-prompts it with an explicit instruction to continue implementing rather than treating the text response as task completion.
+For the **Ollama backend**, each coding agent passes a continuation prompt to the agent loop. If the model produces a text-only response mid-session the loop first checks whether the text contains a JSON-encoded tool call and executes it if found; if not, it re-prompts the model with an explicit continuation instruction rather than exiting prematurely.
 
 **Python startup** (once, before the loop):
 1. Poll every 60 s until `workspace/CLAUDE.md` exists.

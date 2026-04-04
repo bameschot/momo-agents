@@ -79,10 +79,10 @@ if [ "$AGENT_TYPE" = "claude" ]; then
     _DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
     _DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
 elif [ "$AGENT_TYPE" = "ollama" ]; then
-    _DEFAULT_MODEL="gemma4:26b"
-    _DEFAULT_JUNIOR_MODEL="gemma4:26b"
-    _DEFAULT_SENIOR_MODEL="gemma4:26b"
-    _DEFAULT_PI_MODEL="gemma4:26b"
+    _DEFAULT_MODEL="devstral-small-2"
+    _DEFAULT_JUNIOR_MODEL="devstral-small-2"
+    _DEFAULT_SENIOR_MODEL="devstral-small-2"
+    _DEFAULT_PI_MODEL="devstral-small-2"
 else
     echo "Error: --agent-type must be 'claude' or 'ollama', got: '$AGENT_TYPE'" >&2
     exit 1

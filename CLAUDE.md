@@ -30,7 +30,7 @@ momo-agents/
 │   │   ├── claude_senior_coding_agent.py        # Claims and implements medium/hard stories
 │   │   └── claude_story_reviewer_agent.py       # Triages failed stories with user
 │   └── ollama_agents/              # Agents backed by a local Ollama instance
-│       ├── ollama_utilities.py                      # Shared tool defs, ToolExecutor, and agent loops
+│       ├── ollama_utilities.py                      # Shared tool defs, ToolExecutor, agent loops, and text-tool-call fallback helpers
 │       ├── ollama_designer_agent.py                 # Interactive design session (chat loop)
 │       ├── ollama_business_analyst_agent.py         # Decomposes design doc into story files
 │       ├── ollama_project_initialiser_agent.py      # Scaffolds workspace/ from design doc
@@ -38,12 +38,17 @@ momo-agents/
 │       ├── ollama_senior_coding_agent.py            # Claims and implements medium/hard stories
 │       └── ollama_story_reviewer_agent.py           # Triages failed stories with user
 ├── roles/                  # System prompt files (one per LLM agent)
-│   ├── designer.md
-│   ├── business-analyst.md
-│   ├── project-initialiser.md
-│   ├── junior-coding-agent.md
-│   ├── senior-coding-agent.md
-│   └── story-reviewer.md
+│   ├── designer.md                      # Claude Designer
+│   ├── business-analyst.md              # Claude Business Analyst
+│   ├── project-initialiser.md           # Claude Project Initialiser
+│   ├── junior-coding-agent.md           # Claude Junior Coding Agent
+│   ├── senior-coding-agent.md           # Claude Senior Coding Agent
+│   ├── story-reviewer.md                # Claude Story Reviewer
+│   ├── ollama-business-analyst.md       # Ollama Business Analyst (tool-aware variant)
+│   ├── ollama-project-initialiser.md    # Ollama Project Initialiser (tool-aware variant)
+│   ├── ollama-junior-coding-agent.md    # Ollama Junior Coding Agent (tool-aware variant)
+│   ├── ollama-senior-coding-agent.md    # Ollama Senior Coding Agent (tool-aware variant)
+│   └── ollama-story-reviewer.md         # Ollama Story Reviewer (tool-aware variant)
 ├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
 │   ├── design/             # Designer Agent outputs (<feature>.new.md / <feature>.processed.md)
@@ -159,6 +164,15 @@ python scripts/ollama_agents/ollama_story_reviewer_agent.py
 - Place tests in a `tests/` directory mirroring the source structure
 - Aim for high coverage on core agent logic
 - Use `pytest.mark.parametrize` for table-driven tests
+
+## Ollama Agent Robustness
+
+The Ollama backend uses two complementary mechanisms in `ollama_utilities.py` to handle models that do not always emit structured function calls:
+
+- **Text-tool-call fallback** (`_try_extract_tool_calls_from_text`, `_handle_text_tool_calls`): When a model response contains no structured `tool_calls`, the response content is scanned for JSON objects (including code-fence-wrapped ones) that match known tool names. Matched calls are executed normally and appended to the message history.
+- **Continuation prompts** (`continuation_prompt`, `max_continuations`): When `run_agent_loop` receives a text-only turn (after the fallback finds nothing), it re-prompts the model with a continuation message up to `max_continuations` times before returning. All task-oriented Ollama agents pass a `continuation_prompt`.
+
+Ollama role files (`roles/ollama-*.md`) contain explicit per-tool documentation and call examples because local models do not reliably infer calling conventions from schema alone. When adding a new Ollama agent, create a dedicated `ollama-<role>.md` alongside the shared `<role>.md`.
 
 ## AI Agent Guidelines
 

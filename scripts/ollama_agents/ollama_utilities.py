@@ -20,6 +20,7 @@ import argparse
 import glob as glob_module
 import json
 import os
+import re
 import subprocess
 from typing import Any
 
@@ -379,21 +380,110 @@ def _log_response_usage(response: Any, agent_name: str, token_log: Path | None) 
 # ---------------------------------------------------------------------------
 
 
+def _try_extract_tool_calls_from_text(
+    content: str,
+    tool_names: set[str],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Try to parse structured tool calls from a plain-text model response.
+
+    Some local models emit tool call JSON as text rather than using the
+    structured function-call mechanism.  This function scans *content* for
+    JSON objects whose ``name`` or ``function`` key matches a known tool name
+    and returns a list of ``(tool_name, arguments)`` pairs, preserving order
+    and deduplicating by content.
+    """
+    # Strip markdown code fences so bare JSON can be parsed directly
+    cleaned = re.sub(r"```(?:json)?\s*", "", content).replace("```", "").strip()
+
+    found: list[tuple[str, dict[str, Any]]] = []
+    seen: set[str] = set()
+
+    def _try(s: str) -> None:
+        try:
+            obj = json.loads(s)
+        except (json.JSONDecodeError, ValueError):
+            return
+        items: list[Any] = obj if isinstance(obj, list) else [obj]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or item.get("function") or "").strip()
+            args = item.get("arguments") or item.get("parameters") or {}
+            if name in tool_names and isinstance(args, dict):
+                key = f"{name}:{json.dumps(args, sort_keys=True)}"
+                if key not in seen:
+                    seen.add(key)
+                    found.append((name, args))
+
+    # Try the whole cleaned string first (handles responses that are pure JSON)
+    _try(cleaned)
+
+    # Then scan for JSON object substrings (handles JSON embedded in prose)
+    for m in re.finditer(r"\{", cleaned):
+        depth = 0
+        for i, ch in enumerate(cleaned[m.start():], m.start()):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    _try(cleaned[m.start(): i + 1])
+                    break
+
+    return found
+
+
+def _execute_calls(
+    calls: list[tuple[str, dict[str, Any]]],
+    messages: list[Message],
+    executor: ToolExecutor,
+) -> None:
+    """Execute a list of ``(tool_name, arguments)`` pairs, print results, and append tool messages."""
+    for name, arguments in calls:
+        print(f"\n[tool:{name}] {json.dumps(arguments, ensure_ascii=False)}", flush=True)
+        result = executor.execute(name, arguments)
+        preview = result if len(result) <= _PREVIEW_CHARS else result[:_PREVIEW_CHARS] + "…"
+        print(f"[result:ok] {preview}", flush=True)
+        messages.append(Message(role="tool", content=result))
+
+
 def _handle_tool_calls(
     msg: Message,
     messages: list[Message],
     executor: ToolExecutor,
     agent_name: str,
 ) -> None:
-    """Execute every tool call in *msg*, print results, and append them to *messages*."""
-    for tool_call in msg.tool_calls or []:
-        name = tool_call.function.name
-        arguments = _parse_tool_args(tool_call.function.arguments)
-        print(f"\n[tool:{name}] {json.dumps(arguments, ensure_ascii=False)}", flush=True)
-        result = executor.execute(name, arguments)
-        preview = result if len(result) <= _PREVIEW_CHARS else result[:_PREVIEW_CHARS] + "…"
-        print(f"[result:ok] {preview}", flush=True)
-        messages.append(Message(role="tool", content=result))
+    """Execute every structured tool call in *msg*, print results, and append them to *messages*."""
+    calls = [
+        (tool_call.function.name, _parse_tool_args(tool_call.function.arguments))
+        for tool_call in (msg.tool_calls or [])
+    ]
+    _execute_calls(calls, messages, executor)
+
+
+def _handle_text_tool_calls(
+    msg: Message,
+    messages: list[Message],
+    executor: ToolExecutor,
+    agent_name: str,
+    tools: list[dict[str, Any]],
+) -> bool:
+    """Check *msg.content* for embedded JSON tool calls and execute any found.
+
+    Some local models output tool call JSON as plain text rather than using the
+    structured function-call mechanism.  Returns ``True`` if at least one call
+    was detected and executed so callers can ``continue`` the agent loop.
+    """
+    if not msg.content:
+        return False
+    tool_names = {t["function"]["name"] for t in tools}
+    calls = _try_extract_tool_calls_from_text(msg.content, tool_names)
+    if not calls:
+        return False
+    print(f"\n[{agent_name}] Tool call detected in text response — executing.", flush=True)
+    messages.append(msg)
+    _execute_calls(calls, messages, executor)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +542,11 @@ async def run_agent_loop(
             print(f"\n[{agent_name}] {msg.content}", flush=True)
 
         if not msg.tool_calls:
+            # Check whether the model embedded tool call JSON in plain text
+            if _handle_text_tool_calls(msg, messages, executor, agent_name, tools):
+                consecutive_text_turns = 0
+                continue
+
             if continuation_prompt and consecutive_text_turns < max_continuations:
                 consecutive_text_turns += 1
                 print(
@@ -522,6 +617,11 @@ async def run_chat_loop(
             # Execute tools and let the model continue without user prompt
             messages.append(msg)
             _handle_tool_calls(msg, messages, executor, agent_name)
+            continue
+
+        # No structured tool calls — check whether the model embedded a tool
+        # call as plain-text JSON (common with smaller local models).
+        if _handle_text_tool_calls(msg, messages, executor, agent_name, tools):
             continue
 
         # No tool calls — hand back to the user
