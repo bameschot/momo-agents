@@ -79,10 +79,10 @@ if [ "$AGENT_TYPE" = "claude" ]; then
     _DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
     _DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
 elif [ "$AGENT_TYPE" = "ollama" ]; then
-    _DEFAULT_MODEL="qwen2.5-coder"
-    _DEFAULT_JUNIOR_MODEL="qwen2.5-coder"
-    _DEFAULT_SENIOR_MODEL="qwen2.5-coder"
-    _DEFAULT_PI_MODEL="qwen2.5-coder"
+    _DEFAULT_MODEL="gemma4:26b"
+    _DEFAULT_JUNIOR_MODEL="gemma4:26b"
+    _DEFAULT_SENIOR_MODEL="gemma4:26b"
+    _DEFAULT_PI_MODEL="gemma4:26b"
 else
     echo "Error: --agent-type must be 'claude' or 'ollama', got: '$AGENT_TYPE'" >&2
     exit 1
@@ -449,11 +449,11 @@ echo "  Model : ${MODEL_PI}"
 echo ""
 
 if [ -f "${WORKSPACE_DIR}/CLAUDE.md" ]; then
-    echo "workspace/CLAUDE.md already exists — skipping scaffold step."
+    echo "${WORKSPACE_DIR}/CLAUDE.md already exists — skipping scaffold step."
     exit 0
 fi
 
-echo "Waiting for a design/*.new.md file..."
+echo "Waiting for ${DESIGN_DIR}/*.new.md..."
 
 design_file=""
 while true; do

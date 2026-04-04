@@ -106,6 +106,14 @@ async def run(
         token_log=token_log,
         max_turns=500,
         system_prompt=load_role("story-reviewer"),
+        continuation_prompt=(
+            "Continue processing the failed stories. "
+            "For each remaining .failed.md story: rename it to .reviewing.md, read it, "
+            "use ask_user to present the failure summary and options to the user, "
+            "rewrite the story based on their guidance, then rename it back to a bare STORY-NNN.md. "
+            "Once all stories are resolved, delete the HALT file and notify the user via ask_user. "
+            "Do not describe what you plan to do — use tools directly."
+        ),
     )
 
     if halt_file.exists():
