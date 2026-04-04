@@ -80,7 +80,7 @@ async def run(stories_dir: Path, model: str, token_log: Path | None) -> None:
 
     options = ClaudeAgentOptions(
         cwd=str(stories_dir.parent),
-        system_prompt=load_role("story-reviewer"),
+        system_prompt=load_role("claude_roles/claude_story-reviewer"),
         allowed_tools=["AskUserQuestion", "Read", "Write", "Glob", "Bash"],
         permission_mode="default",
         max_turns=500,

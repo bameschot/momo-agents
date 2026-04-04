@@ -97,7 +97,7 @@ async def run(
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
 
     claude_md = (workspace_dir / "CLAUDE.md").read_text()
-    system_prompt = load_role("ollama-junior-coding-agent")
+    system_prompt = load_role("ollama_roles/ollama-junior-coding-agent")
     executor = ToolExecutor(workspace_dir)
     client = make_client(ollama_host)
     print(f"[{agent_name}] Connected to Ollama at {ollama_host}, model={model}", flush=True)

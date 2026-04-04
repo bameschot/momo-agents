@@ -38,17 +38,20 @@ momo-agents/
 │       ├── ollama_senior_coding_agent.py            # Claims and implements medium/hard stories
 │       └── ollama_story_reviewer_agent.py           # Triages failed stories with user
 ├── roles/                  # System prompt files (one per LLM agent)
-│   ├── designer.md                      # Claude Designer
-│   ├── business-analyst.md              # Claude Business Analyst
-│   ├── project-initialiser.md           # Claude Project Initialiser
-│   ├── junior-coding-agent.md           # Claude Junior Coding Agent
-│   ├── senior-coding-agent.md           # Claude Senior Coding Agent
-│   ├── story-reviewer.md                # Claude Story Reviewer
-│   ├── ollama-business-analyst.md       # Ollama Business Analyst (tool-aware variant)
-│   ├── ollama-project-initialiser.md    # Ollama Project Initialiser (tool-aware variant)
-│   ├── ollama-junior-coding-agent.md    # Ollama Junior Coding Agent (tool-aware variant)
-│   ├── ollama-senior-coding-agent.md    # Ollama Senior Coding Agent (tool-aware variant)
-│   └── ollama-story-reviewer.md         # Ollama Story Reviewer (tool-aware variant)
+│   ├── claude_roles/                    # Prompts for the Claude backend
+│   │   ├── claude_designer.md
+│   │   ├── claude_business-analyst.md
+│   │   ├── claude_project-initialiser.md
+│   │   ├── claude_junior-coding-agent.md
+│   │   ├── claude_senior-coding-agent.md
+│   │   └── claude_story-reviewer.md
+│   └── ollama_roles/                    # Prompts for the Ollama backend (tool-aware variants)
+│       ├── designer.md                  # Same prompt as Claude designer (shared)
+│       ├── ollama-business-analyst.md
+│       ├── ollama-project-initialiser.md
+│       ├── ollama-junior-coding-agent.md
+│       ├── ollama-senior-coding-agent.md
+│       └── ollama-story-reviewer.md
 ├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
 │   ├── design/             # Designer Agent outputs (<feature>.new.md / <feature>.processed.md)

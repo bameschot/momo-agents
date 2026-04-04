@@ -7,10 +7,16 @@ import anyio
 
 PROJECT_ROOT = Path(__file__).parent.parent
 ROLES_DIR = PROJECT_ROOT / "roles"
+CLAUDE_ROLES_DIR = ROLES_DIR / "claude_roles"
+OLLAMA_ROLES_DIR = ROLES_DIR / "ollama_roles"
 
 
 def load_role(role_name: str) -> str:
-    """Read and return the system prompt for the given role file (without .md extension)."""
+    """Read and return the system prompt for the given role file (without .md extension).
+
+    role_name may include a subdirectory, e.g. 'claude_roles/claude_designer'
+    or 'ollama_roles/ollama-business-analyst'.
+    """
     return (ROLES_DIR / f"{role_name}.md").read_text()
 
 

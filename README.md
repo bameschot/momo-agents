@@ -68,7 +68,7 @@ The Ollama agents implement their own agentic tool-call loop (`run_agent_loop` i
 | Junior / Senior Coding Agent | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` |
 | Story Reviewer | `read_file`, `write_file`, `bash`, `glob`, `ask_user` |
 
-Each Ollama agent has its own role file in `roles/` (`ollama-*.md`) that documents every tool by name, its parameters, and concrete call examples — this is important because local models cannot infer tool behaviour from context the way large cloud models can.
+Each Ollama agent has its own role file in `roles/ollama_roles/` (`ollama-*.md`) that documents every tool by name, its parameters, and concrete call examples — this is important because local models cannot infer tool behaviour from context the way large cloud models can.
 
 **Robustness features** — `ollama_utilities.py` implements two mechanisms to cope with common local-model failure modes:
 
@@ -86,6 +86,119 @@ Each Ollama agent has its own role file in `roles/` (`ollama-*.md`) that documen
 | Compact reasoning | `phi4:14b` | BA / Reviewer alternative |
 
 For a suggested per-role model configuration see the [examples below](#examples).
+
+---
+
+## Ollama agent tools
+
+Each Ollama agent is given a fixed set of tools at startup. All tool implementations live in `scripts/ollama_agents/ollama_utilities.py` and are dispatched by a shared `ToolExecutor`. The table below shows which agents receive which tools, followed by a description of every tool.
+
+### Tool availability by agent
+
+| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding | Story Reviewer |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `edit_file` | | | ✓ | ✓ | ✓ | |
+| `bash` | | | ✓ | ✓ | ✓ | ✓ |
+| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `grep` | | | ✓ | ✓ | ✓ | |
+| `ask_user` | | | | | | ✓ |
+
+The tools are grouped into four named collections in `ollama_utilities.py`:
+
+| Collection | Tools | Used by |
+|---|---|---|
+| `DESIGNER_TOOLS` | `read_file`, `write_file`, `glob` | Designer |
+| `ANALYST_TOOLS` | `read_file`, `write_file`, `glob` | Business Analyst |
+| `CODING_TOOLS` | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` | Project Initialiser, Junior Coding, Senior Coding |
+| `REVIEWER_TOOLS` | `read_file`, `write_file`, `glob`, `bash`, `ask_user` | Story Reviewer |
+
+---
+
+### Tool reference
+
+#### `read_file`
+Read the full text content of a file from disk.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `path` | string | ✓ | Absolute or working-directory-relative path to the file |
+
+Returns the file content as a string, or an error message if the file does not exist or cannot be read. Used by every agent to inspect design documents, story files, generated source code, and workspace metadata.
+
+---
+
+#### `write_file`
+Write (or completely overwrite) a file with new content.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `path` | string | ✓ | Destination file path (absolute or relative) |
+| `content` | string | ✓ | Full content to write |
+
+Parent directories are created automatically. Returns a success or error message. Used by the Designer to save design documents, by the Business Analyst to write story files, and by coding agents to create or replace source and test files.
+
+---
+
+#### `edit_file`
+Replace the **first occurrence** of an exact string inside an existing file.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `path` | string | ✓ | Path to the file to modify |
+| `old_string` | string | ✓ | Exact text to find (must match byte-for-byte, including whitespace) |
+| `new_string` | string | ✓ | Replacement text |
+
+Returns an error if `old_string` is not found, making the operation safe to use without a full rewrite. Agents are expected to `read_file` first so the match string is exact. Used by coding agents to make surgical edits to existing source files rather than rewriting them wholesale.
+
+---
+
+#### `bash`
+Execute a shell command in the agent's working directory and return its output.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `command` | string | ✓ | Shell command to run |
+
+Runs via `subprocess.run()` with a **120-second timeout**. Returns the combined stdout and stderr along with the exit code. Used by coding agents to run build tools, test runners, linters, formatters, git commands, and any other CLI operations needed to implement or verify a story. The Story Reviewer uses it to inspect git history or run diagnostic commands before consulting the user.
+
+---
+
+#### `glob`
+Find files matching a glob pattern, returning their absolute paths.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `pattern` | string | ✓ | Glob pattern, e.g. `src/**/*.py` or `stories/*.ready.md` |
+| `directory` | string | | Root directory to search from (default: working directory) |
+
+Returns a newline-separated, sorted list of absolute paths. Recursive patterns (`**`) are supported. Used by all agents to discover design files, story files, and source files without having to know exact names ahead of time.
+
+---
+
+#### `grep`
+Search file contents for a regular expression, returning matching lines with file paths and line numbers.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `pattern` | string | ✓ | Regular expression to search for |
+| `path` | string | | File or directory to search (default: working directory) |
+| `glob` | string | | Restrict search to files matching this glob, e.g. `*.py` |
+
+Runs `grep -rn -E` under the hood. Used by coding agents and the Project Initialiser to locate definitions, imports, usages, or configuration values across the workspace without reading every file individually.
+
+---
+
+#### `ask_user`
+Present a question to the user and block until they reply.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `question` | string | ✓ | The question or prompt to display |
+| `choices` | array of strings | | Optional list of options; printed as a numbered menu alongside the question |
+
+Writes the question to stdout and reads a line from stdin. When `choices` is provided the options are numbered and printed below the question, but the user may type any free-form response. Used exclusively by the Story Reviewer to gather human guidance on how to handle a failed story — for example, whether to change the approach, relax acceptance criteria, or split the story into smaller pieces.
 
 ---
 
@@ -113,17 +226,20 @@ momo-agents/
 │       ├── ollama_senior_coding_agent.py
 │       └── ollama_story_reviewer_agent.py
 ├── roles/                     ← system prompt files (one per LLM agent)
-│   ├── designer.md                    ← shared (Claude + Ollama)
-│   ├── business-analyst.md            ← Claude BA
-│   ├── project-initialiser.md         ← Claude PI
-│   ├── junior-coding-agent.md         ← Claude Junior
-│   ├── senior-coding-agent.md         ← Claude Senior
-│   ├── story-reviewer.md              ← Claude Reviewer
-│   ├── ollama-business-analyst.md     ← Ollama BA (tool-use instructions)
-│   ├── ollama-project-initialiser.md  ← Ollama PI (tool-use instructions)
-│   ├── ollama-junior-coding-agent.md  ← Ollama Junior (tool-use instructions)
-│   ├── ollama-senior-coding-agent.md  ← Ollama Senior (tool-use instructions)
-│   └── ollama-story-reviewer.md       ← Ollama Reviewer (tool-use instructions)
+│   ├── claude_roles/                  ← prompts for the Claude backend
+│   │   ├── claude_designer.md
+│   │   ├── claude_business-analyst.md
+│   │   ├── claude_project-initialiser.md
+│   │   ├── claude_junior-coding-agent.md
+│   │   ├── claude_senior-coding-agent.md
+│   │   └── claude_story-reviewer.md
+│   └── ollama_roles/                  ← prompts for the Ollama backend
+│       ├── designer.md                ← same prompt as Claude designer (shared)
+│       ├── ollama-business-analyst.md
+│       ├── ollama-project-initialiser.md
+│       ├── ollama-junior-coding-agent.md
+│       ├── ollama-senior-coding-agent.md
+│       └── ollama-story-reviewer.md
 ├── workspace/                 ← all generated artefacts
 │   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
 │   ├── design/                ← Designer Agent outputs

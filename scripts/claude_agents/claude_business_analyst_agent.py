@@ -88,7 +88,7 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
 
     options = ClaudeAgentOptions(
         cwd=str(workspace_dir),
-        system_prompt=load_role("business-analyst"),
+        system_prompt=load_role("claude_roles/claude_business-analyst"),
         allowed_tools=["Read", "Write", "Glob"],
         permission_mode="acceptEdits",
         max_turns=200,

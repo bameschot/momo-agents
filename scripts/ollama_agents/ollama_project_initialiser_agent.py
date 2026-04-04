@@ -86,7 +86,7 @@ async def run(
         executor=executor,
         agent_name=agent_name,
         token_log=token_log,
-        system_prompt=load_role("ollama-project-initialiser"),
+        system_prompt=load_role("ollama_roles/ollama-project-initialiser"),
         continuation_prompt=(
             "Continue scaffolding the workspace. "
             "Use write_file to create CLAUDE.md and all required project files. "

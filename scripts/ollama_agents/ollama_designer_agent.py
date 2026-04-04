@@ -81,7 +81,7 @@ async def run(
         executor=executor,
         agent_name=agent_name,
         token_log=token_log,
-        system_prompt=load_role("designer"),
+        system_prompt=load_role("ollama_roles/designer"),
         exit_phrases=("exit", "quit", "bye", "done"),
     )
 

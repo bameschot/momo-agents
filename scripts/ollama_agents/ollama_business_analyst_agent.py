@@ -109,7 +109,7 @@ async def run(
         executor=executor,
         agent_name=agent_name,
         token_log=token_log,
-        system_prompt=load_role("ollama-business-analyst"),
+        system_prompt=load_role("ollama_roles/ollama-business-analyst"),
         continuation_prompt=(
             f"Continue writing the story files to {stories_dir}. "
             f"Each story must be a separate file named STORY-NNN.md (zero-padded three digits). "

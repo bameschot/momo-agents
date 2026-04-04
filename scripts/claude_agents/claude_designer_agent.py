@@ -91,7 +91,7 @@ async def run(workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_
 
     options = ClaudeAgentOptions(
         cwd=str(PROJECT_ROOT),
-        system_prompt=load_role("designer"),
+        system_prompt=load_role("claude_roles/claude_designer"),
         allowed_tools=["Read", "Write"],
         permission_mode="acceptEdits",
         max_turns=50,

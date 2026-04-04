@@ -105,7 +105,7 @@ async def run(
         agent_name=agent_name,
         token_log=token_log,
         max_turns=500,
-        system_prompt=load_role("ollama-story-reviewer"),
+        system_prompt=load_role("ollama_roles/ollama-story-reviewer"),
         continuation_prompt=(
             "Continue processing the failed stories. "
             "For each remaining .failed.md story: rename it to .reviewing.md, read it, "

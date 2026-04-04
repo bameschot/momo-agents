@@ -106,7 +106,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir
 
     options = ClaudeAgentOptions(
         cwd=str(workspace_dir),
-        system_prompt=load_role("senior-coding-agent"),
+        system_prompt=load_role("claude_roles/claude_senior-coding-agent"),
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",
         max_turns=300,
