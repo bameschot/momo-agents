@@ -29,7 +29,7 @@ One file per story in `stories/`, named `STORY-NNN.md` (zero-padded three digits
 
 **Index**: N
 **Complexity**: easy | medium | hard
-**Design ref**: workspace/design/<feature>.processed.md | workspace/design/<feature>.new.md
+**Design ref**: workspace/design/<feature>.*.md
 **Depends on**: STORY-NNN | none
 
 ## Context

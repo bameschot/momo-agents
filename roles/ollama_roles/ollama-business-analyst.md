@@ -27,7 +27,7 @@ One file per story in the stories directory, named `STORY-NNN.md` (zero-padded t
 
 **Index**: N
 **Complexity**: easy | medium | hard
-**Design ref**: <absolute design path>.processed.md | <absolute design path>.new.md
+**Design ref**: <absolute design path>.*.md
 **Depends on**: STORY-NNN | none
 
 ## Context
