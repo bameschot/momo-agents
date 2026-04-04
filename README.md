@@ -371,8 +371,6 @@ Two tiers handle stories by complexity:
 
 Both agents follow the same structure: **Python owns the outer loop; a fresh LLM session is started for every story.** This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.
 
-For the **Ollama backend**, each coding agent passes a continuation prompt to the agent loop. If the model produces a text-only response mid-session the loop first checks whether the text contains a JSON-encoded tool call and executes it if found; if not, it re-prompts the model with an explicit continuation instruction rather than exiting prematurely.
-
 **Python startup** (once, before the loop):
 1. Poll every 10 s until `<workspace>/CLAUDE.md` exists.
 2. Read `<workspace>/CLAUDE.md` and retain the content in memory for the lifetime of the process.
@@ -385,14 +383,19 @@ For the **Ollama backend**, each coding agent passes a continuation prompt to th
 5. After the session ends: check whether `.done.md` or `.failed.md` now exists and log accordingly, then loop back to step 1.
 
 **Per-story LLM session**:
-1. Read the story file.
-2. Read the design document(s) listed in the story's **Design ref** field — both possible paths are listed separated by ` | `; read whichever exist.
-3. Note the `## Agent Exclusion List` in `CLAUDE.md` — never read from or write to those paths.
+1. Read the story file and design document(s) from the story's **Design ref** field.
+2. Note the `## Agent Exclusion List` in `CLAUDE.md` — never read from or write to those paths.
+3. Create a dedicated git branch: `git checkout -b story/STORY-NNN`.
 4. Implement the acceptance criteria in `<workspace>/`.
-5. Run tests and linter as instructed in `CLAUDE.md`.
-6. Check for `<workspace>/stories/HALT` before committing — if found, perform the halt procedure immediately.
-7. **On success**: rename `.[complexity].working.md` → `.[complexity].done.md`, commit workspace changes.
-8. **On failure**: create `<workspace>/stories/HALT`, rename `.[complexity].working.md` → `.[complexity].failed.md`, perform halt procedure. No retries.
+5. Run tests and linter as instructed in `CLAUDE.md`. Fix all failures.
+6. Check for `<workspace>/stories/HALT` before proceeding — if found, perform the halt procedure immediately (switch back to main, rename story to `.ready.md`, stop).
+7. **On success**:
+   - Commit all changes on the story branch.
+   - Switch to the main branch and merge: `git checkout main && git merge --no-ff story/STORY-NNN`.
+   - If the merge produces conflicts, resolve every conflict, re-run tests, and complete the merge. The story is **not done** until the merge is clean and tests pass on main.
+   - Delete the story branch: `git branch -d story/STORY-NNN`.
+   - Rename `.[complexity].working.md` → `.[complexity].done.md`.
+8. **On failure**: create `<workspace>/stories/HALT`, switch back to main, rename `.[complexity].working.md` → `.[complexity].failed.md`, append a failure note. No retries.
 
 ---
 
@@ -484,13 +487,19 @@ STORY-NNN.[complexity].ready.md    ← deps met; complexity confirmed
       ▼
 STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
       │
+      │  Agent creates branch: story/STORY-NNN
+      │  Implements, commits on branch
+      │
    ┌──┴────────────────────────┐
 success                     failure (no retry)
    │                            │
-   ▼                            ▼
-STORY-NNN.[complexity].done.md   create workspace/stories/HALT
-(commit workspace)               rename to .failed.md
-                                 coding agent exits
+   │  merge story/STORY-NNN     │  create workspace/stories/HALT
+   │  into main; resolve         │  switch back to main
+   │  any conflicts             │  rename to .failed.md
+   │  delete branch             │  coding agent exits
+   ▼                            │
+STORY-NNN.[complexity].done.md   │
+                                 ▼
                                               │
                                    Story Reviewer claims:
                                    .failed.md → .reviewing.md
@@ -510,6 +519,8 @@ All coordination is via atomic filesystem operations — no database, no message
 |---|---|
 | Mark story ready | Story Orchestrator renames `STORY-NNN.md` → `STORY-NNN.[c].ready.md` after dep check |
 | Claim a story | Python agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic; LLM session starts only after a claim succeeds |
+| Story branch | Agent creates `story/STORY-NNN` from main before writing any code; all commits land on this branch |
+| Merge & integrate | On success the agent merges `story/STORY-NNN` back into main with `--no-ff`; any conflicts must be fully resolved by the agent before the story is marked done |
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
 | Halt detection | Check for `workspace/stories/HALT` before and after implementation; exit immediately if found |
 | Workspace revert | Discard uncommitted changes on HALT detection |

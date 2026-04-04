@@ -460,13 +460,14 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
 <p>Two tiers handle stories by complexity:</p>
 <div class="table-wrapper"><table><thead><tr><th>Agent</th><th>Handles</th><th>Claude default model</th><th>Ollama default model</th></tr></thead><tbody><tr><td><strong>Junior Coding Agent</strong></td><td><code>easy</code> stories</td><td><code>claude-haiku-4-5-20251001</code></td><td><code>qwen2.5-coder:7b</code></td></tr><tr><td><strong>Senior Coding Agent</strong></td><td><code>medium</code> and <code>hard</code> stories</td><td><code>claude-sonnet-4-6</code></td><td><code>qwen2.5-coder:7b</code></td></tr></tbody></table></div>
 <p>Both agents follow the same structure: <strong>Python owns the outer loop; a fresh LLM session is started for every story.</strong> This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.</p>
-<p>For the <strong>Ollama backend</strong>, each coding agent passes a continuation prompt to the agent loop. If the model produces a text-only response mid-session the loop first checks whether the text contains a JSON-encoded tool call and executes it if found; if not, it re-prompts the model with an explicit continuation instruction rather than exiting prematurely.</p>
 <p><strong>Python startup</strong> (once, before the loop):</p>
 <ol><li>Poll every 10 s until <code>&lt;workspace&gt;/CLAUDE.md</code> exists.</li><li>Read <code>&lt;workspace&gt;/CLAUDE.md</code> and retain the content in memory for the lifetime of the process.</li></ol>
 <p><strong>Python outer loop</strong>:</p>
 <ol><li>Check for <code>&lt;workspace&gt;/stories/HALT</code> or <code>&lt;workspace&gt;/.sentinels/pipeline_complete</code> — exit if either exists.</li><li>Atomically claim the lowest-numbered <code>.ready.md</code> story of the correct complexity tier by renaming it to <code>.working.md</code>. POSIX <code>rename(2)</code> is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.</li><li>If no story can be claimed, sleep 10 s and retry.</li><li>Start a <strong>fresh LLM session</strong> for the claimed story, passing the story path and the pre-read <code>&lt;workspace&gt;/CLAUDE.md</code> content directly in the task prompt.</li><li>After the session ends: check whether <code>.done.md</code> or <code>.failed.md</code> now exists and log accordingly, then loop back to step 1.</li></ol>
 <p><strong>Per-story LLM session</strong>:</p>
-<ol><li>Read the story file.</li><li>Read the design document(s) listed in the story's <strong>Design ref</strong> field — both possible paths are listed separated by <code> | </code>; read whichever exist.</li><li>Note the <code>## Agent Exclusion List</code> in <code>CLAUDE.md</code> — never read from or write to those paths.</li><li>Implement the acceptance criteria in <code>&lt;workspace&gt;/</code>.</li><li>Run tests and linter as instructed in <code>CLAUDE.md</code>.</li><li>Check for <code>&lt;workspace&gt;/stories/HALT</code> before committing — if found, perform the halt procedure immediately.</li><li><strong>On success</strong>: rename <code>.[complexity].working.md</code> → <code>.[complexity].done.md</code>, commit workspace changes.</li><li><strong>On failure</strong>: create <code>&lt;workspace&gt;/stories/HALT</code>, rename <code>.[complexity].working.md</code> → <code>.[complexity].failed.md</code>, perform halt procedure. No retries.</li></ol>
+<ol><li>Read the story file and design document(s) from the story's <strong>Design ref</strong> field.</li><li>Note the <code>## Agent Exclusion List</code> in <code>CLAUDE.md</code> — never read from or write to those paths.</li><li>Create a dedicated git branch: <code>git checkout -b story/STORY-NNN</code>.</li><li>Implement the acceptance criteria in <code>&lt;workspace&gt;/</code>.</li><li>Run tests and linter as instructed in <code>CLAUDE.md</code>. Fix all failures.</li><li>Check for <code>&lt;workspace&gt;/stories/HALT</code> before proceeding — if found, perform the halt procedure immediately (switch back to main, rename story to <code>.ready.md</code>, stop).</li><li><strong>On success</strong>:</li></ol>
+<ul><li>Commit all changes on the story branch.</li><li>Switch to the main branch and merge: <code>git checkout main &amp;&amp; git merge --no-ff story/STORY-NNN</code>.</li><li>If the merge produces conflicts, resolve every conflict, re-run tests, and complete the merge. The story is <strong>not done</strong> until the merge is clean and tests pass on main.</li><li>Delete the story branch: <code>git branch -d story/STORY-NNN</code>.</li><li>Rename <code>.[complexity].working.md</code> → <code>.[complexity].done.md</code>.</li></ul>
+<ol><li><strong>On failure</strong>: create <code>&lt;workspace&gt;/stories/HALT</code>, switch back to main, rename <code>.[complexity].working.md</code> → <code>.[complexity].failed.md</code>, append a failure note. No retries.</li></ol>
 <hr>
 <h3 id="story-reviewer">Story Reviewer</h3>
 <p>A <strong>one-shot agent</strong> — <code>start-team.sh</code> invokes it when it detects that <code>&lt;workspace&gt;/stories/HALT</code> exists. The agent processes all currently-failed stories in a single LLM session and then exits. The continuous watch loop for the HALT file lives in <code>start-team.sh</code>.</p>
@@ -513,13 +514,19 @@ STORY-NNN.[complexity].ready.md    ← deps met; complexity confirmed
       ▼
 STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
       │
+      │  Agent creates branch: story/STORY-NNN
+      │  Implements, commits on branch
+      │
    ┌──┴────────────────────────┐
 success                     failure (no retry)
    │                            │
-   ▼                            ▼
-STORY-NNN.[complexity].done.md   create workspace/stories/HALT
-(commit workspace)               rename to .failed.md
-                                 coding agent exits
+   │  merge story/STORY-NNN     │  create workspace/stories/HALT
+   │  into main; resolve         │  switch back to main
+   │  any conflicts             │  rename to .failed.md
+   │  delete branch             │  coding agent exits
+   ▼                            │
+STORY-NNN.[complexity].done.md   │
+                                 ▼
                                               │
                                    Story Reviewer claims:
                                    .failed.md → .reviewing.md
@@ -531,7 +538,7 @@ STORY-NNN.[complexity].done.md   create workspace/stories/HALT
                                    → marks .ready.md again</code></pre>
 <h3 id="parallel-coordination">Parallel coordination</h3>
 <p>All coordination is via atomic filesystem operations — no database, no message queue, no shared memory.</p>
-<div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Mechanism</th></tr></thead><tbody><tr><td>Mark story ready</td><td>Story Orchestrator renames <code>STORY-NNN.md</code> → <code>STORY-NNN.[c].ready.md</code> after dep check</td></tr><tr><td>Claim a story</td><td>Python agent renames <code>STORY-NNN.[c].ready.md</code> → <code>STORY-NNN.[c].working.md</code> — POSIX atomic; LLM session starts only after a claim succeeds</td></tr><tr><td>Complexity routing</td><td>Junior agents glob <code>*.easy.ready.md</code>; Senior agents glob <code>*.medium.ready.md</code> + <code>*.hard.ready.md</code></td></tr><tr><td>Halt detection</td><td>Check for <code>workspace/stories/HALT</code> before and after implementation; exit immediately if found</td></tr><tr><td>Workspace revert</td><td>Discard uncommitted changes on HALT detection</td></tr><tr><td>Pipeline shutdown</td><td><code>workspace/.sentinels/pipeline_complete</code> sentinel written by <code>start-team.sh</code> on Ctrl+C</td></tr><tr><td>Stale agent recovery</td><td>Watchdog resets <code>.[c].working.md</code> files idle &gt; 10 minutes → <code>.[c].ready.md</code></td></tr></tbody></table></div>
+<div class="table-wrapper"><table><thead><tr><th>Operation</th><th>Mechanism</th></tr></thead><tbody><tr><td>Mark story ready</td><td>Story Orchestrator renames <code>STORY-NNN.md</code> → <code>STORY-NNN.[c].ready.md</code> after dep check</td></tr><tr><td>Claim a story</td><td>Python agent renames <code>STORY-NNN.[c].ready.md</code> → <code>STORY-NNN.[c].working.md</code> — POSIX atomic; LLM session starts only after a claim succeeds</td></tr><tr><td>Story branch</td><td>Agent creates <code>story/STORY-NNN</code> from main before writing any code; all commits land on this branch</td></tr><tr><td>Merge &amp; integrate</td><td>On success the agent merges <code>story/STORY-NNN</code> back into main with <code>--no-ff</code>; any conflicts must be fully resolved by the agent before the story is marked done</td></tr><tr><td>Complexity routing</td><td>Junior agents glob <code>*.easy.ready.md</code>; Senior agents glob <code>*.medium.ready.md</code> + <code>*.hard.ready.md</code></td></tr><tr><td>Halt detection</td><td>Check for <code>workspace/stories/HALT</code> before and after implementation; exit immediately if found</td></tr><tr><td>Workspace revert</td><td>Discard uncommitted changes on HALT detection</td></tr><tr><td>Pipeline shutdown</td><td><code>workspace/.sentinels/pipeline_complete</code> sentinel written by <code>start-team.sh</code> on Ctrl+C</td></tr><tr><td>Stale agent recovery</td><td>Watchdog resets <code>.[c].working.md</code> files idle &gt; 10 minutes → <code>.[c].ready.md</code></td></tr></tbody></table></div>
 <hr>
 <h2 id="setup">Setup</h2>
 <h3 id="prerequisites">Prerequisites</h3>
