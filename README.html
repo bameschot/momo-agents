@@ -273,13 +273,13 @@ li { margin: 0.25rem 0; }
 
 /* ── Images ─────────────────────────────────────────────────────────────── */
 img { max-width: 100%; height: auto; border-radius: 4px; }
-</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
-<p>A multi-agent coding pipeline powered by the Claude Agent SDK. A team of specialised agents collaborate over the filesystem to take a feature idea from concept through to working, tested code — without human intervention between steps.</p>
+</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#ai-backends">AI backends</a><ul><li><a href="#claude-default">Claude (default)</a></li><li><a href="#ollama-local">Ollama (local)</a></li></ul></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a><ul><li><a href="#claude-backend">Claude backend</a></li><li><a href="#ollama-backend">Ollama backend</a></li></ul></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
+<p>A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the <strong>Claude Agent SDK</strong> (cloud) and a locally running <strong>Ollama</strong> instance (local/offline).</p>
 <hr>
 <h2 id="pipeline-overview">Pipeline overview</h2>
 <pre><code>  You ──► Designer ──► Project Initialiser
                               │
-                    writes workspace/CLAUDE.md
+                    writes &lt;workspace&gt;/CLAUDE.md
                               │
                ┌──────────────┴──────────────────────┐
                ▼                                     ▼
@@ -289,39 +289,66 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
                │                                     │
                └──────────────┬──────────────────────┘
                               ▼
-             (waits for workspace/CLAUDE.md)
+             (waits for &lt;workspace&gt;/CLAUDE.md)
                ┌──────────────┴──────────────┐
                ▼                             ▼
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
-     Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► workspace/
+     Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► &lt;workspace&gt;/
            [easy]            │         [medium/hard]      │
                              └─────────────┬──────────────┘
                                      (on failure)
                                            ▼
                                     Story Reviewer ──► You</code></pre>
-<p>The pipeline has one hard sequencing constraint: the <strong>Project Initialiser</strong> runs first and writes <code>workspace/CLAUDE.md</code>. The <strong>Business Analyst</strong> and all <strong>Coding Agents</strong> poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.</p>
-<div class="table-wrapper"><table><thead><tr><th>Agent</th><th>Role</th><th>Reads from</th><th>Writes to</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Multi-turn interactive Q&amp;A with user; writes design on <code>write</code> command</td><td>User input (terminal)</td><td><code>workspace/design/</code></td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design, determines the correct tech-stack scaffolding, and writes <code>workspace/CLAUDE.md</code>; all other agents gate on this file</td><td><code>workspace/design/</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Business Analyst</strong></td><td>Waits for <code>workspace/CLAUDE.md</code>, then watches <code>workspace/design/</code> for <code>*.new.md</code> files and decomposes each into story files with a <strong>Complexity</strong> field</td><td><code>workspace/design/*.new.md</code>, <code>workspace/CLAUDE.md</code></td><td><code>workspace/stories/STORY-NNN.md</code></td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Plain Python utility (no LLM); watches <code>workspace/stories/</code> for bare <code>STORY-NNN.md</code> files, parses complexity and deps, renames to <code>STORY-NNN.[complexity].ready.md</code> when deps are met</td><td><code>workspace/stories/STORY-NNN.md</code>, <code>workspace/stories/*.done.md</code></td><td><code>workspace/stories/</code></td></tr><tr><td><strong>Junior Coding Agent</strong> (×N)</td><td>Python outer loop claims one <code>easy</code> story at a time; starts a fresh LLM session per story; polls indefinitely for new work</td><td><code>workspace/stories/*.easy.ready.md</code>, <code>workspace/CLAUDE.md</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Senior Coding Agent</strong> (×N)</td><td>Python outer loop claims one <code>medium</code>/<code>hard</code> story at a time; starts a fresh LLM session per story; polls indefinitely</td><td><code>workspace/stories/*.medium/hard.ready.md</code>, <code>workspace/CLAUDE.md</code></td><td><code>workspace/</code></td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes on <code>HALT</code>; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate</td><td><code>workspace/stories/*.failed.md</code></td><td><code>workspace/stories/</code></td></tr><tr><td><strong>Watchdog</strong></td><td>Resets stale <code>.working.md</code> files whose agent has died or stalled (idle &gt; 10 min) back to <code>.ready.md</code></td><td><code>workspace/stories/</code></td><td><code>workspace/stories/</code></td></tr></tbody></table></div>
-<p>Each LLM agent reads its system prompt from the corresponding file in <code>roles/</code> at startup. <code>story_orchestrator.py</code> makes no LLM calls.</p>
+<p>The pipeline has one hard sequencing constraint: the <strong>Project Initialiser</strong> runs first and writes <code>CLAUDE.md</code> at the workspace root. The <strong>Business Analyst</strong> and all <strong>Coding Agents</strong> poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.</p>
+<div class="table-wrapper"><table><thead><tr><th>Agent</th><th>Role</th><th>Reads from</th><th>Writes to</th></tr></thead><tbody><tr><td><strong>Designer</strong></td><td>Multi-turn interactive Q&amp;A with user; writes design on <code>write</code> command</td><td>User input (terminal)</td><td><code>&lt;workspace&gt;/design/</code></td></tr><tr><td><strong>Project Initialiser</strong></td><td>Reads the design, determines the correct tech-stack scaffolding, and writes <code>CLAUDE.md</code> at the workspace root; all other agents gate on this file</td><td><code>&lt;workspace&gt;/design/</code></td><td><code>&lt;workspace&gt;/</code></td></tr><tr><td><strong>Business Analyst</strong></td><td>Waits for <code>CLAUDE.md</code>, then watches <code>&lt;workspace&gt;/design/</code> for <code>*.new.md</code> files and decomposes each into story files with a <strong>Complexity</strong> field</td><td><code>&lt;workspace&gt;/design/*.new.md</code>, <code>&lt;workspace&gt;/CLAUDE.md</code></td><td><code>&lt;workspace&gt;/stories/STORY-NNN.md</code></td></tr><tr><td><strong>Story Orchestrator</strong></td><td>Plain Python utility (no LLM); watches <code>&lt;workspace&gt;/stories/</code> for bare <code>STORY-NNN.md</code> files, parses complexity and deps, renames to <code>STORY-NNN.[complexity].ready.md</code> when deps are met</td><td><code>&lt;workspace&gt;/stories/STORY-NNN.md</code>, <code>&lt;workspace&gt;/stories/*.done.md</code></td><td><code>&lt;workspace&gt;/stories/</code></td></tr><tr><td><strong>Junior Coding Agent</strong> (×N)</td><td>Python outer loop claims one <code>easy</code> story at a time; starts a fresh LLM session per story; polls indefinitely for new work</td><td><code>&lt;workspace&gt;/stories/*.easy.ready.md</code>, <code>&lt;workspace&gt;/CLAUDE.md</code></td><td><code>&lt;workspace&gt;/</code></td></tr><tr><td><strong>Senior Coding Agent</strong> (×N)</td><td>Python outer loop claims one <code>medium</code>/<code>hard</code> story at a time; starts a fresh LLM session per story; polls indefinitely</td><td><code>&lt;workspace&gt;/stories/*.medium/hard.ready.md</code>, <code>&lt;workspace&gt;/CLAUDE.md</code></td><td><code>&lt;workspace&gt;/</code></td></tr><tr><td><strong>Story Reviewer</strong></td><td>Wakes on <code>HALT</code>; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate</td><td><code>&lt;workspace&gt;/stories/*.failed.md</code></td><td><code>&lt;workspace&gt;/stories/</code></td></tr><tr><td><strong>Watchdog</strong></td><td>Resets stale <code>.working.md</code> files whose agent has died or stalled (idle &gt; 10 min) back to <code>.ready.md</code></td><td><code>&lt;workspace&gt;/stories/</code></td><td><code>&lt;workspace&gt;/stories/</code></td></tr></tbody></table></div>
+<p>Each LLM agent reads its system prompt from the corresponding file in <code>roles/</code> at startup. <code>claude_story_orchestrator.py</code> makes no LLM calls.</p>
+<hr>
+<h2 id="ai-backends">AI backends</h2>
+<h3 id="claude-default">Claude (default)</h3>
+<p>Uses the <a href="https://github.com/anthropics/claude-agent-sdk">Claude Agent SDK</a>. Requires an Anthropic API key. Each agent script lives in <code>scripts/claude_agents/</code>.</p>
+<h3 id="ollama-local">Ollama (local)</h3>
+<p>Uses a locally running <a href="https://ollama.com">Ollama</a> instance. No API key required — models run entirely on your machine. Each agent script lives in <code>scripts/ollama_agents/</code> and shares common tool infrastructure from <code>scripts/ollama_agents/ollama_utilities.py</code>.</p>
+<p>The Ollama agents implement their own agentic tool-call loop (<code>run_agent_loop</code> in <code>ollama_utilities.py</code>) using the OpenAI function-call format. The available tools per agent are:</p>
+<div class="table-wrapper"><table><thead><tr><th>Agent</th><th>Tools</th></tr></thead><tbody><tr><td>Designer</td><td><code>read_file</code>, <code>write_file</code>, <code>glob</code></td></tr><tr><td>Business Analyst</td><td><code>read_file</code>, <code>write_file</code>, <code>glob</code></td></tr><tr><td>Project Initialiser</td><td><code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>bash</code>, <code>glob</code>, <code>grep</code></td></tr><tr><td>Junior / Senior Coding Agent</td><td><code>read_file</code>, <code>write_file</code>, <code>edit_file</code>, <code>bash</code>, <code>glob</code>, <code>grep</code></td></tr><tr><td>Story Reviewer</td><td><code>read_file</code>, <code>write_file</code>, <code>bash</code>, <code>glob</code>, <code>ask_user</code></td></tr></tbody></table></div>
+<p>Each Ollama agent has its own role file in <code>roles/</code> (<code>ollama-*.md</code>) that documents every tool by name, its parameters, and concrete call examples — this is important because local models cannot infer tool behaviour from context the way large cloud models can.</p>
+<p><strong>Continuation prompts</strong>: Local models often emit a text-only planning turn between tool calls (e.g. after reading a design document, before writing story files). The agent loop detects these text-only responses and re-prompts the model with a task-specific continuation message rather than exiting prematurely. Up to three consecutive text-only turns are tolerated before the loop accepts the response as a genuine completion.</p>
+<p><strong>Recommended models</strong> (reliable tool calling is the critical factor):</p>
+<div class="table-wrapper"><table><thead><tr><th>Tier</th><th>Model</th><th>Best for</th></tr></thead><tbody><tr><td>Best overall</td><td><code>qwen2.5-coder:14b</code></td><td>Senior agent, Project Initialiser</td></tr><tr><td>Good, faster</td><td><code>qwen2.5-coder:7b</code></td><td>Junior agent</td></tr><tr><td>Better prose</td><td><code>qwen2.5:14b</code></td><td>Business Analyst, Story Reviewer</td></tr><tr><td>Strong code</td><td><code>codestral:22b</code></td><td>Senior agent (less consistent tool calling)</td></tr><tr><td>Compact reasoning</td><td><code>phi4:14b</code></td><td>BA / Reviewer alternative</td></tr></tbody></table></div>
+<p>For a suggested per-role model configuration see the <a href="#examples">examples below</a>.</p>
 <hr>
 <h2 id="repository-layout">Repository layout</h2>
 <pre><code>momo-agents/
-├── scripts/                   ← Python agent and utility implementations
-│   ├── designer_agent.py
-│   ├── business_analyst_agent.py
-│   ├── project_initialiser_agent.py
-│   ├── story_orchestrator.py      ← non-LLM utility; marks stories ready
-│   ├── junior_coding_agent.py     ← claims easy stories
-│   ├── senior_coding_agent.py     ← claims medium/hard stories
-│   ├── story_reviewer_agent.py
-│   ├── agent_utilities.py         ← shared helpers (run-log writer, path utils)
-│   └── token_logger.py            ← shared JSONL token-usage logger
+├── scripts/
+│   ├── agent_utilities.py         ← shared helpers (path utils, run-log writer, workspace wait)
+│   ├── token_logger.py            ← shared JSONL token-usage logger and console printer
+│   ├── claude_agents/             ← agents backed by the Claude Agent SDK
+│   │   ├── claude_designer_agent.py
+│   │   ├── claude_business_analyst_agent.py
+│   │   ├── claude_project_initialiser_agent.py
+│   │   ├── claude_story_orchestrator.py       ← non-LLM; marks stories ready
+│   │   ├── claude_junior_coding_agent.py      ← claims easy stories
+│   │   ├── claude_senior_coding_agent.py      ← claims medium/hard stories
+│   │   └── claude_story_reviewer_agent.py
+│   └── ollama_agents/             ← agents backed by a local Ollama instance
+│       ├── ollama_utilities.py            ← shared tool defs, ToolExecutor, agent loops
+│       ├── ollama_designer_agent.py
+│       ├── ollama_business_analyst_agent.py
+│       ├── ollama_project_initialiser_agent.py
+│       ├── ollama_junior_coding_agent.py
+│       ├── ollama_senior_coding_agent.py
+│       └── ollama_story_reviewer_agent.py
 ├── roles/                     ← system prompt files (one per LLM agent)
-│   ├── designer.md
-│   ├── business-analyst.md
-│   ├── project-initialiser.md
-│   ├── junior-coding-agent.md
-│   ├── senior-coding-agent.md
-│   └── story-reviewer.md
+│   ├── designer.md                    ← shared (Claude + Ollama)
+│   ├── business-analyst.md            ← Claude BA
+│   ├── project-initialiser.md         ← Claude PI
+│   ├── junior-coding-agent.md         ← Claude Junior
+│   ├── senior-coding-agent.md         ← Claude Senior
+│   ├── story-reviewer.md              ← Claude Reviewer
+│   ├── ollama-business-analyst.md     ← Ollama BA (tool-use instructions)
+│   ├── ollama-project-initialiser.md  ← Ollama PI (tool-use instructions)
+│   ├── ollama-junior-coding-agent.md  ← Ollama Junior (tool-use instructions)
+│   ├── ollama-senior-coding-agent.md  ← Ollama Senior (tool-use instructions)
+│   └── ollama-story-reviewer.md       ← Ollama Reviewer (tool-use instructions)
 ├── workspace/                 ← all generated artefacts
 │   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
 │   ├── design/                ← Designer Agent outputs
@@ -351,19 +378,20 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
 <hr>
 <h2 id="agent-details">Agent details</h2>
 <h3 id="designer">Designer</h3>
-<p>The Designer runs as a genuine multi-turn conversation backed by <code>ClaudeSDKClient</code>. A single SDK session persists for the entire conversation, preserving full context across turns.</p>
+<p>The Designer runs as a multi-turn conversation. A single session persists for the entire interaction, preserving full context across turns.</p>
 <ol><li>Agent greets the user and asks what they want to build.</li><li>Asks clarifying questions — technology stack, constraints, integrations, non-functional requirements — until it has a complete picture.</li><li>Does <strong>not</strong> write anything to disk until the user types <strong><code>write</code></strong>.</li><li>On <code>write</code>: produces a thorough design document and saves it to <code>workspace/design/&lt;feature-name&gt;.new.md</code>, immediately queuing it for the Business Analyst.</li><li>If a <code>.processed.md</code> version already exists, writing a new <code>.new.md</code> re-queues the design and the BA regenerates stories.</li><li>The session continues — the user can keep refining and issue <code>write</code> again at any time.</li><li>Type <code>exit</code>, <code>quit</code>, or press <strong>Ctrl+C</strong> to end the session.</li></ol>
 <hr>
 <h3 id="project-initialiser">Project Initialiser</h3>
-<p>Runs once automatically when the workspace is empty. Its primary output — <code>workspace/CLAUDE.md</code> — is the <strong>start gate</strong> for the Business Analyst and all Coding Agents.</p>
-<ol><li>Reads the design document and determines the correct tech-stack scaffolding (language, runtime, frameworks, tooling).</li><li>Creates <code>workspace/CLAUDE.md</code> with precise, runnable build, test, and lint commands for the identified stack.</li><li>Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.</li><li>Does <strong>not</strong> implement any story logic.</li></ol>
-<p>If <code>workspace/CLAUDE.md</code> already exists the initialiser skips immediately — the presence of that file is the sole signal that scaffolding has already been completed.</p>
+<p>Runs once automatically when the workspace is empty. Its primary output — <code>CLAUDE.md</code> at the workspace root — is the <strong>start gate</strong> for the Business Analyst and all Coding Agents.</p>
+<ol><li>Reads the design document and determines the correct tech-stack scaffolding (language, runtime, frameworks, tooling).</li><li>Creates <code>CLAUDE.md</code> <strong>at the workspace root</strong> with precise, runnable build, test, and lint commands for the identified stack, including an <strong>Agent Exclusion List</strong> section.</li><li>Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.</li><li>Does <strong>not</strong> implement any story logic.</li></ol>
+<p>The agent's working directory is set to the workspace root, so all file paths are relative to it. <code>CLAUDE.md</code> is written directly at the root — never inside a subdirectory.</p>
+<p>If <code>CLAUDE.md</code> already exists at the workspace root the initialiser skips immediately — the presence of that file is the sole signal that scaffolding has already been completed.</p>
 <hr>
 <h3 id="business-analyst">Business Analyst</h3>
 <p>The BA agent uses design file <strong>state encoded in the filename</strong> — no mtime tracking, no external state store.</p>
-<p><strong>Startup gate</strong>: polls every 10 seconds until <code>workspace/CLAUDE.md</code> exists. This ensures stories are always written with full knowledge of the tech stack.</p>
+<p><strong>Startup gate</strong>: polls every 10 seconds until <code>CLAUDE.md</code> exists at the workspace root. This ensures stories are always written with full knowledge of the tech stack.</p>
 <p><strong>Watch loop</strong>:</p>
-<ol><li>Wait for <code>workspace/CLAUDE.md</code> to exist.</li><li>Every 5 seconds, glob all <code>*.new.md</code> files in <code>workspace/design/</code>.</li><li>For each <code>&lt;feature&gt;.new.md</code> found: decompose it into <code>workspace/stories/STORY-NNN.md</code> files.</li><li>On completion, rename <code>&lt;feature&gt;.new.md</code> → <code>&lt;feature&gt;.processed.md</code> inside <code>workspace/design/</code>.</li><li>Sleep and repeat until <code>pipeline_complete</code> is written.</li></ol>
+<ol><li>Wait for <code>&lt;workspace&gt;/CLAUDE.md</code> to exist.</li><li>Every 5 seconds, glob all <code>*.new.md</code> files in <code>&lt;workspace&gt;/design/</code>.</li><li>For each <code>&lt;feature&gt;.new.md</code> found: decompose it into <code>&lt;workspace&gt;/stories/STORY-NNN.md</code> files.</li><li>On completion, rename <code>&lt;feature&gt;.new.md</code> → <code>&lt;feature&gt;.processed.md</code> inside <code>&lt;workspace&gt;/design/</code>.</li><li>Sleep and repeat until <code>pipeline_complete</code> is written.</li></ol>
 <p>Each story includes a <code>**Complexity**: easy | medium | hard</code> field and a <code>**Depends on**</code> field. Stories are written as bare <code>STORY-NNN.md</code> files; the Story Orchestrator assigns the <code>.ready</code> state.</p>
 <p>The BA <strong>strongly prefers easy and medium stories</strong> and only uses hard when splitting would produce artificial or incoherent units of work. Complexity levels reflect realistic effort:</p>
 <div class="table-wrapper"><table><thead><tr><th>Complexity</th><th>Effort</th><th>Meaning</th></tr></thead><tbody><tr><td><strong>easy</strong></td><td>~3 hours</td><td>Self-contained work with clear scope — a new module, a small integration, or several related changes within one subsystem</td></tr><tr><td><strong>medium</strong></td><td>~6 hours</td><td>Multiple moving parts or significant design judgement — a feature spanning a few subsystems, a non-trivial algorithm, or a meaningful refactor</td></tr><tr><td><strong>hard</strong></td><td>&gt; 6 hours</td><td>Broad cross-cutting changes, subtle concurrency/state management, or refactoring across many modules with unclear boundaries</td></tr></tbody></table></div>
@@ -377,13 +405,14 @@ img { max-width: 100%; height: auto; border-radius: 4px; }
 <hr>
 <h3 id="coding-agents">Coding Agents</h3>
 <p>Two tiers handle stories by complexity:</p>
-<div class="table-wrapper"><table><thead><tr><th>Agent</th><th>Handles</th><th>Default model</th></tr></thead><tbody><tr><td><strong>Junior Coding Agent</strong></td><td><code>easy</code> stories</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><strong>Senior Coding Agent</strong></td><td><code>medium</code> and <code>hard</code> stories</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table></div>
+<div class="table-wrapper"><table><thead><tr><th>Agent</th><th>Handles</th><th>Claude default model</th><th>Ollama default model</th></tr></thead><tbody><tr><td><strong>Junior Coding Agent</strong></td><td><code>easy</code> stories</td><td><code>claude-haiku-4-5-20251001</code></td><td><code>qwen2.5-coder</code></td></tr><tr><td><strong>Senior Coding Agent</strong></td><td><code>medium</code> and <code>hard</code> stories</td><td><code>claude-sonnet-4-6</code></td><td><code>qwen2.5-coder</code></td></tr></tbody></table></div>
 <p>Both agents follow the same structure: <strong>Python owns the outer loop; a fresh LLM session is started for every story.</strong> This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.</p>
+<p>For the <strong>Ollama backend</strong>, each coding agent passes a continuation prompt to the agent loop. If the model produces a text-only response mid-session (a common pattern with local models that plan before acting), the loop re-prompts it with an explicit instruction to continue implementing rather than treating the text response as task completion.</p>
 <p><strong>Python startup</strong> (once, before the loop):</p>
 <ol><li>Poll every 60 s until <code>workspace/CLAUDE.md</code> exists.</li><li>Read <code>workspace/CLAUDE.md</code> and retain the content in memory for the lifetime of the process.</li></ol>
 <p><strong>Python outer loop</strong>:</p>
-<ol><li>Check for <code>workspace/stories/HALT</code> or <code>pipeline_complete</code> sentinel — exit if either exists.</li><li>Atomically claim the lowest-numbered <code>.ready.md</code> story of the correct complexity tier by renaming it to <code>.working.md</code>. POSIX <code>rename(2)</code> is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.</li><li>If no story can be claimed, sleep 60 s and retry.</li><li>Start a <strong>fresh <code>query()</code> session</strong> for the claimed story, passing the story path and the pre-read <code>workspace/CLAUDE.md</code> content directly in the task prompt.</li><li>When the session ends, loop back to step 1.</li></ol>
-<p><strong>Per-story LLM session</strong> (one <code>query()</code> call per story):</p>
+<ol><li>Check for <code>workspace/stories/HALT</code> or <code>pipeline_complete</code> sentinel — exit if either exists.</li><li>Atomically claim the lowest-numbered <code>.ready.md</code> story of the correct complexity tier by renaming it to <code>.working.md</code>. POSIX <code>rename(2)</code> is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.</li><li>If no story can be claimed, sleep 60 s and retry.</li><li>Start a <strong>fresh session</strong> for the claimed story, passing the story path and the pre-read <code>workspace/CLAUDE.md</code> content directly in the task prompt.</li><li>When the session ends, loop back to step 1.</li></ol>
+<p><strong>Per-story LLM session</strong>:</p>
 <ol><li>Read the story file.</li><li>Read the design document(s) listed in the story's <strong>Design ref</strong> field — both possible paths are listed separated by <code> | </code>; read whichever exist.</li><li>Note the <code>## Agent Exclusion List</code> in <code>workspace/CLAUDE.md</code> — never read from or write to those paths.</li><li>Implement the acceptance criteria in <code>workspace/</code>.</li><li>Run tests and linter as instructed in <code>workspace/CLAUDE.md</code>.</li><li>Check for <code>workspace/stories/HALT</code> before committing. If found, perform the halt procedure.</li><li><strong>On success</strong>: rename <code>.working.md</code> → <code>.done.md</code>, commit workspace changes.</li><li><strong>On failure</strong>: create <code>workspace/stories/HALT</code>, rename <code>.working.md</code> → <code>.failed.md</code>, perform halt procedure. No retries.</li></ol>
 <hr>
 <h3 id="story-reviewer">Story Reviewer</h3>
@@ -449,7 +478,7 @@ STORY-NNN.[complexity].done.md   create workspace/stories/HALT
 <hr>
 <h2 id="setup">Setup</h2>
 <h3 id="prerequisites">Prerequisites</h3>
-<ul><li>Python 3.11+</li><li><a href="https://github.com/astral-sh/uv"> 0 </a> (recommended) or <code>pip</code></li><li>An Anthropic API key</li></ul>
+<ul><li>Python 3.11+</li><li><a href="https://github.com/astral-sh/uv"> 0 </a> (recommended) or <code>pip</code></li><li><strong>Claude backend</strong>: an Anthropic API key</li><li><strong>Ollama backend</strong>: a running <a href="https://ollama.com">Ollama</a> instance with at least one model pulled (e.g. <code>ollama pull qwen2.5-coder</code>)</li></ul>
 <h3 id="install">Install</h3>
 <pre><code class="language-bash"># 1. Clone the repository
 git clone https://github.com/bameschot/momo-agents.git
@@ -462,20 +491,43 @@ source .venv/bin/activate      # Linux / macOS
 # 3. Install the project and its dependencies
 uv pip install -e &quot;.[dev]&quot;
 
-# 4. Add your API key
-echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
+# 4a. Claude backend — add your API key
+echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env
+
+# 4b. Ollama backend — install the extra and pull a model
+uv pip install -e &quot;.[ollama]&quot;
+ollama pull qwen2.5-coder</code></pre>
 <hr>
 <h2 id="running-the-pipeline">Running the pipeline</h2>
 <h3 id="start-the-full-team">Start the full team</h3>
 <pre><code class="language-bash">./start-team.sh --workspace &lt;path&gt; [options]</code></pre>
-<p>Opens every agent simultaneously in its own named terminal window and monitors the pipeline in the current terminal until you press <strong>Ctrl+C</strong>.</p>
+<p>Opens every agent simultaneously in its own named terminal window and monitors the pipeline in the current terminal until you press <strong>Ctrl+C</strong>. Each agent window prints its <strong>mode</strong> and <strong>model</strong> at startup so you can confirm configuration at a glance.</p>
 <p><code>&lt;path&gt;</code> is the workspace directory where all generated artefacts live. It can be anywhere on the filesystem — inside or outside the <code>momo-agents</code> repo. If the directory does not exist, <code>start-team.sh</code> will offer to create it and initialise a git repository inside it.</p>
-<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--workspace &lt;path&gt;</code></td><td>Path to the workspace directory (required)</td><td>—</td></tr><tr><td><code>--junior-agents N</code></td><td>Number of parallel Junior Coding Agents (easy stories)</td><td><code>2</code></td></tr><tr><td><code>--senior-agents N</code></td><td>Number of parallel Senior Coding Agents (medium/hard stories)</td><td><code>1</code></td></tr><tr><td><code>--model-designer M</code></td><td>Claude model for the Designer</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-ba M</code></td><td>Claude model for the Business Analyst</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-pi M</code></td><td>Claude model for the Project Initialiser</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-junior M</code></td><td>Claude model for Junior Coding Agents</td><td><code>claude-haiku-4-5-20251001</code></td></tr><tr><td><code>--model-senior M</code></td><td>Claude model for Senior Coding Agents</td><td><code>claude-sonnet-4-6</code></td></tr><tr><td><code>--model-reviewer M</code></td><td>Claude model for the Story Reviewer</td><td><code>claude-sonnet-4-6</code></td></tr></tbody></table></div>
+<div class="table-wrapper"><table><thead><tr><th>Flag</th><th>Description</th><th>Default</th></tr></thead><tbody><tr><td><code>--workspace &lt;path&gt;</code></td><td>Path to the workspace directory (required)</td><td>—</td></tr><tr><td><code>--agent-type TYPE</code></td><td>AI backend: <code>claude</code> or <code>ollama</code></td><td><code>claude</code></td></tr><tr><td><code>--ollama-host URL</code></td><td>Ollama API base URL (Ollama mode only)</td><td><code>http://localhost:11434</code></td></tr><tr><td><code>--junior-agents N</code></td><td>Number of parallel Junior Coding Agents (easy stories)</td><td><code>2</code></td></tr><tr><td><code>--senior-agents N</code></td><td>Number of parallel Senior Coding Agents (medium/hard stories)</td><td><code>1</code></td></tr><tr><td><code>--model-designer M</code></td><td>Model for the Designer</td><td>see defaults below</td></tr><tr><td><code>--model-ba M</code></td><td>Model for the Business Analyst</td><td>see defaults below</td></tr><tr><td><code>--model-pi M</code></td><td>Model for the Project Initialiser</td><td>see defaults below</td></tr><tr><td><code>--model-junior M</code></td><td>Model for Junior Coding Agents</td><td>see defaults below</td></tr><tr><td><code>--model-senior M</code></td><td>Model for Senior Coding Agents</td><td>see defaults below</td></tr><tr><td><code>--model-reviewer M</code></td><td>Model for the Story Reviewer</td><td>see defaults below</td></tr></tbody></table></div>
+<p><strong>Model defaults:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Agent</th><th><code>--agent-type claude</code></th><th><code>--agent-type ollama</code></th></tr></thead><tbody><tr><td>Designer</td><td><code>claude-sonnet-4-6</code></td><td><code>qwen2.5-coder</code></td></tr><tr><td>Business Analyst</td><td><code>claude-sonnet-4-6</code></td><td><code>qwen2.5-coder</code></td></tr><tr><td>Project Initialiser</td><td><code>claude-haiku-4-5-20251001</code></td><td><code>qwen2.5-coder</code></td></tr><tr><td>Junior Coding Agent</td><td><code>claude-haiku-4-5-20251001</code></td><td><code>qwen2.5-coder</code></td></tr><tr><td>Senior Coding Agent</td><td><code>claude-sonnet-4-6</code></td><td><code>qwen2.5-coder</code></td></tr><tr><td>Story Reviewer</td><td><code>claude-sonnet-4-6</code></td><td><code>qwen2.5-coder</code></td></tr></tbody></table></div>
 <p><strong>Agent windows opened:</strong></p>
 <div class="table-wrapper"><table><thead><tr><th>Window</th><th>Agent</th><th>Notes</th></tr></thead><tbody><tr><td><code>🎨 Designer Agent</code></td><td>Interactive design session</td><td>Type requirements; <code>write</code> saves the design</td></tr><tr><td><code>🏗️ Project Initialiser</code></td><td>Workspace scaffolder</td><td>Runs once; skips if workspace already populated</td></tr><tr><td><code>📋 Business Analyst</code></td><td>Design watcher</td><td>Polls <code>&lt;workspace&gt;/design/</code> every 5 s; waits for <code>&lt;workspace&gt;/CLAUDE.md</code></td></tr><tr><td><code>🎯 Story Orchestrator</code></td><td>Readiness manager</td><td>Continuously marks stories ready as deps complete</td></tr><tr><td><code>🐕 Watchdog</code></td><td>Stale story reset</td><td>Resets stories idle &gt; 10 min back to <code>.ready.md</code></td></tr><tr><td><code>🔍 Story Reviewer</code></td><td>Failed-story triage</td><td>Wakes on HALT; interactive with you</td></tr><tr><td><code>🟢 Junior Coding Agent N</code></td><td>Easy story implementation</td><td>Waits for <code>&lt;workspace&gt;/CLAUDE.md</code>; polls for <code>*.easy.ready.md</code></td></tr><tr><td><code>🔵 Senior Coding Agent N</code></td><td>Medium/hard story implementation</td><td>Waits for <code>&lt;workspace&gt;/CLAUDE.md</code>; polls for <code>*.medium/hard.ready.md</code></td></tr></tbody></table></div>
-<p><strong>Examples:</strong></p>
-<pre><code class="language-bash"># Default — 2 junior agents, 1 senior agent
+<p><strong>Examples:</strong> &lt;a name="examples"&gt;&lt;/a&gt;</p>
+<pre><code class="language-bash"># Claude backend — 2 junior agents, 1 senior agent (defaults)
 ./start-team.sh --workspace /path/to/my-project
+
+# Ollama backend — all agents use local qwen2.5-coder (simplest config)
+./start-team.sh --workspace /path/to/my-project --agent-type ollama
+
+# Ollama — recommended per-role model split for best results
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --model-junior   qwen2.5-coder:7b  \
+  --model-senior   qwen2.5-coder:14b \
+  --model-pi       qwen2.5-coder:14b \
+  --model-ba       qwen2.5:14b       \
+  --model-reviewer qwen2.5:14b
+
+# Ollama on a remote host
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --ollama-host http://192.168.1.10:11434
 
 # Relative paths are resolved from the current directory
 ./start-team.sh --workspace ../my-project
@@ -483,11 +535,8 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
 # Scale up for a large backlog
 ./start-team.sh --workspace /path/to/my-project --junior-agents 4 --senior-agents 2
 
-# Use opus for design, keep defaults elsewhere
-./start-team.sh --workspace /path/to/my-project --model-designer claude-opus-4-6
-
-# --flag=value form also works
-./start-team.sh --workspace=/path/to/my-project --junior-agents=3 --model-junior=claude-sonnet-4-6</code></pre>
+# Use a different model for design only (Claude)
+./start-team.sh --workspace /path/to/my-project --model-designer claude-opus-4-6</code></pre>
 <h3 id="monitor-progress">Monitor progress</h3>
 <pre><code class="language-bash">./status.sh</code></pre>
 <p>Prints a live snapshot of how many stories are in each state:</p>
@@ -514,35 +563,63 @@ echo &quot;ANTHROPIC_API_KEY=your_key_here&quot; &gt; .env</code></pre>
 <p>After a full reset, re-running <code>./start-team.sh --workspace &lt;path&gt;</code> goes through the complete pipeline from scratch.</p>
 <hr>
 <h2 id="running-agents-individually">Running agents individually</h2>
-<p>Each agent can also be invoked directly:</p>
+<h3 id="claude-backend">Claude backend</h3>
 <pre><code class="language-bash"># Designer (interactive)
-python scripts/designer_agent.py --model claude-sonnet-4-6
+python scripts/claude_agents/claude_designer_agent.py --model claude-sonnet-4-6
 
 # Project Initialiser
-python scripts/project_initialiser_agent.py \
+python scripts/claude_agents/claude_project_initialiser_agent.py \
   --design workspace/design/my-feature.new.md \
   --model claude-sonnet-4-6
 
 # Business Analyst (waits for workspace/CLAUDE.md before starting)
-python scripts/business_analyst_agent.py \
+python scripts/claude_agents/claude_business_analyst_agent.py \
   --design workspace/design/my-feature.new.md \
   --workspace-dir workspace \
   --model claude-sonnet-4-6
 
-# Story Orchestrator
-python scripts/story_orchestrator.py
+# Story Orchestrator (no LLM — agent-type agnostic)
+python scripts/claude_agents/claude_story_orchestrator.py
 
 # Junior Coding Agent (easy stories; waits for workspace/CLAUDE.md)
-python scripts/junior_coding_agent.py \
+python scripts/claude_agents/claude_junior_coding_agent.py \
   --model claude-haiku-4-5-20251001
 
 # Senior Coding Agent (medium/hard stories; waits for workspace/CLAUDE.md)
-python scripts/senior_coding_agent.py \
+python scripts/claude_agents/claude_senior_coding_agent.py \
   --model claude-sonnet-4-6
 
 # Story Reviewer
-python scripts/story_reviewer_agent.py \
+python scripts/claude_agents/claude_story_reviewer_agent.py \
   --model claude-sonnet-4-6</code></pre>
+<h3 id="ollama-backend">Ollama backend</h3>
+<pre><code class="language-bash"># Designer (interactive)
+python scripts/ollama_agents/ollama_designer_agent.py --model qwen2.5-coder
+
+# Project Initialiser
+python scripts/ollama_agents/ollama_project_initialiser_agent.py \
+  --design workspace/design/my-feature.new.md \
+  --model qwen2.5-coder
+
+# Business Analyst
+python scripts/ollama_agents/ollama_business_analyst_agent.py \
+  --design workspace/design/my-feature.new.md \
+  --workspace-dir workspace \
+  --model qwen2.5-coder
+
+# Junior Coding Agent (easy stories)
+python scripts/ollama_agents/ollama_junior_coding_agent.py --model qwen2.5-coder
+
+# Senior Coding Agent (medium/hard stories)
+python scripts/ollama_agents/ollama_senior_coding_agent.py --model qwen2.5-coder
+
+# Story Reviewer
+python scripts/ollama_agents/ollama_story_reviewer_agent.py --model qwen2.5-coder
+
+# Override Ollama host for any agent:
+python scripts/ollama_agents/ollama_junior_coding_agent.py \
+  --model llama3.1 \
+  --ollama-host http://192.168.1.10:11434</code></pre>
 <p>All path arguments default to <code>workspace/</code> relative to the <code>momo-agents</code> repo root when running agents individually. Pass <code>--workspace-dir &lt;path&gt;</code> to point them at any workspace directory.</p>
 <hr>
 <h2 id="development">Development</h2>
@@ -554,7 +631,7 @@ ruff format .
 mypy scripts/
 
 # Tests
-pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
+pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#ai-backends">AI backends</a><ul><li><a href="#claude-default">Claude (default)</a></li><li><a href="#ollama-local">Ollama (local)</a></li></ul></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a><ul><li><a href="#claude-backend">Claude backend</a></li><li><a href="#ollama-backend">Ollama backend</a></li></ul></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
 (function () {
   'use strict';
 

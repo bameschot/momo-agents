@@ -9,7 +9,7 @@ A multi-agent coding pipeline that takes a feature idea from concept through to 
 ```
   You ──► Designer ──► Project Initialiser
                               │
-                    writes workspace/CLAUDE.md
+                    writes <workspace>/CLAUDE.md
                               │
                ┌──────────────┴──────────────────────┐
                ▼                                     ▼
@@ -19,11 +19,11 @@ A multi-agent coding pipeline that takes a feature idea from concept through to 
                │                                     │
                └──────────────┬──────────────────────┘
                               ▼
-             (waits for workspace/CLAUDE.md)
+             (waits for <workspace>/CLAUDE.md)
                ┌──────────────┴──────────────┐
                ▼                             ▼
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
-     Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► workspace/
+     Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► <workspace>/
            [easy]            │         [medium/hard]      │
                              └─────────────┬──────────────┘
                                      (on failure)
@@ -31,18 +31,18 @@ A multi-agent coding pipeline that takes a feature idea from concept through to 
                                     Story Reviewer ──► You
 ```
 
-The pipeline has one hard sequencing constraint: the **Project Initialiser** runs first and writes `workspace/CLAUDE.md`. The **Business Analyst** and all **Coding Agents** poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.
+The pipeline has one hard sequencing constraint: the **Project Initialiser** runs first and writes `CLAUDE.md` at the workspace root. The **Business Analyst** and all **Coding Agents** poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.
 
 | Agent | Role | Reads from | Writes to |
 |---|---|---|---|
-| **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `workspace/design/` |
-| **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `workspace/CLAUDE.md`; all other agents gate on this file | `workspace/design/` | `workspace/` |
-| **Business Analyst** | Waits for `workspace/CLAUDE.md`, then watches `workspace/design/` for `*.new.md` files and decomposes each into story files with a **Complexity** field | `workspace/design/*.new.md`, `workspace/CLAUDE.md` | `workspace/stories/STORY-NNN.md` |
-| **Story Orchestrator** | Plain Python utility (no LLM); watches `workspace/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `workspace/stories/STORY-NNN.md`, `workspace/stories/*.done.md` | `workspace/stories/` |
-| **Junior Coding Agent** (×N) | Python outer loop claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `workspace/stories/*.easy.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
-| **Senior Coding Agent** (×N) | Python outer loop claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `workspace/stories/*.medium/hard.ready.md`, `workspace/CLAUDE.md` | `workspace/` |
-| **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `workspace/stories/*.failed.md` | `workspace/stories/` |
-| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `workspace/stories/` | `workspace/stories/` |
+| **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `<workspace>/design/` |
+| **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `CLAUDE.md` at the workspace root; all other agents gate on this file | `<workspace>/design/` | `<workspace>/` |
+| **Business Analyst** | Waits for `CLAUDE.md`, then watches `<workspace>/design/` for `*.new.md` files and decomposes each into story files with a **Complexity** field | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
+| **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
+| **Junior Coding Agent** (×N) | Python outer loop claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
+| **Senior Coding Agent** (×N) | Python outer loop claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
+| **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `<workspace>/stories/*.failed.md` | `<workspace>/stories/` |
+| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `<workspace>/stories/` | `<workspace>/stories/` |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `claude_story_orchestrator.py` makes no LLM calls.
 
@@ -58,9 +58,31 @@ Uses the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk). Req
 
 Uses a locally running [Ollama](https://ollama.com) instance. No API key required — models run entirely on your machine. Each agent script lives in `scripts/ollama_agents/` and shares common tool infrastructure from `scripts/ollama_agents/ollama_utilities.py`.
 
-The Ollama agents implement their own agentic tool-call loop (Ollama uses the OpenAI function-call format rather than the Claude Agent SDK). The same six tools are available to every Ollama agent: `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep`. The Story Reviewer additionally has `ask_user` for interactive triage.
+The Ollama agents implement their own agentic tool-call loop (`run_agent_loop` in `ollama_utilities.py`) using the OpenAI function-call format. The available tools per agent are:
 
-Recommended models with reliable tool use: `qwen2.5-coder`, `llama3.1`, `mistral-small3.1`.
+| Agent | Tools |
+|---|---|
+| Designer | `read_file`, `write_file`, `glob` |
+| Business Analyst | `read_file`, `write_file`, `glob` |
+| Project Initialiser | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` |
+| Junior / Senior Coding Agent | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` |
+| Story Reviewer | `read_file`, `write_file`, `bash`, `glob`, `ask_user` |
+
+Each Ollama agent has its own role file in `roles/` (`ollama-*.md`) that documents every tool by name, its parameters, and concrete call examples — this is important because local models cannot infer tool behaviour from context the way large cloud models can.
+
+**Continuation prompts**: Local models often emit a text-only planning turn between tool calls (e.g. after reading a design document, before writing story files). The agent loop detects these text-only responses and re-prompts the model with a task-specific continuation message rather than exiting prematurely. Up to three consecutive text-only turns are tolerated before the loop accepts the response as a genuine completion.
+
+**Recommended models** (reliable tool calling is the critical factor):
+
+| Tier | Model | Best for |
+|---|---|---|
+| Best overall | `qwen2.5-coder:14b` | Senior agent, Project Initialiser |
+| Good, faster | `qwen2.5-coder:7b` | Junior agent |
+| Better prose | `qwen2.5:14b` | Business Analyst, Story Reviewer |
+| Strong code | `codestral:22b` | Senior agent (less consistent tool calling) |
+| Compact reasoning | `phi4:14b` | BA / Reviewer alternative |
+
+For a suggested per-role model configuration see the [examples below](#examples).
 
 ---
 
@@ -88,18 +110,17 @@ momo-agents/
 │       ├── ollama_senior_coding_agent.py
 │       └── ollama_story_reviewer_agent.py
 ├── roles/                     ← system prompt files (one per LLM agent)
-│   ├── designer.md
-│   ├── business-analyst.md
-│   ├── project-initialiser.md
-│   ├── junior-coding-agent.md
-│   ├── senior-coding-agent.md
-│   ├── story-reviewer.md
-│   ├── ollama-designer.md
-│   ├── ollama-business-analyst.md
-│   ├── ollama-project-initialiser.md
-│   ├── ollama-junior-coding-agent.md
-│   ├── ollama-senior-coding-agent.md
-│   └── ollama-story-reviewer.md
+│   ├── designer.md                    ← shared (Claude + Ollama)
+│   ├── business-analyst.md            ← Claude BA
+│   ├── project-initialiser.md         ← Claude PI
+│   ├── junior-coding-agent.md         ← Claude Junior
+│   ├── senior-coding-agent.md         ← Claude Senior
+│   ├── story-reviewer.md              ← Claude Reviewer
+│   ├── ollama-business-analyst.md     ← Ollama BA (tool-use instructions)
+│   ├── ollama-project-initialiser.md  ← Ollama PI (tool-use instructions)
+│   ├── ollama-junior-coding-agent.md  ← Ollama Junior (tool-use instructions)
+│   ├── ollama-senior-coding-agent.md  ← Ollama Senior (tool-use instructions)
+│   └── ollama-story-reviewer.md       ← Ollama Reviewer (tool-use instructions)
 ├── workspace/                 ← all generated artefacts
 │   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
 │   ├── design/                ← Designer Agent outputs
@@ -148,14 +169,16 @@ The Designer runs as a multi-turn conversation. A single session persists for th
 
 ### Project Initialiser
 
-Runs once automatically when the workspace is empty. Its primary output — `workspace/CLAUDE.md` — is the **start gate** for the Business Analyst and all Coding Agents.
+Runs once automatically when the workspace is empty. Its primary output — `CLAUDE.md` at the workspace root — is the **start gate** for the Business Analyst and all Coding Agents.
 
 1. Reads the design document and determines the correct tech-stack scaffolding (language, runtime, frameworks, tooling).
-2. Creates `workspace/CLAUDE.md` with precise, runnable build, test, and lint commands for the identified stack, including an **Agent Exclusion List** section.
+2. Creates `CLAUDE.md` **at the workspace root** with precise, runnable build, test, and lint commands for the identified stack, including an **Agent Exclusion List** section.
 3. Scaffolds the idiomatic directory layout, config files, and empty entry points for that stack.
 4. Does **not** implement any story logic.
 
-If `workspace/CLAUDE.md` already exists the initialiser skips immediately — the presence of that file is the sole signal that scaffolding has already been completed.
+The agent's working directory is set to the workspace root, so all file paths are relative to it. `CLAUDE.md` is written directly at the root — never inside a subdirectory.
+
+If `CLAUDE.md` already exists at the workspace root the initialiser skips immediately — the presence of that file is the sole signal that scaffolding has already been completed.
 
 ---
 
@@ -163,13 +186,13 @@ If `workspace/CLAUDE.md` already exists the initialiser skips immediately — th
 
 The BA agent uses design file **state encoded in the filename** — no mtime tracking, no external state store.
 
-**Startup gate**: polls every 10 seconds until `workspace/CLAUDE.md` exists. This ensures stories are always written with full knowledge of the tech stack.
+**Startup gate**: polls every 10 seconds until `CLAUDE.md` exists at the workspace root. This ensures stories are always written with full knowledge of the tech stack.
 
 **Watch loop**:
-1. Wait for `workspace/CLAUDE.md` to exist.
-2. Every 5 seconds, glob all `*.new.md` files in `workspace/design/`.
-3. For each `<feature>.new.md` found: decompose it into `workspace/stories/STORY-NNN.md` files.
-4. On completion, rename `<feature>.new.md` → `<feature>.processed.md` inside `workspace/design/`.
+1. Wait for `<workspace>/CLAUDE.md` to exist.
+2. Every 5 seconds, glob all `*.new.md` files in `<workspace>/design/`.
+3. For each `<feature>.new.md` found: decompose it into `<workspace>/stories/STORY-NNN.md` files.
+4. On completion, rename `<feature>.new.md` → `<feature>.processed.md` inside `<workspace>/design/`.
 5. Sleep and repeat until `pipeline_complete` is written.
 
 Each story includes a `**Complexity**: easy | medium | hard` field and a `**Depends on**` field. Stories are written as bare `STORY-NNN.md` files; the Story Orchestrator assigns the `.ready` state.
@@ -215,6 +238,8 @@ Two tiers handle stories by complexity:
 | **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` | `qwen2.5-coder` |
 
 Both agents follow the same structure: **Python owns the outer loop; a fresh LLM session is started for every story.** This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.
+
+For the **Ollama backend**, each coding agent passes a continuation prompt to the agent loop. If the model produces a text-only response mid-session (a common pattern with local models that plan before acting), the loop re-prompts it with an explicit instruction to continue implementing rather than treating the text response as task completion.
 
 **Python startup** (once, before the loop):
 1. Poll every 60 s until `workspace/CLAUDE.md` exists.
@@ -434,25 +459,28 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `🟢 Junior Coding Agent N` | Easy story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.easy.ready.md` |
 | `🔵 Senior Coding Agent N` | Medium/hard story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.medium/hard.ready.md` |
 
-**Examples:**
+**Examples:** <a name="examples"></a>
 
 ```bash
 # Claude backend — 2 junior agents, 1 senior agent (defaults)
 ./start-team.sh --workspace /path/to/my-project
 
-# Ollama backend — all agents use local qwen2.5-coder
+# Ollama backend — all agents use local qwen2.5-coder (simplest config)
 ./start-team.sh --workspace /path/to/my-project --agent-type ollama
+
+# Ollama — recommended per-role model split for best results
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --model-junior   qwen2.5-coder:7b  \
+  --model-senior   qwen2.5-coder:14b \
+  --model-pi       qwen2.5-coder:14b \
+  --model-ba       qwen2.5:14b       \
+  --model-reviewer qwen2.5:14b
 
 # Ollama on a remote host
 ./start-team.sh --workspace /path/to/my-project \
   --agent-type ollama \
   --ollama-host http://192.168.1.10:11434
-
-# Ollama with a specific model per agent tier
-./start-team.sh --workspace /path/to/my-project \
-  --agent-type ollama \
-  --model-junior qwen2.5-coder \
-  --model-senior llama3.1
 
 # Relative paths are resolved from the current directory
 ./start-team.sh --workspace ../my-project
