@@ -41,12 +41,13 @@ The design document path is provided in the task prompt. Read it before doing an
    Label this section `## Agent Exclusion List` so coding agents can locate it quickly.
 
 4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
+   - If the workspace is not already a git repository, initialise one with `git init`
+   - Include or amend an existing `.gitignore` file appropriate for the tech stack
    - Directory structure as described or implied by the design
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
-   - If the workspace is not already a git repository, initialise one with `git init`
-   - Include or amend an existing `.gitignore` file appropriate for the tech stack
+   - commit the changes as 'initial-commit'
 
 5. Do **not** implement any business logic from the stories.
 6. Do **not** write files outside the workspace root.

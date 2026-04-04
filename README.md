@@ -80,7 +80,7 @@ Each Ollama agent has its own role file in `roles/ollama_roles/` (`ollama-*.md`)
 | Tier | Model | Best for |
 |---|---|---|
 | Best overall | `qwen2.5-coder:14b` | Senior agent, Project Initialiser |
-| Good, faster | `qwen2.5-coder:7b` | Junior agent |
+| Good, faster | `qwen3.5:9b` | Junior agent |
 | Better prose | `qwen2.5:14b` | Business Analyst, Story Reviewer |
 | Strong code | `codestral:22b` | Senior agent (less consistent tool calling) |
 | Compact reasoning | `phi4:14b` | BA / Reviewer alternative |
@@ -366,8 +366,8 @@ Two tiers handle stories by complexity:
 
 | Agent | Handles | Claude default model | Ollama default model |
 |---|---|---|---|
-| **Junior Coding Agent** | `easy` stories | `claude-haiku-4-5-20251001` | `qwen2.5-coder:7b` |
-| **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` | `qwen2.5-coder:7b` |
+| **Junior Coding Agent** | `easy` stories | `claude-haiku-4-5-20251001` | `qwen3.5:9b` |
+| **Senior Coding Agent** | `medium` and `hard` stories | `claude-sonnet-4-6` | `qwen3.5:9b` |
 
 Both agents follow the same structure: **Python owns the outer loop; a fresh LLM session is started for every story.** This keeps each session's context small and avoids the quadratic token cost that accumulates when tool-call history from previous stories remains in context.
 
@@ -536,7 +536,7 @@ All coordination is via atomic filesystem operations — no database, no message
 - Python 3.11+
 - [`uv`](https://github.com/astral-sh/uv) (recommended) or `pip`
 - **Claude backend**: an Anthropic API key
-- **Ollama backend**: a running [Ollama](https://ollama.com) instance with at least one model pulled (e.g. `ollama pull qwen2.5-coder:7b`)
+- **Ollama backend**: a running [Ollama](https://ollama.com) instance with at least one model pulled (e.g. `ollama pull qwen3.5:9b`)
 
 ### Install
 
@@ -557,7 +557,7 @@ echo "ANTHROPIC_API_KEY=your_key_here" > .env
 
 # 4b. Ollama backend — install the extra and pull a model
 uv pip install -e ".[ollama]"
-ollama pull qwen2.5-coder:7b
+ollama pull qwen3.5:9b
 ```
 
 ---
@@ -592,12 +592,12 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 
 | Agent | `--agent-type claude` | `--agent-type ollama` |
 |---|---|---|
-| Designer | `claude-sonnet-4-6` | `qwen2.5-coder:7b` |
-| Business Analyst | `claude-sonnet-4-6` | `qwen2.5-coder:7b` |
-| Project Initialiser | `claude-haiku-4-5-20251001` | `qwen2.5-coder:7b` |
-| Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen2.5-coder:7b` |
-| Senior Coding Agent | `claude-sonnet-4-6` | `qwen2.5-coder:7b` |
-| Story Reviewer | `claude-sonnet-4-6` | `qwen2.5-coder:7b` |
+| Designer | `claude-sonnet-4-6` | `qwen3.5:9b` |
+| Business Analyst | `claude-sonnet-4-6` | `qwen3.5:9b` |
+| Project Initialiser | `claude-haiku-4-5-20251001` | `qwen3.5:9b` |
+| Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:9b` |
+| Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:9b` |
+| Story Reviewer | `claude-sonnet-4-6` | `qwen3.5:9b` |
 
 **Agent windows opened:**
 
@@ -624,9 +624,9 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 # Ollama — recommended per-role model split for best results
 ./start-team.sh --workspace /path/to/my-project \
   --agent-type ollama \
-  --model-junior   qwen2.5-coder:7b  \
-  --model-senior   qwen2.5-coder:7b \
-  --model-pi       qwen2.5-coder:7b \
+  --model-junior   qwen3.5:9b  \
+  --model-senior   qwen3.5:9b \
+  --model-pi       qwen3.5:9b \
   --model-ba       qwen2.5:7b       \
   --model-reviewer qwen2.5:7b
 
@@ -744,27 +744,27 @@ python scripts/claude_agents/claude_story_reviewer_agent.py \
 
 ```bash
 # Designer (interactive)
-python scripts/ollama_agents/ollama_designer_agent.py --model qwen2.5-coder:7b
+python scripts/ollama_agents/ollama_designer_agent.py --model qwen3.5:9b
 
 # Project Initialiser
 python scripts/ollama_agents/ollama_project_initialiser_agent.py \
   --design workspace/design/my-feature.new.md \
-  --model qwen2.5-coder:7b
+  --model qwen3.5:9b
 
 # Business Analyst
 python scripts/ollama_agents/ollama_business_analyst_agent.py \
   --design workspace/design/my-feature.new.md \
   --workspace-dir workspace \
-  --model qwen2.5-coder:7b
+  --model qwen3.5:9b
 
 # Junior Coding Agent (easy stories)
-python scripts/ollama_agents/ollama_junior_coding_agent.py --model qwen2.5-coder:7b
+python scripts/ollama_agents/ollama_junior_coding_agent.py --model qwen3.5:9b
 
 # Senior Coding Agent (medium/hard stories)
-python scripts/ollama_agents/ollama_senior_coding_agent.py --model qwen2.5-coder:7b
+python scripts/ollama_agents/ollama_senior_coding_agent.py --model qwen3.5:9b
 
 # Story Reviewer
-python scripts/ollama_agents/ollama_story_reviewer_agent.py --model qwen2.5-coder:7b
+python scripts/ollama_agents/ollama_story_reviewer_agent.py --model qwen3.5:9b
 
 # Override Ollama host for any agent:
 python scripts/ollama_agents/ollama_junior_coding_agent.py \
