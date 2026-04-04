@@ -13,7 +13,7 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
 from token_logger import log_usage, print_message
 
-POLL_INTERVAL = 60  # seconds between polls when no eligible story is available
+POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 

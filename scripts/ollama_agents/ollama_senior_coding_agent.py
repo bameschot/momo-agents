@@ -20,7 +20,7 @@ from ollama_utilities import (
     run_agent_loop,
 )
 
-POLL_INTERVAL = 60  # seconds between polls when no eligible story is available
+POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
 
 
 def _parse_args() -> argparse.Namespace:
