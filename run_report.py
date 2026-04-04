@@ -53,6 +53,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="PATH",
         help="Directory to write the HTML report into (default: workspace/).",
     )
+    parser.add_argument(
+        "--git-log",
+        default=str(Path(__file__).parent / "workspace" / ".sentinels" / "git_log.jsonl"),
+        metavar="PATH",
+        help="Path to the git_log.jsonl file (default: workspace/.sentinels/git_log.jsonl).",
+    )
     return parser.parse_args(argv)
 
 
@@ -81,7 +87,31 @@ def load_run_log(run_log_path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 3. Token Data Loader
+# 3. Git Log Loader
+# ---------------------------------------------------------------------------
+
+def load_git_log(git_log_path: Path) -> list[dict]:
+    """Load entries from git_log.jsonl. Returns an empty list if file is absent."""
+    if not git_log_path.exists():
+        return []
+    entries = []
+    with open(git_log_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                print(
+                    f"Warning: skipping unparseable git-log line: {line}",
+                    file=sys.stderr,
+                )
+    return entries
+
+
+# ---------------------------------------------------------------------------
+# 5. Token Data Loader
 # ---------------------------------------------------------------------------
 
 def load_token_records(tokens_log_dir: Path) -> list[dict]:
@@ -211,6 +241,35 @@ def _build_run_log_html(entries: list[dict]) -> str:
         "  <table>\n"
         "    <thead>\n"
         "      <tr><th>Timestamp</th><th>Agent</th><th>Message</th></tr>\n"
+        "    </thead>\n"
+        "    <tbody>\n"
+        + "\n".join(rows) + "\n"
+        "    </tbody>\n"
+        "  </table>\n"
+    )
+
+
+def _build_git_log_html(entries: list[dict]) -> str:
+    if not entries:
+        return "  <p><em>No git commits recorded during this run.</em></p>\n"
+
+    rows = []
+    for entry in entries:
+        ts = entry.get("timestamp", "")
+        committer = entry.get("committer", "")
+        message = entry.get("message", "")
+        rows.append(
+            f"    <tr>"
+            f"<td>{ts}</td>"
+            f"<td>{committer}</td>"
+            f"<td>{message}</td>"
+            f"</tr>"
+        )
+
+    return (
+        "  <table>\n"
+        "    <thead>\n"
+        "      <tr><th>Timestamp</th><th>Committer</th><th>Message</th></tr>\n"
         "    </thead>\n"
         "    <tbody>\n"
         + "\n".join(rows) + "\n"
@@ -377,8 +436,9 @@ const RAW_DATA = """ + raw_data_json + """;
 """
 
 
-def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str) -> str:
+def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str, git_log_entries: list[dict] | None = None) -> str:
     run_log_html = _build_run_log_html(run_log_entries)
+    git_log_html = _build_git_log_html(git_log_entries or [])
     token_table_html = _build_token_html(agg)
     has_chart_data = bool(agg["agent_totals"])
 
@@ -424,6 +484,8 @@ def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str) -> str:
         "  <h1>Pipeline Run Report</h1>\n"
         "  <h2>Run Log</h2>\n"
         + run_log_html
+        + "  <h2>Git Commits</h2>\n"
+        + git_log_html
         + "  <h2>Token Usage</h2>\n"
         + token_table_html
         + chart_section
@@ -442,9 +504,11 @@ def main() -> None:
     run_log_path = Path(args.run_log)
     tokens_log_dir = Path(args.tokens_log_dir)
     output_dir = Path(args.output_dir)
+    git_log_path = Path(args.git_log)
 
     run_log_entries = load_run_log(run_log_path)
     token_records = load_token_records(tokens_log_dir)
+    git_log_entries = load_git_log(git_log_path)
 
     if not run_log_entries and not token_records:
         print("Error: no run log entries and no token records found.", file=sys.stderr)
@@ -455,7 +519,7 @@ def main() -> None:
     cache_dir = Path(__file__).parent / ".chartjs_cache"
     chartjs_src = fetch_chartjs(cache_dir)
 
-    html = build_html(run_log_entries, agg, chartjs_src)
+    html = build_html(run_log_entries, agg, chartjs_src, git_log_entries)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")

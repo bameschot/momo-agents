@@ -42,7 +42,7 @@ The design document path is provided in the task prompt. Read it before doing an
 
 4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
    - If the workspace is not already a git repository, initialise one with `git init`
-   - Include or amend an existing `.gitignore` file appropriate for the tech stack
+   - Include or amend an existing `.gitignore` file appropriate for the tech stack. the file always includes .sentinels
    - Directory structure as described or implied by the design
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons

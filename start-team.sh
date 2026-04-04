@@ -261,6 +261,7 @@ _workspace_initialized() {
 # ─────────────────────────────────────────────────────────────────────────────
 # Setup — create sentinel directory; clear any stale pipeline_complete sentinel
 # ─────────────────────────────────────────────────────────────────────────────
+TEAM_START_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens"
 rm -f "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
 touch "$SENTINEL_DIR/run-log.jsonl"
@@ -941,10 +942,16 @@ _teardown() {
     echo ""
     _token_summary
     echo ""
+    echo "  Exporting git log..."
+    "$PYTHON" "$SCRIPT_DIR/git_log_exporter.py" \
+        --repo "$WORKSPACE_DIR" \
+        --start-date "$TEAM_START_TIME" \
+        --output "$SENTINEL_DIR/git_log.jsonl" 2>/dev/null || true
     echo "  Generating run report..."
     report_path=$("$PYTHON" "$SCRIPT_DIR/run_report.py" \
         --run-log "$SENTINEL_DIR/run-log.jsonl" \
         --tokens-log-dir "$SENTINEL_DIR/tokens" \
+        --git-log "$SENTINEL_DIR/git_log.jsonl" \
         --output-dir "$WORKSPACE_DIR" 2>/dev/null) && \
         echo "  Run report written → $report_path" || \
         echo "  (Run report skipped — no log data)"
