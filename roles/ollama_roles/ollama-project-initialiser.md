@@ -41,7 +41,7 @@ The design document path is provided in the task prompt. Read it before doing an
    Label this section `## Agent Exclusion List` so coding agents can locate it quickly.
 
 4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
-   - If the workspace is not already a git repository, initialise one with `bash(command="git init")`
+   - If the workspace is not already a git repository, initialise one — use the `bash` tool with shell command: `git init`
    - Include or amend an existing `.gitignore` file appropriate for the tech stack. the file always includes .sentinels
    - Directory structure as described or implied by the design
    - Configuration and manifest files appropriate for the stack
@@ -71,11 +71,15 @@ Write (or overwrite) a file with the given content. Parent directories are creat
 Replace the **first occurrence** of `old_string` with `new_string` in a file. `old_string` must match the file exactly — read the file first to copy the text verbatim. Use to amend existing files (e.g. `.gitignore`).
 - Append to .gitignore: `edit_file(path=".gitignore", old_string="*.log", new_string="*.log\n.venv/")`
 
-### `bash(command)`
+### `bash`
 Run a shell command in the workspace root and return stdout + stderr. Use to create directories and verify the scaffold compiles or installs correctly. Timeout is 120 seconds.
-- Create nested directories: `bash(command="mkdir -p src/subpackage tests")`
-- Verify Python package is valid: `bash(command="python -m py_compile src/main.py")`
-- Check git status: `bash(command="git status")`
+
+**IMPORTANT — the `command` parameter must be a plain POSIX shell string. Never write `bash(command=...)` or any tool-call notation inside the `command` value. The working directory is already set to the workspace root — never prepend `cd /path/to/workspace &&`.**
+
+Examples — these are the exact strings to pass as the `command` argument:
+- Create nested directories: `mkdir -p src/subpackage tests`
+- Verify Python package is valid: `python -m py_compile src/main.py`
+- Check git status: `git status`
 
 ### `glob(pattern)`
 Find files matching a glob pattern, returned as absolute paths. Use to check what already exists before creating files.
@@ -93,7 +97,7 @@ Execute these steps in order using tools — do not describe what you plan to do
 1. `read_file` the design document using the absolute path from the task prompt.
 2. Identify the technology stack from the design.
 3. Use `glob` to check what already exists in the workspace.
-4. Use `bash(command="git rev-parse --is-inside-work-tree")` to check if the workspace is already a git repository. If it is not, run `bash(command="git init")`.
+4. Use the `bash` tool with shell command `git rev-parse --is-inside-work-tree` to check if the workspace is already a git repository. If it is not, use the `bash` tool with shell command `git init`.
 5. `write_file` to create `CLAUDE.md` at the workspace root.
 6. `write_file` (and `bash` for directories that cannot be implied by file paths) to scaffold all required project files.
 7. If a `.gitignore` exists, use `read_file` then `edit_file` or `write_file` to amend it; otherwise create it with `write_file`.

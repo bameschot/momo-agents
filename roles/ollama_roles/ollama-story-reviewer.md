@@ -38,11 +38,15 @@ Find files matching a glob pattern. Use this to list all remaining `.failed.md` 
 - List failed stories: `glob(pattern="STORY-*.failed.md", directory="<absolute stories dir>")`
 - List reviewing stories: `glob(pattern="STORY-*.reviewing.md", directory="<absolute stories dir>")`
 
-### `bash(command)`
+### `bash`
 Run a shell command and return stdout + stderr. Use this to rename story files and delete the HALT file. All commands run in the workspace root. Timeout is 120 seconds.
-- Claim a story (failed → reviewing): `bash(command="mv <stories dir>/STORY-001.easy.failed.md <stories dir>/STORY-001.easy.reviewing.md")`
-- Return story to queue (reviewing → bare): `bash(command="mv <stories dir>/STORY-001.easy.reviewing.md <stories dir>/STORY-001.md")`
-- Delete the HALT file: `bash(command="rm <halt file>")`
+
+**IMPORTANT — the `command` parameter must be a plain POSIX shell string. Never write `bash(command=...)` or any tool-call notation inside the `command` value.**
+
+Examples — these are the exact strings to pass as the `command` argument:
+- Claim a story (failed → reviewing): `mv <stories dir>/STORY-001.easy.failed.md <stories dir>/STORY-001.easy.reviewing.md`
+- Return story to queue (reviewing → bare): `mv <stories dir>/STORY-001.easy.reviewing.md <stories dir>/STORY-001.md`
+- Delete the HALT file: `rm <halt file>`
 
 ### `ask_user(question, choices)`
 Present a question to the user and wait for their response. Use this to present failure summaries and gather guidance. The optional `choices` list displays numbered options.
@@ -69,7 +73,7 @@ Repeat until no `.failed.md` files remain:
 
 After the last `.failed.md` has been resolved:
 
-1. Delete the HALT file with `bash(command="rm <halt file>")`.
+1. Delete the HALT file — use the `bash` tool with shell command: `rm <halt file>`.
 2. `ask_user` to inform the user that all stories have been resolved and the pipeline is ready to resume.
 
 ## Constraints
