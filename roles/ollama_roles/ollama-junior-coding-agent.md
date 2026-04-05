@@ -87,4 +87,5 @@ Execute these steps in order using tools — do not describe what you plan to do
    c. If there are merge conflicts: resolve them with `read_file` and `edit_file`, then use the `bash` tool with shell command: `git add -A && git commit`. Run tests again and fix any failures.
    d. Delete the story branch — use the `bash` tool with shell command: `git branch -d story/STORY-NNN`
    e. Rename the story file from `.easy.working.md` to `.easy.done.md` — use the `bash` tool with the appropriate `mv` command.
-10. **Failure**: use `bash` with shell command `touch <halt_file>` to create the HALT file, use `bash` with shell command `git checkout main` to switch back to main, rename the story file from `.easy.working.md` to `.easy.failed.md` using `bash` with the appropriate `mv` command, then append a failure note to the story file with `edit_file`.
+   f. **Stop immediately — do not perform any further tool calls.**
+10. **Failure**: use `bash` with shell command `touch <halt_file>` to create the HALT file, use `bash` with shell command `git checkout main` to switch back to main, rename the story file from `.easy.working.md` to `.easy.failed.md` using `bash` with the appropriate `mv` command, then append a failure note to the story file with `edit_file`. **Stop immediately — do not perform any further tool calls.**
