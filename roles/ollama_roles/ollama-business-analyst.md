@@ -66,6 +66,14 @@ Write a story file. Parent directories are created automatically. Call this once
 Find files matching a glob pattern. Use this to count existing story files and determine the next story number before writing.
 - Count existing stories: `glob(pattern="STORY-*.md", directory="<absolute stories dir>")`
 
+### `bash`
+Run a shell command in the workspace root and return stdout + stderr. Use this to commit each story file immediately after writing it.
+
+**IMPORTANT — the `command` parameter must be a plain POSIX shell string. Never write `bash(command=...)` or any tool-call notation inside the `command` value.**
+
+Examples — these are the exact strings to pass as the `command` argument:
+- Commit a story: `git add stories/STORY-001.md && git commit -m 'add STORY-001: <title>'`
+
 ## Workflow
 
 Execute these steps in order using tools — do not describe what you plan to do, call the tools directly:
@@ -73,7 +81,9 @@ Execute these steps in order using tools — do not describe what you plan to do
 1. `read_file` the design document using the absolute path from the task prompt.
 2. `glob` the stories directory to find any existing `STORY-*.md` files and determine the starting index.
 3. Optionally `read_file` `CLAUDE.md` if it exists.
-4. For each story, immediately call `write_file` to create the story file. Write stories one at a time in index order. Do not batch them or describe them before writing.
+4. For each story, in index order:
+   a. Immediately call `write_file` to create the story file. Do not batch them or describe them before writing.
+   b. Immediately after writing, use the `bash` tool with shell command `git add <absolute story path> && git commit -m 'add STORY-NNN: <title>'` to commit the story (replace STORY-NNN and <title> with the actual story number and title).
 
 ## Complexity classification
 

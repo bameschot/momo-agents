@@ -12,7 +12,7 @@ from ollama import Message
 
 from agent_utilities import append_run_log, load_role, resolve_path, wait_for_workspace
 from ollama_utilities import (
-    ANALYST_TOOLS,
+    BA_TOOLS,
     DEFAULT_MODEL,
     ToolExecutor,
     add_ollama_args,
@@ -62,6 +62,9 @@ def _build_task(
         "Read the design document in full. Decompose it into an ordered set of discrete, "
         "implementable stories and write each one to the stories directory as STORY-NNN.md. "
         "Follow the story file format defined in your role exactly.\n\n"
+        "After writing each story file, immediately commit it — use the `bash` tool with "
+        f"shell command `git add {stories_dir}/STORY-NNN.md && git commit -m 'add STORY-NNN: <title>'` "
+        "(replace STORY-NNN and <title> with the actual story number and title).\n\n"
         "Complexity rules (mandatory):\n"
         "- Assign every story a complexity of easy, medium, or hard.\n"
         "- Include the complexity label in both the heading and the **Complexity** field.\n"
@@ -105,7 +108,7 @@ async def run(
         messages=messages,
         client=client,
         model=model,
-        tools=ANALYST_TOOLS,
+        tools=BA_TOOLS,
         executor=executor,
         agent_name=agent_name,
         token_log=token_log,

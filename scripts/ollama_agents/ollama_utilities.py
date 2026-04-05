@@ -205,11 +205,12 @@ CODING_TOOLS: list[dict[str, Any]] = [
     _TOOL_GREP,
 ]
 
-#: Analyst toolkit: read design docs, write story files, list files.
-ANALYST_TOOLS: list[dict[str, Any]] = [
+#: Business Analyst toolkit: read/write/list files + shell for git commits.
+BA_TOOLS: list[dict[str, Any]] = [
     _TOOL_READ_FILE,
     _TOOL_WRITE_FILE,
     _TOOL_GLOB,
+    _TOOL_BASH,
 ]
 
 #: Designer toolkit: read/write files only (conversation handled by chat loop).

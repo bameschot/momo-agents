@@ -86,6 +86,7 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 
 ## Rules
 
+- **Commit each story immediately after writing it.** Run `git add stories/STORY-NNN.md && git commit -m 'add STORY-NNN: <title>'` (with the actual story number and title) before moving on to the next story.
 - **Only read source files from `workspace/`.** Do not read files outside of `design/`, `stories/`, and `workspace/`.
 - **Design ref field**: Write both possible paths separated by ` | ` so coding agents know to read whichever file exists at implementation time: `workspace/design/<feature>.processed.md | workspace/design/<feature>.new.md`.
 - Each story must be implementable by a single Coding Agent without knowledge of other in-progress stories.

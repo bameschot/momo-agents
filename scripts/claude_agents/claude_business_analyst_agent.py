@@ -78,6 +78,9 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         "Read the design document in full. Decompose it into an ordered set of discrete, "
         "implementable stories and write each one to the stories directory as STORY-NNN.md. "
         "Follow the story file format defined in your role exactly.\n\n"
+        "After writing each story file, immediately commit it with: "
+        f"git add {stories_dir}/STORY-NNN.md && git commit -m 'add STORY-NNN: <title>' "
+        "(replace STORY-NNN and <title> with the actual story number and title).\n\n"
         "Complexity rules (mandatory):\n"
         "- Assign every story a complexity of easy, medium, or hard.\n"
         "- Include the complexity label in both the heading and the **Complexity** field.\n"
@@ -89,7 +92,7 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     options = ClaudeAgentOptions(
         cwd=str(workspace_dir),
         system_prompt=load_role("claude_roles/claude_business-analyst"),
-        allowed_tools=["Read", "Write", "Glob"],
+        allowed_tools=["Read", "Write", "Glob", "Bash"],
         permission_mode="acceptEdits",
         max_turns=200,
         model=model,
