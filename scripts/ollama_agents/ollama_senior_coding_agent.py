@@ -64,24 +64,41 @@ def _claim_story(stories_dir: Path) -> Path | None:
 
 def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file: Path) -> str:
     parts = story_path.stem.split(".")  # STORY-001.medium.working → ['STORY-001', 'medium', 'working']
-    complexity = parts[1] if len(parts) >= 2 else "unknown"
+    story_number = parts[0]  # e.g. STORY-001
+    done_path = story_path.with_name(story_path.name.replace(".working.md", ".done.md"))
+    failed_path = story_path.with_name(story_path.name.replace(".working.md", ".failed.md"))
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
         f"HALT file: {halt_file}\n\n"
         f"## workspace/CLAUDE.md\n\n{claude_md}\n\n"
         "## Task\n"
-        "1. Read the story file.\n"
-        "2. Read the design doc(s) from the story's **Design ref** field "
+        f"1. Use `read_file` to read the story file at {story_path}.\n"
+        "2. Use `read_file` to read the design doc(s) from the story's **Design ref** field "
         "(two paths separated by ' | ' — read whichever exist).\n"
         "3. Note the '## Agent Exclusion List' in CLAUDE.md above — never read from or "
         "write to those paths.\n"
-        "4. Implement the acceptance criteria.\n"
-        "5. Run tests and linter per CLAUDE.md.\n"
-        f"6. Check {halt_file} — if found, perform the halt procedure.\n"
-        f"7. Success → rename .{complexity}.working.md → .{complexity}.done.md, commit.\n"
-        f"8. Failure → create {halt_file}, rename .{complexity}.working.md → "
-        f".{complexity}.failed.md, perform halt procedure."
+        f"4. Use the `bash` tool with shell command `git checkout -b story/{story_number}` "
+        "to create and switch to the story branch.\n"
+        "5. Implement the acceptance criteria using `write_file` (new files) and "
+        "`edit_file` (modifications).\n"
+        "6. Run tests and linter per CLAUDE.md using the `bash` tool.\n"
+        f"7. Use the `bash` tool with shell command "
+        f"`test -f {halt_file} && echo exists || echo absent` to check for the HALT file. "
+        "If found, perform the halt procedure.\n"
+        "8. Success:\n"
+        f"   a. Use the `bash` tool with shell command "
+        f"`git add -A && git commit -m 'implement {story_number}: <title>'`.\n"
+        f"   b. Use the `bash` tool with shell command "
+        f"`git checkout main && git merge --no-ff story/{story_number}` "
+        "(use `master` if `main` does not exist).\n"
+        f"   c. Use the `bash` tool with shell command `git branch -d story/{story_number}`.\n"
+        f"   d. Use the `bash` tool with shell command `mv {story_path} {done_path}`.\n"
+        "   e. Stop immediately — do not perform any further tool calls.\n"
+        f"9. Failure → use the `bash` tool with shell command `touch {halt_file}` to create "
+        "the HALT file, use the `bash` tool with shell command `git checkout main` to switch "
+        f"back to main, use the `bash` tool with shell command `mv {story_path} {failed_path}` "
+        "to rename the story, append a failure note with `edit_file`, then stop immediately."
     )
 
 
