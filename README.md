@@ -651,18 +651,17 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 
 **Python startup** (once, before the loop):
 1. Poll every 10 s until `<workspace>/CLAUDE.md` exists.
-2. Read `<workspace>/CLAUDE.md` and retain the content in memory for the lifetime of the process.
 
 **Python outer loop**:
 1. Check for `<workspace>/stories/HALT` or `<workspace>/.sentinels/pipeline_complete` — exit if either exists.
 2. Atomically claim the lowest-numbered `.ready.md` story of the correct complexity tier by renaming it to `.working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
 3. If no story can be claimed, sleep 10 s and retry.
-4. Start a **fresh LLM session** for the claimed story, passing the story path and the pre-read `<workspace>/CLAUDE.md` content directly in the task prompt.
+4. Start a **fresh LLM session** for the claimed story, passing the story path, workspace root, and HALT file path in the task prompt.
 5. After the session ends: check whether `.done.md` or `.failed.md` now exists and log accordingly, then loop back to step 1.
 
 **Per-story LLM session**:
-1. Read the story file and design document(s) from the story's **Design ref** field.
-2. Note the `## Agent Exclusion List` in `CLAUDE.md` — never read from or write to those paths.
+1. Read `<workspace>/CLAUDE.md` — note build/test/lint commands and the Agent Exclusion List (never read from or write to those paths).
+2. Read the story file and design document(s) from the story's **Design ref** field.
 3. Create a dedicated git branch: `git checkout -b story/STORY-NNN`.
 4. Implement the acceptance criteria in `<workspace>/`.
 5. Run tests and linter as instructed in `CLAUDE.md`. Fix all failures.
@@ -675,6 +674,8 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
    - Rename `.[complexity].working.md` → `.[complexity].done.md`.
    - Stop immediately — do not perform any further tool calls.
 8. **On failure**: create `<workspace>/stories/HALT`, switch back to main, rename `.[complexity].working.md` → `.[complexity].failed.md`, append a failure note, then stop immediately.
+
+> `<workspace>/CLAUDE.md` is read at the start of every story session rather than being pre-loaded and injected into the task prompt. This keeps each session's initial context lean — for real projects CLAUDE.md can be several hundred lines — and avoids inflating input token costs across a large story backlog.
 
 ---
 

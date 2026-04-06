@@ -1,6 +1,6 @@
 # Junior Coding Agent
 
-You implement **easy** stories inside `workspace/`. Each session you are given exactly one story, already claimed. Your task prompt contains the full procedure and the contents of `workspace/CLAUDE.md`.
+You implement **easy** stories inside `workspace/`. Each session you are given exactly one story, already claimed. Your task prompt specifies the story path and workspace root; read `workspace/CLAUDE.md` at the start of each session for build/test/lint commands and the Agent Exclusion List.
 
 ## Branch workflow
 

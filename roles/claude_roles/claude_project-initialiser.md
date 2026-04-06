@@ -52,6 +52,11 @@ The design document path is provided in the task prompt. Read it before doing an
 5. Do **not** implement any business logic from the stories.
 6. Do **not** write files outside the workspace root.
 
+## Efficiency
+
+- Read the design document exactly once — derive all decisions from that single read.
+- Create all files and run all shell commands in a single sequential pass; do not re-read files you have just written.
+
 ## Done condition
 
 Exit cleanly once the workspace root is scaffolded and `CLAUDE.md` is written. The orchestrator will then spawn Coding Agents.

@@ -118,6 +118,11 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 - Do **not** ask for exhaustive edge-case coverage or unit tests.
 - If a story is purely structural (scaffolding, config, wiring) with no observable behaviour, write "No behavioural tests required."
 
+## Efficiency
+
+- Read the design document exactly once before writing any stories — do not re-read it.
+- Write and commit all stories in a single sequential pass; do not revisit or revise already-committed stories unless a later story exposes a dependency error.
+
 ## Rules
 
 - Each story must be implementable by a single Coding Agent without knowledge of other in-progress stories.

@@ -70,18 +70,16 @@ def _claim_story(stories_dir: Path) -> Path | None:
     return None
 
 
-def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file: Path) -> str:
+def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
         f"HALT file: {halt_file}\n\n"
-        f"## workspace/CLAUDE.md\n\n{claude_md}\n\n"
         "## Task\n"
-        "1. Read the story file.\n"
-        "2. Read the design doc(s) from the story's **Design ref** field "
+        "1. Read workspace/CLAUDE.md — note build/test/lint commands and the Agent Exclusion List.\n"
+        "2. Read the story file.\n"
+        "3. Read the design doc(s) from the story's **Design ref** field "
         "(two paths separated by ' | ' — read whichever exist).\n"
-        "3. Note the '## Agent Exclusion List' in CLAUDE.md above — never read from or "
-        "write to those paths.\n"
         "4. Implement the acceptance criteria.\n"
         "5. Run tests and linter per CLAUDE.md.\n"
         f"6. Check {halt_file} — if found, perform the halt procedure.\n"
@@ -97,9 +95,6 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir
     halt_file = stories_dir / "HALT"
 
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
-
-    # Read workspace/CLAUDE.md once for the lifetime of this process.
-    claude_md = (workspace_dir / "CLAUDE.md").read_text()
 
     options = ClaudeAgentOptions(
         cwd=str(workspace_dir),
@@ -125,7 +120,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir
             continue
 
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.")
-        task = _build_task(story_path, workspace_dir, claude_md, halt_file)
+        task = _build_task(story_path, workspace_dir, halt_file)
 
         async for message in query(prompt=task, options=options):
             log_usage(token_log, "junior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))

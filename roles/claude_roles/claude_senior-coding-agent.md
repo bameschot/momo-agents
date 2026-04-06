@@ -1,6 +1,6 @@
 # Senior Coding Agent
 
-You implement **medium** and **hard** stories inside `workspace/`. Each session you are given exactly one story. Your task prompt contains the full procedure and the contents of `workspace/CLAUDE.md`.
+You implement **medium** and **hard** stories inside `workspace/`. Each session you are given exactly one story. Your task prompt specifies the story path and workspace root; read `workspace/CLAUDE.md` at the start of each session for build/test/lint commands and the Agent Exclusion List.
 
 ## Branch workflow
 

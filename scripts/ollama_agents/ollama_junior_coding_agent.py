@@ -60,7 +60,7 @@ def _claim_story(stories_dir: Path) -> Path | None:
     return None
 
 
-def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file: Path) -> str:
+def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
     done_path = story_path.with_name(story_path.name.replace(".working.md", ".done.md"))
     failed_path = story_path.with_name(story_path.name.replace(".working.md", ".failed.md"))
     story_number = story_path.name.split(".")[0]  # e.g. STORY-001
@@ -68,13 +68,12 @@ def _build_task(story_path: Path, workspace_dir: Path, claude_md: str, halt_file
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
         f"HALT file: {halt_file}\n\n"
-        f"## workspace/CLAUDE.md\n\n{claude_md}\n\n"
         "## Task\n"
-        f"1. Use `read_file` to read the story file at {story_path}.\n"
-        "2. Use `read_file` to read the design doc(s) from the story's **Design ref** field "
+        f"1. Use `read_file` to read `{workspace_dir}/CLAUDE.md` — note build/test/lint commands "
+        "and the Agent Exclusion List (never read from or write to those paths).\n"
+        f"2. Use `read_file` to read the story file at {story_path}.\n"
+        "3. Use `read_file` to read the design doc(s) from the story's **Design ref** field "
         "(two paths separated by ' | ' — read whichever exist).\n"
-        "3. Note the '## Agent Exclusion List' in CLAUDE.md above — never read from or "
-        "write to those paths.\n"
         f"4. Use the `bash` tool with shell command `git checkout -b story/{story_number}` "
         "to create and switch to the story branch.\n"
         "5. Implement the acceptance criteria using `write_file` (new files) and "
@@ -114,7 +113,6 @@ async def run(
 
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
 
-    claude_md = (workspace_dir / "CLAUDE.md").read_text()
     system_prompt = load_role("ollama_roles/ollama-junior-coding-agent")
     executor = ToolExecutor(workspace_dir)
     client = make_client(ollama_host)
@@ -138,7 +136,7 @@ async def run(
             continue
 
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.", flush=True)
-        task = _build_task(story_path, workspace_dir, claude_md, halt_file)
+        task = _build_task(story_path, workspace_dir, halt_file)
 
         messages: list[Message] = [Message(role="user", content=task)]
         await run_agent_loop(

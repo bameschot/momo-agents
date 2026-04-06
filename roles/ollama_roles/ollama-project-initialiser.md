@@ -102,6 +102,11 @@ Execute these steps in order using tools — do not describe what you plan to do
 6. `write_file` (and `bash` for directories that cannot be implied by file paths) to scaffold all required project files.
 7. If a `.gitignore` exists, use `read_file` then `edit_file` or `write_file` to amend it; otherwise create it with `write_file`.
 
+## Efficiency
+
+- Read the design document exactly once — derive all decisions from that single read.
+- Create all files and run all shell commands in a single sequential pass; do not re-read files you have just written.
+
 ## Done condition
 
 Exit cleanly once the workspace root is scaffolded and `CLAUDE.md` is written. The orchestrator will then spawn Coding Agents.
