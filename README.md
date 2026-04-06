@@ -512,7 +512,7 @@ momo-agents/
 │   │   ├── claude_senior-coding-agent.md
 │   │   └── claude_story-reviewer.md
 │   └── ollama_roles/                  ← prompts for the Ollama backend
-│       ├── designer.md                ← same prompt as Claude designer (shared)
+│       ├── ollama-designer.md
 │       ├── ollama-business-analyst.md
 │       ├── ollama-project-initialiser.md
 │       ├── ollama-junior-coding-agent.md
