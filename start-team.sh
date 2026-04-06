@@ -3,7 +3,13 @@
 # Agents self-coordinate via the filesystem; no window needs to wait for another.
 #
 # Usage: ./start-team.sh --workspace <path> [options]
-#        Options: [--agent-type claude|ollama]
+#        Options: [--agent-type claude|ollama]          (global default for all roles)
+#                 [--designer-agent-type claude|ollama]  (override for Designer)
+#                 [--ba-agent-type claude|ollama]        (override for Business Analyst)
+#                 [--pi-agent-type claude|ollama]        (override for Project Initialiser)
+#                 [--junior-agent-type claude|ollama]    (override for Junior Coding Agents)
+#                 [--senior-agent-type claude|ollama]    (override for Senior Coding Agents)
+#                 [--reviewer-agent-type claude|ollama]  (override for Story Reviewer)
 #                 [--junior-agents N] [--senior-agents N]
 #                 [--model-designer M] [--model-ba M] [--model-pi M]
 #                 [--model-junior M] [--model-senior M] [--model-reviewer M]
@@ -31,7 +37,15 @@ OLLAMA_HOST="http://localhost:11434"
 N_JUNIOR_AGENTS=2
 N_SENIOR_AGENTS=1
 
-# Model placeholders — finalised after arg parsing once AGENT_TYPE is known.
+# Per-role agent type overrides — empty means "inherit from AGENT_TYPE"
+AGENT_TYPE_DESIGNER=""
+AGENT_TYPE_BA=""
+AGENT_TYPE_PI=""
+AGENT_TYPE_JUNIOR=""
+AGENT_TYPE_SENIOR=""
+AGENT_TYPE_REVIEWER=""
+
+# Model placeholders — finalised after arg parsing once per-role agent types are known.
 MODEL_DESIGNER=""
 MODEL_BA=""
 MODEL_PI=""
@@ -45,79 +59,124 @@ MODEL_REVIEWER=""
 args=("$@")
 for ((i = 0; i < ${#args[@]}; i++)); do
     case "${args[$i]}" in
-        --workspace=*)      WORKSPACE_DIR="${args[$i]#*=}" ;;
-        --workspace)        WORKSPACE_DIR="${args[$((i + 1))]:-}" ;;
-        --agent-type=*)     AGENT_TYPE="${args[$i]#*=}" ;;
-        --agent-type)       AGENT_TYPE="${args[$((i + 1))]:-claude}" ;;
-        --ollama-host=*)    OLLAMA_HOST="${args[$i]#*=}" ;;
-        --ollama-host)      OLLAMA_HOST="${args[$((i + 1))]:-http://localhost:11434}" ;;
-        --junior-agents=*)  N_JUNIOR_AGENTS="${args[$i]#*=}" ;;
-        --junior-agents)    N_JUNIOR_AGENTS="${args[$((i + 1))]:-2}" ;;
-        --senior-agents=*)  N_SENIOR_AGENTS="${args[$i]#*=}" ;;
-        --senior-agents)    N_SENIOR_AGENTS="${args[$((i + 1))]:-1}" ;;
-        --model-designer=*) MODEL_DESIGNER="${args[$i]#*=}" ;;
-        --model-designer)   MODEL_DESIGNER="${args[$((i + 1))]:-}" ;;
-        --model-ba=*)       MODEL_BA="${args[$i]#*=}" ;;
-        --model-ba)         MODEL_BA="${args[$((i + 1))]:-}" ;;
-        --model-pi=*)       MODEL_PI="${args[$i]#*=}" ;;
-        --model-pi)         MODEL_PI="${args[$((i + 1))]:-}" ;;
-        --model-junior=*)   MODEL_JUNIOR="${args[$i]#*=}" ;;
-        --model-junior)     MODEL_JUNIOR="${args[$((i + 1))]:-}" ;;
-        --model-senior=*)   MODEL_SENIOR="${args[$i]#*=}" ;;
-        --model-senior)     MODEL_SENIOR="${args[$((i + 1))]:-}" ;;
-        --model-reviewer=*) MODEL_REVIEWER="${args[$i]#*=}" ;;
-        --model-reviewer)   MODEL_REVIEWER="${args[$((i + 1))]:-}" ;;
+        --workspace=*)              WORKSPACE_DIR="${args[$i]#*=}" ;;
+        --workspace)                WORKSPACE_DIR="${args[$((i + 1))]:-}" ;;
+        --agent-type=*)             AGENT_TYPE="${args[$i]#*=}" ;;
+        --agent-type)               AGENT_TYPE="${args[$((i + 1))]:-claude}" ;;
+        --designer-agent-type=*)    AGENT_TYPE_DESIGNER="${args[$i]#*=}" ;;
+        --designer-agent-type)      AGENT_TYPE_DESIGNER="${args[$((i + 1))]:-}" ;;
+        --ba-agent-type=*)          AGENT_TYPE_BA="${args[$i]#*=}" ;;
+        --ba-agent-type)            AGENT_TYPE_BA="${args[$((i + 1))]:-}" ;;
+        --pi-agent-type=*)          AGENT_TYPE_PI="${args[$i]#*=}" ;;
+        --pi-agent-type)            AGENT_TYPE_PI="${args[$((i + 1))]:-}" ;;
+        --junior-agent-type=*)      AGENT_TYPE_JUNIOR="${args[$i]#*=}" ;;
+        --junior-agent-type)        AGENT_TYPE_JUNIOR="${args[$((i + 1))]:-}" ;;
+        --senior-agent-type=*)      AGENT_TYPE_SENIOR="${args[$i]#*=}" ;;
+        --senior-agent-type)        AGENT_TYPE_SENIOR="${args[$((i + 1))]:-}" ;;
+        --reviewer-agent-type=*)    AGENT_TYPE_REVIEWER="${args[$i]#*=}" ;;
+        --reviewer-agent-type)      AGENT_TYPE_REVIEWER="${args[$((i + 1))]:-}" ;;
+        --ollama-host=*)            OLLAMA_HOST="${args[$i]#*=}" ;;
+        --ollama-host)              OLLAMA_HOST="${args[$((i + 1))]:-http://localhost:11434}" ;;
+        --junior-agents=*)          N_JUNIOR_AGENTS="${args[$i]#*=}" ;;
+        --junior-agents)            N_JUNIOR_AGENTS="${args[$((i + 1))]:-2}" ;;
+        --senior-agents=*)          N_SENIOR_AGENTS="${args[$i]#*=}" ;;
+        --senior-agents)            N_SENIOR_AGENTS="${args[$((i + 1))]:-1}" ;;
+        --model-designer=*)         MODEL_DESIGNER="${args[$i]#*=}" ;;
+        --model-designer)           MODEL_DESIGNER="${args[$((i + 1))]:-}" ;;
+        --model-ba=*)               MODEL_BA="${args[$i]#*=}" ;;
+        --model-ba)                 MODEL_BA="${args[$((i + 1))]:-}" ;;
+        --model-pi=*)               MODEL_PI="${args[$i]#*=}" ;;
+        --model-pi)                 MODEL_PI="${args[$((i + 1))]:-}" ;;
+        --model-junior=*)           MODEL_JUNIOR="${args[$i]#*=}" ;;
+        --model-junior)             MODEL_JUNIOR="${args[$((i + 1))]:-}" ;;
+        --model-senior=*)           MODEL_SENIOR="${args[$i]#*=}" ;;
+        --model-senior)             MODEL_SENIOR="${args[$((i + 1))]:-}" ;;
+        --model-reviewer=*)         MODEL_REVIEWER="${args[$i]#*=}" ;;
+        --model-reviewer)           MODEL_REVIEWER="${args[$((i + 1))]:-}" ;;
     esac
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Validate agent type and apply model defaults
+# Validate global agent type
 # ─────────────────────────────────────────────────────────────────────────────
-if [ "$AGENT_TYPE" = "claude" ]; then
-    _DEFAULT_MODEL="claude-sonnet-4-6"
-    _DEFAULT_JUNIOR_MODEL="claude-haiku-4-5-20251001"
-    _DEFAULT_SENIOR_MODEL="claude-sonnet-4-6"
-    _DEFAULT_PI_MODEL="claude-haiku-4-5-20251001"
-elif [ "$AGENT_TYPE" = "ollama" ]; then
-    _DEFAULT_MODEL="qwen3.5:4b"
-    _DEFAULT_JUNIOR_MODEL="qwen3.5:4b"
-    _DEFAULT_SENIOR_MODEL="qwen3.5:4b"
-    _DEFAULT_PI_MODEL="qwen3.5:4b"
-else
+if [ "$AGENT_TYPE" != "claude" ] && [ "$AGENT_TYPE" != "ollama" ]; then
     echo "Error: --agent-type must be 'claude' or 'ollama', got: '$AGENT_TYPE'" >&2
     exit 1
 fi
 
-MODEL_DESIGNER="${MODEL_DESIGNER:-$_DEFAULT_MODEL}"
-MODEL_BA="${MODEL_BA:-$_DEFAULT_MODEL}"
-MODEL_PI="${MODEL_PI:-$_DEFAULT_PI_MODEL}"
-MODEL_JUNIOR="${MODEL_JUNIOR:-$_DEFAULT_JUNIOR_MODEL}"
-MODEL_SENIOR="${MODEL_SENIOR:-$_DEFAULT_SENIOR_MODEL}"
-MODEL_REVIEWER="${MODEL_REVIEWER:-$_DEFAULT_MODEL}"
+# ─────────────────────────────────────────────────────────────────────────────
+# Resolve per-role agent types — default to global AGENT_TYPE when not set.
+# Validate each.
+# ─────────────────────────────────────────────────────────────────────────────
+AGENT_TYPE_DESIGNER="${AGENT_TYPE_DESIGNER:-$AGENT_TYPE}"
+AGENT_TYPE_BA="${AGENT_TYPE_BA:-$AGENT_TYPE}"
+AGENT_TYPE_PI="${AGENT_TYPE_PI:-$AGENT_TYPE}"
+AGENT_TYPE_JUNIOR="${AGENT_TYPE_JUNIOR:-$AGENT_TYPE}"
+AGENT_TYPE_SENIOR="${AGENT_TYPE_SENIOR:-$AGENT_TYPE}"
+AGENT_TYPE_REVIEWER="${AGENT_TYPE_REVIEWER:-$AGENT_TYPE}"
+
+for _role_var in AGENT_TYPE_DESIGNER AGENT_TYPE_BA AGENT_TYPE_PI AGENT_TYPE_JUNIOR AGENT_TYPE_SENIOR AGENT_TYPE_REVIEWER; do
+    _val="${!_role_var}"
+    if [ "$_val" != "claude" ] && [ "$_val" != "ollama" ]; then
+        echo "Error: --${_role_var/AGENT_TYPE_/} must be 'claude' or 'ollama', got: '$_val'" >&2
+        exit 1
+    fi
+done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-role model defaults — derived from each role's own agent type.
+# ─────────────────────────────────────────────────────────────────────────────
+_default_model() {
+    local agent_type="$1" role="$2"
+    if [ "$agent_type" = "claude" ]; then
+        case "$role" in
+            junior|pi) echo "claude-haiku-4-5-20251001" ;;
+            *)         echo "claude-sonnet-4-6" ;;
+        esac
+    else
+        echo "qwen3.5:4b"
+    fi
+}
+
+MODEL_DESIGNER="${MODEL_DESIGNER:-$(_default_model "$AGENT_TYPE_DESIGNER" designer)}"
+MODEL_BA="${MODEL_BA:-$(_default_model "$AGENT_TYPE_BA" ba)}"
+MODEL_PI="${MODEL_PI:-$(_default_model "$AGENT_TYPE_PI" pi)}"
+MODEL_JUNIOR="${MODEL_JUNIOR:-$(_default_model "$AGENT_TYPE_JUNIOR" junior)}"
+MODEL_SENIOR="${MODEL_SENIOR:-$(_default_model "$AGENT_TYPE_SENIOR" senior)}"
+MODEL_REVIEWER="${MODEL_REVIEWER:-$(_default_model "$AGENT_TYPE_REVIEWER" reviewer)}"
 
 if [ -z "$WORKSPACE_DIR" ]; then
     echo "Usage: $0 --workspace <path> [options]"
     echo ""
-    echo "  --workspace <path>      Path to the workspace directory (required)."
-    echo "                          Created automatically (with git init) if it does not exist."
+    echo "  --workspace <path>          Path to the workspace directory (required)."
+    echo "                              Created automatically (with git init) if it does not exist."
     echo ""
-    echo "  --agent-type TYPE       Agent backend: 'claude' (default) or 'ollama'."
-    echo "  --ollama-host URL       Ollama API base URL (default: http://localhost:11434)."
-    echo "                          Only used when --agent-type ollama."
+    echo "  --agent-type TYPE           Global agent backend: 'claude' (default) or 'ollama'."
+    echo "                              Applies to all roles unless overridden per role below."
+    echo "  --ollama-host URL           Ollama API base URL (default: http://localhost:11434)."
+    echo "                              Used by any role configured as ollama."
     echo ""
-    echo "  --junior-agents N       Junior Coding Agents to spawn — handle easy stories    (default: 2)"
-    echo "  --senior-agents N       Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
+    echo "  Per-role agent type overrides (each defaults to --agent-type):"
+    echo "  --designer-agent-type TYPE  Agent type for the Designer"
+    echo "  --ba-agent-type TYPE        Agent type for the Business Analyst"
+    echo "  --pi-agent-type TYPE        Agent type for the Project Initialiser"
+    echo "  --junior-agent-type TYPE    Agent type for Junior Coding Agents"
+    echo "  --senior-agent-type TYPE    Agent type for Senior Coding Agents"
+    echo "  --reviewer-agent-type TYPE  Agent type for the Story Reviewer"
     echo ""
-    echo "  --model-designer M      Model for Designer Agent"
-    echo "  --model-ba M            Model for Business Analyst"
-    echo "  --model-pi M            Model for Project Initialiser"
-    echo "  --model-junior M        Model for Junior Coding Agents"
-    echo "  --model-senior M        Model for Senior Coding Agents"
-    echo "  --model-reviewer M      Model for Story Reviewer"
+    echo "  --junior-agents N           Junior Coding Agents to spawn — handle easy stories    (default: 2)"
+    echo "  --senior-agents N           Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
     echo ""
-    echo "  claude defaults:  designer/ba/reviewer=$_DEFAULT_MODEL"
-    echo "                    junior=$_DEFAULT_JUNIOR_MODEL  senior=$_DEFAULT_SENIOR_MODEL  pi=$_DEFAULT_PI_MODEL"
-    echo "  ollama defaults:  all agents=qwen2.5-coder"
+    echo "  --model-designer M          Model for Designer Agent"
+    echo "  --model-ba M                Model for Business Analyst"
+    echo "  --model-pi M                Model for Project Initialiser"
+    echo "  --model-junior M            Model for Junior Coding Agents"
+    echo "  --model-senior M            Model for Senior Coding Agents"
+    echo "  --model-reviewer M          Model for Story Reviewer"
+    echo ""
+    echo "  claude defaults:  designer/ba/reviewer/senior=claude-sonnet-4-6"
+    echo "                    junior/pi=claude-haiku-4-5-20251001"
+    echo "  ollama defaults:  all roles=qwen3.5:4b"
     exit 1
 fi
 
@@ -279,6 +338,12 @@ WORKSPACE_DIR='$WORKSPACE_DIR'
 SENTINEL_DIR='$SENTINEL_DIR'
 PYTHON='$PYTHON'
 AGENT_TYPE='$AGENT_TYPE'
+AGENT_TYPE_DESIGNER='$AGENT_TYPE_DESIGNER'
+AGENT_TYPE_BA='$AGENT_TYPE_BA'
+AGENT_TYPE_PI='$AGENT_TYPE_PI'
+AGENT_TYPE_JUNIOR='$AGENT_TYPE_JUNIOR'
+AGENT_TYPE_SENIOR='$AGENT_TYPE_SENIOR'
+AGENT_TYPE_REVIEWER='$AGENT_TYPE_REVIEWER'
 OLLAMA_HOST='$OLLAMA_HOST'
 ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
 MODEL_DESIGNER='$MODEL_DESIGNER'
@@ -295,28 +360,34 @@ CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 WS_STATE="$(_workspace_initialized && echo "already initialised (PI will skip)" || echo "empty (PI will scaffold)")"
 
+# Helper: show role type only when it differs from the global agent type
+_role_type_note() {
+    local role_type="$1"
+    if [ "$role_type" != "$AGENT_TYPE" ]; then
+        echo " ($role_type)"
+    fi
+}
+
 echo "╔══════════════════════════════════════════════════╗"
 echo "║           momo-agents  ·  start-team             ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 echo "  Feature        : $FEATURE"
-echo "  Agent Type     : $AGENT_TYPE"
-if [ "$AGENT_TYPE" = "ollama" ]; then
-    echo "  Ollama Host    : $OLLAMA_HOST"
-fi
-echo "  Junior Agents  : $N_JUNIOR_AGENTS  (easy stories — $MODEL_JUNIOR)"
-echo "  Senior Agents  : $N_SENIOR_AGENTS  (medium + hard stories — $MODEL_SENIOR)"
+echo "  Agent Type     : $AGENT_TYPE  (global default)"
+echo "  Ollama Host    : $OLLAMA_HOST"
+echo "  Junior Agents  : $N_JUNIOR_AGENTS"
+echo "  Senior Agents  : $N_SENIOR_AGENTS"
 echo "  Python         : $PYTHON"
 echo "  Terminal       : $TERMINAL"
 echo "  Workspace      : $WS_STATE"
 echo ""
-echo "  Models:"
-echo "    Designer   : $MODEL_DESIGNER"
-echo "    BA         : $MODEL_BA"
-echo "    PI         : $MODEL_PI"
-echo "    Junior     : $MODEL_JUNIOR"
-echo "    Senior     : $MODEL_SENIOR"
-echo "    Reviewer   : $MODEL_REVIEWER"
+echo "  Roles:"
+echo "    Designer   : [$AGENT_TYPE_DESIGNER] $MODEL_DESIGNER"
+echo "    BA         : [$AGENT_TYPE_BA] $MODEL_BA"
+echo "    PI         : [$AGENT_TYPE_PI] $MODEL_PI"
+echo "    Junior     : [$AGENT_TYPE_JUNIOR] $MODEL_JUNIOR"
+echo "    Senior     : [$AGENT_TYPE_SENIOR] $MODEL_SENIOR"
+echo "    Reviewer   : [$AGENT_TYPE_REVIEWER] $MODEL_REVIEWER"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -338,12 +409,12 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║        Designer Agent            ║"
 echo "╚══════════════════════════════════╝"
-echo "  Mode  : ${AGENT_TYPE}"
+echo "  Mode  : ${AGENT_TYPE_DESIGNER}"
 echo "  Model : ${MODEL_DESIGNER}"
 echo ""
 echo "Ask clarifying questions then type 'write' to produce the design file."
 echo ""
-if [ "$AGENT_TYPE" = "ollama" ]; then
+if [ "$AGENT_TYPE_DESIGNER" = "ollama" ]; then
     "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_designer_agent.py" \
         --model "${MODEL_DESIGNER}" \
         --ollama-host "${OLLAMA_HOST}" \
@@ -379,7 +450,7 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║      Business Analyst Agent      ║"
 echo "╚══════════════════════════════════╝"
-echo "  Mode  : ${AGENT_TYPE}"
+echo "  Mode  : ${AGENT_TYPE_BA}"
 echo "  Model : ${MODEL_BA}"
 echo ""
 echo "Watching ${DESIGN_DIR}/ for *.new.md files..."
@@ -398,7 +469,7 @@ while true; do
 
         echo "[Business Analyst] New design: ${feature} — decomposing into stories..."
         echo ""
-        if [ "$AGENT_TYPE" = "ollama" ]; then
+        if [ "$AGENT_TYPE_BA" = "ollama" ]; then
             "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_business_analyst_agent.py" \
                 --design "$design_file" \
                 --stories-dir "${STORIES_DIR}" \
@@ -445,7 +516,7 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║    Project Initialiser Agent     ║"
 echo "╚══════════════════════════════════╝"
-echo "  Mode  : ${AGENT_TYPE}"
+echo "  Mode  : ${AGENT_TYPE_PI}"
 echo "  Model : ${MODEL_PI}"
 echo ""
 
@@ -478,7 +549,7 @@ done
 echo "Design file found: ${design_file}"
 echo "Scaffolding workspace..."
 echo ""
-if [ "$AGENT_TYPE" = "ollama" ]; then
+if [ "$AGENT_TYPE_PI" = "ollama" ]; then
     "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_project_initialiser_agent.py" \
         --design "${design_file}" \
         --workspace-dir "${WORKSPACE_DIR}" \
@@ -516,7 +587,7 @@ printf "\033]0;Junior Coding Agent ${AGENT_ID} [easy]\007"
 echo "╔══════════════════════════════════╗"
 echo "║   Junior Coding Agent ${AGENT_ID} [easy]  ║"
 echo "╚══════════════════════════════════╝"
-echo "  Mode  : ${AGENT_TYPE}"
+echo "  Mode  : ${AGENT_TYPE_JUNIOR}"
 echo "  Model : ${MODEL_JUNIOR}"
 echo ""
 echo "Handles: easy stories"
@@ -534,7 +605,7 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    if [ "$AGENT_TYPE" = "ollama" ]; then
+    if [ "$AGENT_TYPE_JUNIOR" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_junior_coding_agent.py" \
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
@@ -611,7 +682,7 @@ printf "\033]0;Senior Coding Agent ${AGENT_ID} [medium/hard]\007"
 echo "╔══════════════════════════════════════╗"
 echo "║  Senior Coding Agent ${AGENT_ID} [medium/hard]  ║"
 echo "╚══════════════════════════════════════╝"
-echo "  Mode  : ${AGENT_TYPE}"
+echo "  Mode  : ${AGENT_TYPE_SENIOR}"
 echo "  Model : ${MODEL_SENIOR}"
 echo ""
 echo "Handles: medium and hard stories"
@@ -629,7 +700,7 @@ echo "Prerequisites ready — starting agent loop."
 echo ""
 
 while true; do
-    if [ "$AGENT_TYPE" = "ollama" ]; then
+    if [ "$AGENT_TYPE_SENIOR" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_senior_coding_agent.py" \
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
@@ -740,7 +811,7 @@ source "${SCRIPT_DIR}/.venv/bin/activate"
 echo "╔══════════════════════════════════╗"
 echo "║       Story Reviewer Agent       ║"
 echo "╚══════════════════════════════════╝"
-echo "  Mode  : ${AGENT_TYPE}"
+echo "  Mode  : ${AGENT_TYPE_REVIEWER}"
 echo "  Model : ${MODEL_REVIEWER}"
 echo ""
 echo "Watching for HALT file..."
@@ -759,7 +830,7 @@ while true; do
 
     echo "[Story Reviewer] HALT detected — starting review session..."
     echo ""
-    if [ "$AGENT_TYPE" = "ollama" ]; then
+    if [ "$AGENT_TYPE_REVIEWER" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_story_reviewer_agent.py" \
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_REVIEWER}" \

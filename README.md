@@ -1,6 +1,6 @@
 # momo-agents
 
-A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline).
+A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline). Backends can be mixed freely: each agent role (Designer, Business Analyst, Project Initialiser, Junior Coder, Senior Coder, Reviewer) can be independently configured as either Claude or Ollama, letting you balance cost, speed, and capability per role.
 
 ---
 
@@ -52,8 +52,14 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | Flag | Description | Default |
 |---|---|---|
 | `--workspace <path>` | Path to the workspace directory (required) | — |
-| `--agent-type TYPE` | AI backend: `claude` or `ollama` | `claude` |
-| `--ollama-host URL` | Ollama API base URL (Ollama mode only) | `http://localhost:11434` |
+| `--agent-type TYPE` | Global AI backend for all roles: `claude` or `ollama` | `claude` |
+| `--designer-agent-type TYPE` | Backend override for the Designer | inherits `--agent-type` |
+| `--ba-agent-type TYPE` | Backend override for the Business Analyst | inherits `--agent-type` |
+| `--pi-agent-type TYPE` | Backend override for the Project Initialiser | inherits `--agent-type` |
+| `--junior-agent-type TYPE` | Backend override for Junior Coding Agents | inherits `--agent-type` |
+| `--senior-agent-type TYPE` | Backend override for Senior Coding Agents | inherits `--agent-type` |
+| `--reviewer-agent-type TYPE` | Backend override for the Story Reviewer | inherits `--agent-type` |
+| `--ollama-host URL` | Ollama API base URL (used by any role configured as ollama) | `http://localhost:11434` |
 | `--junior-agents N` | Number of parallel Junior Coding Agents (easy stories) | `2` |
 | `--senior-agents N` | Number of parallel Senior Coding Agents (medium/hard stories) | `1` |
 | `--model-designer M` | Model for the Designer | see defaults below |
@@ -63,16 +69,16 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--model-senior M` | Model for Senior Coding Agents | see defaults below |
 | `--model-reviewer M` | Model for the Story Reviewer | see defaults below |
 
-**Model defaults:**
+**Model defaults** (each role uses the default for its own configured backend):
 
-| Agent | `--agent-type claude` | `--agent-type ollama` |
+| Agent | claude default | ollama default |
 |---|---|---|
-| Designer | `claude-sonnet-4-6` | `qwen3.5:9b` |
-| Business Analyst | `claude-sonnet-4-6` | `qwen3.5:9b` |
-| Project Initialiser | `claude-haiku-4-5-20251001` | `qwen3.5:9b` |
-| Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:9b` |
-| Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:9b` |
-| Story Reviewer | `claude-sonnet-4-6` | `qwen3.5:9b` |
+| Designer | `claude-sonnet-4-6` | `qwen3.5:4b` |
+| Business Analyst | `claude-sonnet-4-6` | `qwen3.5:4b` |
+| Project Initialiser | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
+| Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
+| Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
+| Story Reviewer | `claude-sonnet-4-6` | `qwen3.5:4b` |
 
 **Agent windows opened:**
 
@@ -118,6 +124,40 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 
 # Use a different model for design only (Claude)
 ./start-team.sh --workspace /path/to/my-project --model-designer claude-opus-4-6
+```
+
+### Hybrid mode — mixing Claude and Ollama per role
+
+Each agent role can be configured independently as either `claude` or `ollama`. Use `--agent-type` to set the global default and then override individual roles with the per-role flags. This lets you use cloud models where quality matters most and local models where speed or cost is the priority.
+
+Per-role flags: `--designer-agent-type`, `--ba-agent-type`, `--pi-agent-type`, `--junior-agent-type`, `--senior-agent-type`, `--reviewer-agent-type`. Each accepts `claude` or `ollama` and defaults to `--agent-type` when not set.
+
+Each role's model default is derived from its own configured backend, so you only need to pass `--model-<role>` when you want to override the default for that backend.
+
+```bash
+# Claude for design and planning; Ollama for the high-volume coding work
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type claude \
+  --junior-agent-type ollama  --model-junior qwen3.5:9b \
+  --senior-agent-type ollama  --model-senior qwen2.5-coder:14b
+
+# Fully local except for the Senior Coding Agent (most complex stories)
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --senior-agent-type claude
+
+# Claude for interactive/creative roles; Ollama for mechanical decomposition
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type claude \
+  --ba-agent-type ollama  --model-ba qwen2.5:7b \
+  --pi-agent-type ollama  --model-pi qwen3.5:9b
+
+# All Ollama with a stronger model for senior stories, Claude only for review
+./start-team.sh --workspace /path/to/my-project \
+  --agent-type ollama \
+  --model-junior qwen3.5:9b \
+  --model-senior qwen2.5-coder:14b \
+  --reviewer-agent-type claude
 ```
 
 ### Monitor progress
