@@ -11,7 +11,7 @@ import anyio
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
-from conversation_logger import ConversationLogger
+from conversation_logger import log_claude_message
 from token_logger import log_usage, print_message
 
 POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
@@ -100,7 +100,7 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
 
 async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
-    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
+
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
@@ -136,7 +136,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir
         async for message in query(prompt=task, options=options):
             log_usage(token_log, "senior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
             print_message(message)
-            conv_logger.log_claude_message(message, story_context)
+            log_claude_message(conv_log_dir, agent_name, message, story_context)
 
         stem = story_path.name.replace(".working.md", "")
         done_path = story_path.with_name(stem + ".done.md")

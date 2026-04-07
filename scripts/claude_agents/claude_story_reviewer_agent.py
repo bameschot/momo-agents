@@ -11,7 +11,7 @@ import anyio
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, load_role, resolve_path
-from conversation_logger import ConversationLogger
+from conversation_logger import log_claude_message
 from token_logger import log_usage, print_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -43,7 +43,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 async def run(stories_dir: Path, model: str, token_log: Path | None, conv_log_dir: Path | None) -> None:
-    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, "story-reviewer")
+
     halt_file = stories_dir / "HALT"
     # Glob matches STORY-NNN.[complexity].failed.md
     failed_stories = sorted(stories_dir.glob("STORY-*.failed.md"))
@@ -97,7 +97,7 @@ async def run(stories_dir: Path, model: str, token_log: Path | None, conv_log_di
     async for message in query(prompt=task, options=options):
         log_usage(token_log, "reviewer", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
         print_message(message)
-        conv_logger.log_claude_message(message, "review")
+        log_claude_message(conv_log_dir, "story-reviewer", message, "review")
 
     if halt_file.exists():
         print(

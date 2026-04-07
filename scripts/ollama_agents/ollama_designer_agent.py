@@ -11,7 +11,6 @@ import anyio
 from ollama import Message
 
 from agent_utilities import append_run_log, load_role, resolve_path
-from conversation_logger import ConversationLogger
 from ollama_utilities import (
     DEFAULT_MODEL,
     DESIGNER_TOOLS,
@@ -65,7 +64,7 @@ async def run(
     conv_log_dir: Path | None,
 ) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
-    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
+
     design_dir = workspace_dir / "design"
     design_dir.mkdir(parents=True, exist_ok=True)
 
@@ -86,7 +85,7 @@ async def run(
         token_log=token_log,
         system_prompt=load_role("ollama_roles/ollama-designer"),
         exit_phrases=("exit", "quit", "bye", "done"),
-        conv_logger=conv_logger,
+        conv_log_dir=conv_log_dir,
         context="design",
     )
 
