@@ -18,6 +18,10 @@ momo-agents/
 ├── README.md               # Project overview
 ├── LICENSE                 # MIT License
 ├── pyproject.toml          # Project metadata and dependencies
+├── requirements.txt        # Pip-compatible dependency list (mirrors pyproject.toml extras)
+├── bundle-workspace.py     # Packages a project workspace into a named zip file
+├── git_log_exporter.py     # Exports git commit metadata to JSONL format
+├── run_report.py           # Generates a pipeline run report from run-log.jsonl and token logs
 ├── scripts/                # Python agent and utility implementations
 │   ├── agent_utilities.py          # Shared helpers (path resolution, run-log, workspace wait)
 │   ├── token_logger.py             # Shared JSONL token-usage logger and console printer
@@ -46,12 +50,13 @@ momo-agents/
 │   │   ├── claude_senior-coding-agent.md
 │   │   └── claude_story-reviewer.md
 │   └── ollama_roles/                    # Prompts for the Ollama backend (tool-aware variants)
-│       ├── designer.md                  # Same prompt as Claude designer (shared)
+│       ├── ollama-designer.md
 │       ├── ollama-business-analyst.md
 │       ├── ollama-project-initialiser.md
 │       ├── ollama-junior-coding-agent.md
 │       ├── ollama-senior-coding-agent.md
 │       └── ollama-story-reviewer.md
+├── generated-test-applications/  # Sample outputs from pipeline test runs
 ├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
 │   ├── design/             # Designer Agent outputs (<feature>.new.md / <feature>.processed.md)
