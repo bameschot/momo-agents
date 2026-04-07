@@ -1,15 +1,15 @@
 """
 run_report.py — Pipeline Run Report Generator
 
-Reads the pipeline run log (run-log.jsonl) and per-agent token usage logs
-(*.jsonl files in a tokens directory), then produces a self-contained
-single-page HTML report with:
+Reads the pipeline run log (run-log.jsonl) and per-agent conversation logs
+(*_log.jsonl files in the agent_conversation_logs directory), then produces
+a self-contained single-page HTML report with:
   - Run Log section: timestamped entries from each agent
   - Token Usage section: per-agent token counts, cost, and an interactive
     Chart.js timeline
 
 Usage:
-    python run_report.py [--run-log <path>] [--tokens-log-dir <path>] [--output-dir <path>]
+    python run_report.py [--run-log <path>] [--conv-log-dir <path>] [--output-dir <path>]
 
 Output:
     <output-dir>/run-report_YYYY-MM-DD_HH-MM-SS.html
@@ -41,11 +41,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to the run-log.jsonl file (default: workspace/.sentinels/run-log.jsonl).",
     )
     parser.add_argument(
-        "--tokens-log-dir",
-        default=str(Path(__file__).parent / "workspace" / ".sentinels" / "tokens"),
+        "--conv-log-dir",
+        default=str(Path(__file__).parent / "workspace" / ".sentinels" / "agent_conversation_logs"),
         metavar="PATH",
-        help="Path to directory containing *.jsonl token log files "
-             "(default: workspace/.sentinels/tokens).",
+        help="Path to directory containing *_log.jsonl conversation log files "
+             "(default: workspace/.sentinels/agent_conversation_logs).",
     )
     parser.add_argument(
         "--output-dir",
@@ -111,33 +111,85 @@ def load_git_log(git_log_path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# 5. Token Data Loader
+# 5. Conversation Log Loaders
 # ---------------------------------------------------------------------------
 
-def load_token_records(tokens_log_dir: Path) -> list[dict]:
-    """Walk tokens_log_dir and return a flat list of token usage records.
+def load_conversation_entries(conv_log_dir: Path) -> list[dict]:
+    """Load every raw entry from *_log.jsonl files, sorted chronologically.
 
-    Returns an empty list (rather than exiting) so the report can still be
-    generated even when no token logs exist yet.
+    Used to render the Conversation History section.  Returns an empty list
+    when the directory does not exist.
     """
-    if not tokens_log_dir.exists():
+    if not conv_log_dir.exists():
         return []
-    records = []
-    for jsonl_file in sorted(tokens_log_dir.glob("*.jsonl")):
-        agent_name = jsonl_file.stem
+    entries = []
+    for jsonl_file in sorted(conv_log_dir.glob("*_log.jsonl")):
         with open(jsonl_file, encoding="utf-8") as f:
             for line in f:
                 if not line.strip():
                     continue
                 try:
-                    record = json.loads(line)
-                    record["agent"] = agent_name
-                    records.append(record)
+                    entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     print(
                         f"Warning: skipping unparseable line in {jsonl_file.name}: {line.rstrip()}",
                         file=sys.stderr,
                     )
+    entries.sort(key=lambda e: e.get("ts", ""))
+    return entries
+
+
+def load_conversation_records(conv_log_dir: Path) -> list[dict]:
+    """Walk conv_log_dir and return token usage records derived from conversation logs.
+
+    Reads *_log.jsonl files written by conversation_logger.py.  Only
+    ``assistant`` and ``result`` role entries carry token data:
+
+    - ``assistant`` entries contribute per-message token counts; cost_usd is 0.
+    - ``result`` entries contribute the session-total cost_usd; token counts
+      are zeroed to avoid double-counting with the per-message assistant entries.
+
+    Returns an empty list (rather than exiting) so the report can still be
+    generated even when no conversation logs exist yet.
+    """
+    if not conv_log_dir.exists():
+        return []
+    records = []
+    for jsonl_file in sorted(conv_log_dir.glob("*_log.jsonl")):
+        with open(jsonl_file, encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    print(
+                        f"Warning: skipping unparseable line in {jsonl_file.name}: {line.rstrip()}",
+                        file=sys.stderr,
+                    )
+                    continue
+
+                role = entry.get("role")
+                if role == "assistant":
+                    records.append({
+                        "ts": entry["ts"],
+                        "agent": entry["agent"],
+                        "input_tokens": entry.get("input_tokens", 0),
+                        "output_tokens": entry.get("output_tokens", 0),
+                        "cache_read_tokens": entry.get("cache_read_tokens", 0),
+                        "cache_write_tokens": entry.get("cache_write_tokens", 0),
+                        "cost_usd": 0.0,
+                    })
+                elif role == "result":
+                    records.append({
+                        "ts": entry["ts"],
+                        "agent": entry["agent"],
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "cache_read_tokens": 0,
+                        "cache_write_tokens": 0,
+                        "cost_usd": entry.get("cost_usd", 0.0),
+                    })
     return records
 
 
@@ -219,6 +271,143 @@ def fetch_chartjs(cache_dir: Path) -> str:
 # ---------------------------------------------------------------------------
 # 6. HTML Builder
 # ---------------------------------------------------------------------------
+
+_MAX_CONTENT_CHARS = 500
+
+
+def _esc(text: str) -> str:
+    """Minimal HTML escaping for safe inline insertion."""
+    return (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+    )
+
+
+def _truncate(text: str, limit: int = _MAX_CONTENT_CHARS) -> str:
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def _render_content_html(entry: dict) -> str:
+    """Return an HTML fragment summarising the content of one conversation entry."""
+    role = entry.get("role", "")
+    content = entry.get("content", "")
+
+    if role == "system":
+        return f"<em>subtype: {_esc(str(entry.get('subtype', '')))}</em>"
+
+    if role == "result":
+        stop = _esc(str(entry.get("stop_reason", "")))
+        turns = entry.get("num_turns", "")
+        cost = entry.get("cost_usd", 0.0)
+        return f"<em>stop={stop} &nbsp; turns={turns} &nbsp; cost=${cost:.6f}</em>"
+
+    if role == "assistant":
+        parts: list[str] = []
+        if isinstance(content, list):
+            for block in content:
+                btype = block.get("type", "")
+                if btype == "text":
+                    parts.append(_esc(_truncate(block.get("text", ""))))
+                elif btype == "tool_use":
+                    inp_str = _truncate(json.dumps(block.get("input", {}), ensure_ascii=False), 200)
+                    parts.append(f"<code>[tool:{_esc(block.get('name', ''))}] {_esc(inp_str)}</code>")
+                elif btype == "tool_result":
+                    status = "error" if block.get("is_error") else "ok"
+                    res = _truncate(str(block.get("content", "")), 200)
+                    parts.append(f"<code>[result:{status}] {_esc(res)}</code>")
+                elif btype == "thinking":
+                    parts.append(f"<em>[thinking] {_esc(_truncate(block.get('thinking', ''), 200))}</em>")
+        elif isinstance(content, str):
+            parts.append(_esc(_truncate(content)))
+        return "<br>".join(parts) if parts else "<em>(empty)</em>"
+
+    if role == "user":
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if block.get("type") == "tool_result":
+                    status = "error" if block.get("is_error") else "ok"
+                    res = _truncate(str(block.get("content", "")), 200)
+                    parts.append(f"<code>[result:{status}] {_esc(res)}</code>")
+            return "<br>".join(parts) if parts else "<em>(empty)</em>"
+        return _esc(_truncate(str(content)))
+
+    # Ollama assistant messages or any other role — best-effort
+    if isinstance(content, str):
+        rendered = _esc(_truncate(content))
+    else:
+        rendered = _esc(_truncate(json.dumps(content, ensure_ascii=False)))
+    tool_calls = entry.get("tool_calls")
+    if tool_calls:
+        tc_parts = []
+        for tc in tool_calls:
+            args_str = _truncate(json.dumps(tc.get("arguments", {}), ensure_ascii=False), 200)
+            tc_parts.append(f"<code>[tool:{_esc(tc.get('name', ''))}] {_esc(args_str)}</code>")
+        rendered = (rendered + "<br>" if rendered else "") + "<br>".join(tc_parts)
+    return rendered or "<em>(empty)</em>"
+
+
+def _build_conversation_history_html(entries: list[dict]) -> str:
+    """Build one collapsible <details> block per agent, collapsed by default."""
+    if not entries:
+        return "  <p><em>No conversation log entries recorded.</em></p>\n"
+
+    # Group entries by agent, preserving the global chronological order within each group.
+    agent_entries: dict[str, list[dict]] = defaultdict(list)
+    for entry in entries:
+        agent_entries[entry.get("agent", "unknown")].append(entry)
+
+    html_parts: list[str] = []
+    for agent in sorted(agent_entries.keys()):
+        agent_list = agent_entries[agent]
+        count = len(agent_list)
+        rows: list[str] = []
+        for entry in agent_list:
+            ts = _esc(entry.get("ts", ""))
+            context = _esc(entry.get("context", ""))
+            role = entry.get("role", "")
+            in_tok = entry.get("input_tokens", 0)
+            out_tok = entry.get("output_tokens", 0)
+            tok_str = f"in={in_tok:,} out={out_tok:,}" if (in_tok or out_tok) else ""
+            rows.append(
+                f"      <tr>"
+                f'<td class="ts-col">{ts}</td>'
+                f'<td class="ctx-col">{context}</td>'
+                f'<td class="role-col role-{_esc(role)}"><code>{_esc(role)}</code></td>'
+                f'<td class="content-col">{_render_content_html(entry)}</td>'
+                f'<td class="tok-col">{tok_str}</td>'
+                f"</tr>"
+            )
+        table = (
+            "    <table>\n"
+            "      <thead>\n"
+            "        <tr>"
+            "<th>Timestamp</th>"
+            "<th>Context</th>"
+            "<th>Role</th>"
+            "<th>Content</th>"
+            "<th>Tokens</th>"
+            "</tr>\n"
+            "      </thead>\n"
+            "      <tbody>\n"
+            + "\n".join(rows) + "\n"
+            "      </tbody>\n"
+            "    </table>\n"
+        )
+        html_parts.append(
+            f"  <details>\n"
+            f"    <summary>"
+            f"<strong>{_esc(agent)}</strong>"
+            f' <span class="entry-count">({count} entries)</span>'
+            f"</summary>\n"
+            + table
+            + "  </details>\n"
+        )
+
+    return "\n".join(html_parts) + "\n"
+
 
 def _build_run_log_html(entries: list[dict]) -> str:
     if not entries:
@@ -436,10 +625,17 @@ const RAW_DATA = """ + raw_data_json + """;
 """
 
 
-def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str, git_log_entries: list[dict] | None = None) -> str:
+def build_html(
+    run_log_entries: list[dict],
+    agg: dict,
+    chartjs_src: str,
+    git_log_entries: list[dict] | None = None,
+    conv_entries: list[dict] | None = None,
+) -> str:
     run_log_html = _build_run_log_html(run_log_entries)
     git_log_html = _build_git_log_html(git_log_entries or [])
     token_table_html = _build_token_html(agg)
+    conv_history_html = _build_conversation_history_html(conv_entries or [])
     has_chart_data = bool(agg["agent_totals"])
 
     chart_section = ""
@@ -478,6 +674,24 @@ def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str, git_log
         "    tfoot { font-weight: bold; background-color: #e8e8e8; }\n"
         "    #chart-container { margin-top: 2rem; }\n"
         "    #controls { margin-bottom: 1rem; }\n"
+        "    details { margin-bottom: 0.75rem; border: 1px solid #ddd; border-radius: 4px; }\n"
+        "    details > summary { cursor: pointer; padding: 0.5rem 0.75rem; background: #f7f7f7;\n"
+        "                        border-radius: 4px; user-select: none; list-style: none; }\n"
+        "    details > summary::-webkit-details-marker { display: none; }\n"
+        "    details > summary::before { content: '▶\\00a0'; font-size: 0.75em; }\n"
+        "    details[open] > summary::before { content: '▼\\00a0'; }\n"
+        "    details > table { border-radius: 0 0 4px 4px; border-top: none; }\n"
+        "    .entry-count { font-weight: normal; color: #666; font-size: 0.9em; }\n"
+        "    .ts-col  { white-space: nowrap; font-size: 0.85em; text-align: left; }\n"
+        "    .ctx-col { white-space: nowrap; font-size: 0.85em; text-align: left; }\n"
+        "    .role-col { white-space: nowrap; text-align: left; }\n"
+        "    .content-col { text-align: left; word-break: break-word; max-width: 55vw; }\n"
+        "    .tok-col { white-space: nowrap; font-size: 0.85em; }\n"
+        "    .role-assistant code { color: #1a5276; }\n"
+        "    .role-user     code { color: #145a32; }\n"
+        "    .role-system   code { color: #7d6608; }\n"
+        "    .role-result   code { color: #6e2f8a; }\n"
+        "    .role-tool     code { color: #784212; }\n"
         "  </style>\n"
         "</head>\n"
         "<body>\n"
@@ -489,6 +703,8 @@ def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str, git_log
         + "  <h2>Token Usage</h2>\n"
         + token_table_html
         + chart_section
+        + "  <h2>Conversation History</h2>\n"
+        + conv_history_html
         + chart_script
         + "</body>\n"
         "</html>\n"
@@ -502,16 +718,17 @@ def build_html(run_log_entries: list[dict], agg: dict, chartjs_src: str, git_log
 def main() -> None:
     args = parse_args()
     run_log_path = Path(args.run_log)
-    tokens_log_dir = Path(args.tokens_log_dir)
+    conv_log_dir = Path(args.conv_log_dir)
     output_dir = Path(args.output_dir)
     git_log_path = Path(args.git_log)
 
     run_log_entries = load_run_log(run_log_path)
-    token_records = load_token_records(tokens_log_dir)
+    conv_entries = load_conversation_entries(conv_log_dir)
+    token_records = load_conversation_records(conv_log_dir)
     git_log_entries = load_git_log(git_log_path)
 
-    if not run_log_entries and not token_records:
-        print("Error: no run log entries and no token records found.", file=sys.stderr)
+    if not run_log_entries and not token_records and not conv_entries:
+        print("Error: no run log entries and no conversation log records found.", file=sys.stderr)
         sys.exit(1)
 
     agg = aggregate(token_records)
@@ -519,7 +736,7 @@ def main() -> None:
     cache_dir = Path(__file__).parent / ".chartjs_cache"
     chartjs_src = fetch_chartjs(cache_dir)
 
-    html = build_html(run_log_entries, agg, chartjs_src, git_log_entries)
+    html = build_html(run_log_entries, agg, chartjs_src, git_log_entries, conv_entries)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")

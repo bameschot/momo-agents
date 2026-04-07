@@ -1034,7 +1034,7 @@ _teardown() {
     echo "  Generating run report..."
     report_path=$("$PYTHON" "$SCRIPT_DIR/run_report.py" \
         --run-log "$SENTINEL_DIR/run-log.jsonl" \
-        --tokens-log-dir "$SENTINEL_DIR/tokens" \
+        --conv-log-dir "$SENTINEL_DIR/agent_conversation_logs" \
         --git-log "$SENTINEL_DIR/git_log.jsonl" \
         --output-dir "$WORKSPACE_DIR" 2>/dev/null) && \
         echo "  Run report written → $report_path" || \
