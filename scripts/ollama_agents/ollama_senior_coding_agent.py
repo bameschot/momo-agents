@@ -11,6 +11,7 @@ import anyio
 from ollama import Message
 
 from agent_utilities import append_run_log, load_role, resolve_path, wait_for_workspace
+from conversation_logger import ConversationLogger
 from ollama_utilities import (
     CODING_TOOLS,
     DEFAULT_MODEL,
@@ -109,8 +110,10 @@ async def run(
     tokens_log_dir: Path | None,
     run_log: Path | None,
     agent_name: str,
+    conv_log_dir: Path | None,
 ) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
+    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
@@ -140,6 +143,7 @@ async def run(
 
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.", flush=True)
         task = _build_task(story_path, workspace_dir, halt_file)
+        story_context = story_path.stem.split(".")[0]  # e.g. STORY-001
 
         messages: list[Message] = [Message(role="user", content=task)]
         await run_agent_loop(
@@ -151,6 +155,8 @@ async def run(
             agent_name=agent_name,
             token_log=token_log,
             system_prompt=system_prompt,
+            conv_logger=conv_logger,
+            context=story_context,
         )
 
         stem = story_path.name.replace(".working.md", "")
@@ -168,6 +174,7 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
+    conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
     anyio.run(
         run,
         stories_dir,
@@ -177,4 +184,5 @@ if __name__ == "__main__":
         tokens_log_dir,
         run_log,
         args.agent_name,
+        conv_log_dir,
     )

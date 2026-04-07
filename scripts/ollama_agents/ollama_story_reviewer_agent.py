@@ -11,6 +11,7 @@ import anyio
 from ollama import Message
 
 from agent_utilities import PROJECT_ROOT, load_role, resolve_path
+from conversation_logger import ConversationLogger
 from ollama_utilities import (
     DEFAULT_MODEL,
     REVIEWER_TOOLS,
@@ -74,8 +75,10 @@ async def run(
     ollama_host: str,
     tokens_log_dir: Path | None,
     agent_name: str,
+    conv_log_dir: Path | None,
 ) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
+    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
     halt_file = stories_dir / "HALT"
     failed_stories = sorted(stories_dir.glob("STORY-*.failed.md"))
 
@@ -108,6 +111,8 @@ async def run(
         token_log=token_log,
         max_turns=500,
         system_prompt=load_role("ollama_roles/ollama-story-reviewer"),
+        conv_logger=conv_logger,
+        context="review",
     )
 
     if halt_file.exists():
@@ -122,6 +127,7 @@ if __name__ == "__main__":
     args = _parse_args()
     stories_dir = resolve_path(args.stories_dir)
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
+    conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
     anyio.run(
         run,
         stories_dir,
@@ -129,4 +135,5 @@ if __name__ == "__main__":
         args.ollama_host,
         tokens_log_dir,
         args.agent_name,
+        conv_log_dir,
     )

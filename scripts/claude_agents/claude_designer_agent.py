@@ -17,6 +17,7 @@ from claude_agent_sdk import (
 )
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path
+from conversation_logger import ConversationLogger
 from token_logger import log_usage
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -49,6 +50,11 @@ def _parse_args() -> argparse.Namespace:
         default="designer",
         help="Name used to identify this agent in logs (default: designer)",
     )
+    parser.add_argument(
+        "--conv-log-dir",
+        default="",
+        help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
+    )
     return parser.parse_args()
 
 
@@ -69,7 +75,11 @@ def _initial_prompt(design_dir: Path) -> str:
     )
 
 
-async def _stream_response(client: ClaudeSDKClient) -> tuple[str | None, dict | None]:
+async def _stream_response(
+    client: ClaudeSDKClient,
+    conv_logger: ConversationLogger,
+    context: str,
+) -> tuple[str | None, dict | None]:
     """Stream and print the agent's response. Returns (stop_reason, usage)."""
     stop_reason = None
     usage = None
@@ -81,11 +91,13 @@ async def _stream_response(client: ClaudeSDKClient) -> tuple[str | None, dict | 
         elif isinstance(message, ResultMessage):
             stop_reason = message.stop_reason
             usage = message.usage
+        conv_logger.log_claude_message(message, context)
     return stop_reason, usage
 
 
-async def run(workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str) -> None:
+async def run(workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
+    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
     design_dir = workspace_dir / "design"
     design_dir.mkdir(parents=True, exist_ok=True)
 
@@ -101,7 +113,7 @@ async def run(workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_
     async with ClaudeSDKClient(options=options) as client:
         # Initial greeting turn
         await client.query(_initial_prompt(design_dir))
-        _, usage = await _stream_response(client)
+        _, usage = await _stream_response(client, conv_logger, "design")
         log_usage(token_log, "designer", usage)
         print()  # newline after agent response
 
@@ -122,7 +134,7 @@ async def run(workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_
 
             before = set(design_dir.glob("*.new.md"))
             await client.query(user_input)
-            stop_reason, usage = await _stream_response(client)
+            stop_reason, usage = await _stream_response(client, conv_logger, "design")
             log_usage(token_log, "designer", usage)
             print()
 
@@ -140,4 +152,5 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name)
+    conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
+    anyio.run(run, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name, conv_log_dir)

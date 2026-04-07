@@ -22,11 +22,14 @@ import json
 import os
 import re
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ollama import AsyncClient, Message
 
 from token_logger import log_usage
+
+if TYPE_CHECKING:
+    from conversation_logger import ConversationLogger
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -502,6 +505,8 @@ async def run_agent_loop(
     token_log: Path | None,
     max_turns: int = MAX_TURNS,
     system_prompt: str = "",
+    conv_logger: "ConversationLogger | None" = None,
+    context: str = "",
 ) -> None:
     """Drive a task-oriented agentic loop.
 
@@ -527,6 +532,8 @@ async def run_agent_loop(
             options={"num_ctx": 32768},
         )
         _log_response_usage(response, agent_name, token_log)
+        if conv_logger is not None:
+            conv_logger.log_ollama_response(response, context)
 
         msg = response.message
         if msg.content:
@@ -562,6 +569,8 @@ async def run_chat_loop(
     max_turns: int = MAX_TURNS,
     exit_phrases: tuple[str, ...] = ("exit", "quit", "bye"),
     system_prompt: str = "",
+    conv_logger: "ConversationLogger | None" = None,
+    context: str = "",
 ) -> None:
     """Drive an interactive chat loop.
 
@@ -586,6 +595,8 @@ async def run_chat_loop(
             options={"num_ctx": 32768},
         )
         _log_response_usage(response, agent_name, token_log)
+        if conv_logger is not None:
+            conv_logger.log_ollama_response(response, context)
 
         msg = response.message
         if msg.content:
@@ -657,6 +668,11 @@ def add_ollama_args(
         "--tokens-log-dir",
         default="",
         help="Directory for token usage JSONL logs; file named <agent-name>.jsonl (optional)",
+    )
+    parser.add_argument(
+        "--conv-log-dir",
+        default="",
+        help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
     )
     parser.add_argument(
         "--run-log",

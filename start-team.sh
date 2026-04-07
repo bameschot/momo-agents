@@ -321,7 +321,7 @@ _workspace_initialized() {
 # Setup — create sentinel directory; clear any stale pipeline_complete sentinel
 # ─────────────────────────────────────────────────────────────────────────────
 TEAM_START_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens"
+mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens" "$SENTINEL_DIR/agent_conversation_logs"
 rm -f "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
 touch "$SENTINEL_DIR/run-log.jsonl"
 
@@ -353,6 +353,7 @@ MODEL_JUNIOR='$MODEL_JUNIOR'
 MODEL_SENIOR='$MODEL_SENIOR'
 MODEL_REVIEWER='$MODEL_REVIEWER'
 RUN_LOG='$SENTINEL_DIR/run-log.jsonl'
+CONV_LOG_DIR='$SENTINEL_DIR/agent_conversation_logs'
 CONFIG
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -420,6 +421,7 @@ if [ "$AGENT_TYPE_DESIGNER" = "ollama" ]; then
         --ollama-host "${OLLAMA_HOST}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "ollama-designer"
 else
@@ -427,6 +429,7 @@ else
         --model "${MODEL_DESIGNER}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "designer"
 fi
@@ -477,6 +480,7 @@ while true; do
                 --model "${MODEL_BA}" \
                 --ollama-host "${OLLAMA_HOST}" \
                 --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+                --conv-log-dir "${CONV_LOG_DIR}" \
                 --run-log "${RUN_LOG}" \
                 --agent-name "ollama-business-analyst"
         else
@@ -486,6 +490,7 @@ while true; do
                 --workspace-dir "${WORKSPACE_DIR}" \
                 --model "${MODEL_BA}" \
                 --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+                --conv-log-dir "${CONV_LOG_DIR}" \
                 --run-log "${RUN_LOG}" \
                 --agent-name "business-analyst"
         fi
@@ -556,6 +561,7 @@ if [ "$AGENT_TYPE_PI" = "ollama" ]; then
         --model "${MODEL_PI}" \
         --ollama-host "${OLLAMA_HOST}" \
         --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "ollama-project-initialiser"
 else
@@ -564,6 +570,7 @@ else
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_PI}" \
         --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "project-initialiser"
 fi
@@ -612,6 +619,7 @@ while true; do
             --model "${MODEL_JUNIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
             --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "ollama-junior-coding-agent-${AGENT_ID}"
     else
@@ -620,6 +628,7 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "junior-coding-agent-${AGENT_ID}"
     fi
@@ -707,6 +716,7 @@ while true; do
             --model "${MODEL_SENIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
             --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "ollama-senior-coding-agent-${AGENT_ID}"
     else
@@ -715,6 +725,7 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "senior-coding-agent-${AGENT_ID}"
     fi
@@ -836,12 +847,14 @@ while true; do
             --model "${MODEL_REVIEWER}" \
             --ollama-host "${OLLAMA_HOST}" \
             --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
             --agent-name "ollama-story-reviewer"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_reviewer_agent.py" \
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_REVIEWER}" \
-            --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl"
+            --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl" \
+            --conv-log-dir "${CONV_LOG_DIR}"
     fi
     echo ""
     echo "[Story Reviewer] Session complete — resuming watch."

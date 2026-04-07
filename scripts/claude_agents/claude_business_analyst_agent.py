@@ -11,6 +11,7 @@ import anyio
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
+from conversation_logger import ConversationLogger
 from token_logger import log_usage, print_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -55,11 +56,17 @@ def _parse_args() -> argparse.Namespace:
         default="business-analyst",
         help="Name used to identify this agent in logs (default: business-analyst)",
     )
+    parser.add_argument(
+        "--conv-log-dir",
+        default="",
+        help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
+    )
     return parser.parse_args()
 
 
-async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str) -> None:
+async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
+    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -97,6 +104,7 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     async for message in query(prompt=task, options=options):
         log_usage(token_log, "ba", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
         print_message(message)
+        conv_logger.log_claude_message(message, "business-analysis")
 
     after = set(stories_dir.glob("STORY-*.md"))
     for story_file in sorted(after - before, key=lambda p: p.name):
@@ -116,4 +124,5 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
-    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name)
+    conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
+    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name, conv_log_dir)

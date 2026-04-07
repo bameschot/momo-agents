@@ -11,6 +11,7 @@ import anyio
 from ollama import Message
 
 from agent_utilities import append_run_log, load_role, resolve_path
+from conversation_logger import ConversationLogger
 from ollama_utilities import (
     CODING_TOOLS,
     DEFAULT_MODEL,
@@ -65,8 +66,10 @@ async def run(
     tokens_log_dir: Path | None,
     run_log: Path | None,
     agent_name: str,
+    conv_log_dir: Path | None,
 ) -> None:
     token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
+    conv_logger = ConversationLogger.from_log_dir(conv_log_dir, agent_name)
 
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
@@ -88,6 +91,8 @@ async def run(
         agent_name=agent_name,
         token_log=token_log,
         system_prompt=load_role("ollama_roles/ollama-project-initialiser"),
+        conv_logger=conv_logger,
+        context="project-init",
     )
 
     append_run_log(run_log, agent_name, f"project initiated from: {design_path.name}")
@@ -100,6 +105,7 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
+    conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
     anyio.run(
         run,
         design_path,
@@ -109,4 +115,5 @@ if __name__ == "__main__":
         tokens_log_dir,
         run_log,
         args.agent_name,
+        conv_log_dir,
     )
