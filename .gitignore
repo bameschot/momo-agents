@@ -218,3 +218,6 @@ __marimo__/
 
 *.zip
 .env
+.chartjs_cache
+.ruff_cache
+.pytest_cache
