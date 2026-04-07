@@ -334,6 +334,15 @@ def _render_content_html(entry: dict) -> str:
             return "<br>".join(parts) if parts else "<em>(empty)</em>"
         return _esc(_truncate(str(content)))
 
+    if role == "tool":
+        tool_name = _esc(entry.get("tool_name", ""))
+        args_str = _truncate(json.dumps(entry.get("arguments", {}), ensure_ascii=False), 200)
+        result = _truncate(str(content))
+        return (
+            f"<code>[call: {tool_name}]</code> {_esc(args_str)}"
+            f"<br><code>[output]</code> {_esc(result)}"
+        )
+
     # Ollama assistant messages or any other role — best-effort
     if isinstance(content, str):
         rendered = _esc(_truncate(content))

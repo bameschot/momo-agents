@@ -20,11 +20,18 @@ Each JSONL record contains:
     cache_read_tokens
     cache_write_tokens
     cost_usd        USD cost (0.0 when unavailable)
+
+For role=tool (Ollama tool results):
+    tool_name       name of the tool that was called
+    arguments       dict of arguments passed to the tool
+    content         string result returned by the tool (truncated to 4000 chars)
 """
 import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_CONTENT_TRUNCATE = 4000
 
 
 # ------------------------------------------------------------------
@@ -41,10 +48,38 @@ def log_claude_message(log_dir: Path | None, agent_name: str, message: Any, cont
 
 
 def log_ollama_response(log_dir: Path | None, agent_name: str, response: Any, context: str) -> None:
-    """Log an Ollama ChatResponse object."""
+    """Log an Ollama ChatResponse object (assistant turn)."""
     if log_dir is None:
         return
     _write(log_dir / f"{agent_name}_log.jsonl", _build_ollama_entry(agent_name, response, context))
+
+
+def log_ollama_tool_result(
+    log_dir: Path | None,
+    agent_name: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+    result: str,
+    context: str,
+) -> None:
+    """Log a single Ollama tool execution result as a role=tool entry."""
+    if log_dir is None:
+        return
+    entry: dict[str, Any] = {
+        "ts": _ts(),
+        "agent": agent_name,
+        "context": context,
+        "role": "tool",
+        "tool_name": tool_name,
+        "arguments": arguments,
+        "content": result[:_CONTENT_TRUNCATE],
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0,
+    }
+    _write(log_dir / f"{agent_name}_log.jsonl", entry)
 
 
 # ------------------------------------------------------------------
@@ -78,11 +113,17 @@ def _build_claude_entry(agent_name: str, message: Any, context: str) -> dict[str
             if isinstance(block, TextBlock):
                 content.append({"type": "text", "text": block.text})
             elif isinstance(block, ToolUseBlock):
-                content.append({"type": "tool_use", "name": block.name, "input": block.input})
+                content.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
             elif isinstance(block, ToolResultBlock):
                 content.append({
                     "type": "tool_result",
-                    "content": str(block.content)[:2000],
+                    "tool_use_id": block.tool_use_id,
+                    "content": _serialize_block_content(block.content),
                     "is_error": block.is_error,
                 })
             elif isinstance(block, ThinkingBlock):
@@ -109,7 +150,8 @@ def _build_claude_entry(agent_name: str, message: Any, context: str) -> dict[str
                 if isinstance(block, ToolResultBlock):
                     parts.append({
                         "type": "tool_result",
-                        "content": str(block.content)[:2000],
+                        "tool_use_id": block.tool_use_id,
+                        "content": _serialize_block_content(block.content),
                         "is_error": block.is_error,
                     })
             user_content = parts
@@ -165,6 +207,24 @@ def _build_ollama_entry(agent_name: str, response: Any, context: str) -> dict[st
 # ------------------------------------------------------------------
 # Internal helpers
 # ------------------------------------------------------------------
+
+def _serialize_block_content(content: Any) -> str:
+    """Serialise a ToolResultBlock's content to a plain string.
+
+    The Claude SDK allows ``content`` to be either a plain ``str`` or a list
+    of content blocks (e.g. ``[{"type": "text", "text": "..."}]``).  Using
+    ``str()`` on a list produces an ugly Python repr; JSON is cleaner and
+    round-trippable.  The result is truncated to *_CONTENT_TRUNCATE* chars.
+    """
+    if isinstance(content, str):
+        raw = content
+    else:
+        try:
+            raw = json.dumps(content, ensure_ascii=False)
+        except (TypeError, ValueError):
+            raw = str(content)
+    return raw[:_CONTENT_TRUNCATE]
+
 
 def _ts() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

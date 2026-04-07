@@ -26,7 +26,7 @@ from typing import Any
 
 from ollama import AsyncClient, Message
 
-from conversation_logger import log_ollama_response
+from conversation_logger import log_ollama_response, log_ollama_tool_result
 from token_logger import log_usage
 
 # ---------------------------------------------------------------------------
@@ -439,6 +439,9 @@ def _execute_calls(
     calls: list[tuple[str, dict[str, Any]]],
     messages: list[Message],
     executor: ToolExecutor,
+    agent_name: str = "",
+    conv_log_dir: Path | None = None,
+    context: str = "",
 ) -> None:
     """Execute a list of ``(tool_name, arguments)`` pairs, print results, and append tool messages."""
     for name, arguments in calls:
@@ -447,6 +450,7 @@ def _execute_calls(
         preview = result if len(result) <= _PREVIEW_CHARS else result[:_PREVIEW_CHARS] + "…"
         print(f"[result:ok] {preview}", flush=True)
         messages.append(Message(role="tool", content=result))
+        log_ollama_tool_result(conv_log_dir, agent_name, name, arguments, result, context)
 
 
 def _handle_tool_calls(
@@ -454,13 +458,15 @@ def _handle_tool_calls(
     messages: list[Message],
     executor: ToolExecutor,
     agent_name: str,
+    conv_log_dir: Path | None = None,
+    context: str = "",
 ) -> None:
     """Execute every structured tool call in *msg*, print results, and append them to *messages*."""
     calls = [
         (tool_call.function.name, _parse_tool_args(tool_call.function.arguments))
         for tool_call in (msg.tool_calls or [])
     ]
-    _execute_calls(calls, messages, executor)
+    _execute_calls(calls, messages, executor, agent_name, conv_log_dir, context)
 
 
 def _handle_text_tool_calls(
@@ -469,6 +475,8 @@ def _handle_text_tool_calls(
     executor: ToolExecutor,
     agent_name: str,
     tools: list[dict[str, Any]],
+    conv_log_dir: Path | None = None,
+    context: str = "",
 ) -> bool:
     """Check *msg.content* for embedded JSON tool calls and execute any found.
 
@@ -484,7 +492,7 @@ def _handle_text_tool_calls(
         return False
     print(f"\n[{agent_name}] Tool call detected in text response — executing.", flush=True)
     messages.append(msg)
-    _execute_calls(calls, messages, executor)
+    _execute_calls(calls, messages, executor, agent_name, conv_log_dir, context)
     return True
 
 
@@ -538,14 +546,14 @@ async def run_agent_loop(
 
         if not msg.tool_calls:
             # Check whether the model embedded tool call JSON in plain text
-            if _handle_text_tool_calls(msg, messages, executor, agent_name, tools):
+            if _handle_text_tool_calls(msg, messages, executor, agent_name, tools, conv_log_dir, context):
                 continue
 
             print(f"[{agent_name}] Turn {turn + 1}: done (no tool calls).", flush=True)
             return
 
         messages.append(msg)
-        _handle_tool_calls(msg, messages, executor, agent_name)
+        _handle_tool_calls(msg, messages, executor, agent_name, conv_log_dir, context)
 
     print(f"[{agent_name}] Reached max turns ({max_turns}) — stopping.", flush=True)
 
@@ -601,12 +609,12 @@ async def run_chat_loop(
         if msg.tool_calls:
             # Execute tools and let the model continue without user prompt
             messages.append(msg)
-            _handle_tool_calls(msg, messages, executor, agent_name)
+            _handle_tool_calls(msg, messages, executor, agent_name, conv_log_dir, context)
             continue
 
         # No structured tool calls — check whether the model embedded a tool
         # call as plain-text JSON (common with smaller local models).
-        if _handle_text_tool_calls(msg, messages, executor, agent_name, tools):
+        if _handle_text_tool_calls(msg, messages, executor, agent_name, tools, conv_log_dir, context):
             continue
 
         # No tool calls — hand back to the user
