@@ -518,33 +518,62 @@ momo-agents/
 │       ├── ollama-junior-coding-agent.md
 │       ├── ollama-senior-coding-agent.md
 │       └── ollama-story-reviewer.md
-├── workspace/                 ← all generated artefacts
-│   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
-│   ├── design/                ← Designer Agent outputs
-│   │   ├── <feature>.new.md       ← written by Designer; queued for BA
-│   │   └── <feature>.processed.md ← renamed by BA after stories are generated
-│   ├── stories/               ← story files; complexity + state encoded in filename
-│   │   ├── STORY-001.md                      ← unprocessed (written by BA)
-│   │   ├── STORY-002.easy.ready.md           ← deps met; ready for Junior Agent
-│   │   ├── STORY-003.medium.working.md       ← claimed by a Senior Agent
-│   │   ├── STORY-004.easy.done.md            ← complete
-│   │   ├── STORY-005.hard.failed.md          ← failed; awaiting review
-│   │   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
-│   │   └── HALT                              ← sentinel: all Coding Agents must stop
-│   ├── .sentinels/            ← runtime coordination files (created by start-team.sh)
-│   │   ├── pipeline_complete      ← written on Ctrl+C; signals all agents to exit
-│   │   ├── config.sh              ← shared env vars sourced by wrapper scripts
-│   │   ├── run-log.jsonl          ← pipeline event log (one JSON entry per line)
-│   │   ├── git_log.jsonl          ← workspace git commits for this run (exported on shutdown)
-│   │   ├── tokens/                ← per-agent JSONL token usage logs
-│   │   └── run_*.sh               ← agent wrapper scripts
-│   ├── src/
-│   └── tests/
 ├── start-team.sh              ← launches all agents simultaneously
 ├── reset-team.sh              ← wipes all artefacts; resets to clean state
 ├── status.sh                  ← live story-state summary
 └── watchdog.sh                ← resets stale .working.md files after 10 min
 ```
+
+---
+
+## Workspace layout
+
+The workspace is a **separate directory** that lives outside the `momo-agents` repo — pass it to `--workspace` when starting the team. It can be anywhere on your filesystem; `start-team.sh` will create it and initialise a git repository inside it if it does not already exist.
+
+All pipeline artefacts are written here. Nothing inside `momo-agents/` itself is modified during a run.
+
+```
+<workspace>/                   ← root of the generated project (any path you choose)
+├── CLAUDE.md                  ← build/test/lint instructions written by the Project Initialiser;
+│                                 acts as the start gate for the Business Analyst and all Coding Agents
+├── design/                    ← Designer Agent outputs
+│   ├── <feature>.new.md           ← written by the Designer; queued for the Business Analyst
+│   └── <feature>.processed.md     ← renamed by the BA after stories are generated
+├── stories/                   ← story files; complexity and state are encoded in the filename
+│   ├── STORY-001.md                       ← unprocessed (just written by BA, awaiting orchestrator)
+│   ├── STORY-002.easy.ready.md            ← deps met; ready for a Junior Coding Agent
+│   ├── STORY-003.medium.working.md        ← claimed by a Senior Coding Agent
+│   ├── STORY-004.easy.done.md             ← implementation complete
+│   ├── STORY-005.hard.failed.md           ← failed; awaiting Story Reviewer
+│   ├── STORY-006.medium.reviewing.md      ← currently being triaged by the Story Reviewer
+│   └── HALT                               ← sentinel: all Coding Agents must stop and wait
+├── .sentinels/                ← runtime coordination files created by start-team.sh;
+│   │                             entire directory is removed on clean shutdown
+│   ├── pipeline_complete          ← written on Ctrl+C; signals all agents to exit
+│   ├── config.sh                  ← shared environment variables sourced by wrapper scripts
+│   ├── run-log.jsonl              ← pipeline event log (one JSON object per line)
+│   ├── git_log.jsonl              ← workspace git commits for this run (exported on shutdown)
+│   ├── tokens/                    ← per-agent JSONL token-usage logs
+│   └── run_*.sh                   ← per-agent wrapper scripts
+├── src/                       ← generated application source code
+├── tests/                     ← generated tests
+└── run-report_YYYY-MM-DD_HH-MM-SS.html   ← self-contained HTML run report (written on shutdown)
+```
+
+### Story filename convention
+
+Story state and complexity are encoded directly in the filename so agents can claim work with a single atomic rename — no database or lock file required.
+
+```
+STORY-NNN.<complexity>.<state>.md
+```
+
+| Segment | Values | Set by |
+|---|---|---|
+| `complexity` | `easy`, `medium`, `hard` | Business Analyst (when writing the story) |
+| `state` | *(none)* → `ready` → `working` → `done` \| `failed` → `reviewing` | Story Orchestrator, Coding Agents, Story Reviewer |
+
+A bare `STORY-NNN.md` (no complexity or state suffix) is newly written by the BA and not yet evaluated. The Story Orchestrator renames it to `STORY-NNN.<complexity>.ready.md` once all dependency stories are in `done` state.
 
 ---
 

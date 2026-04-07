@@ -273,7 +273,7 @@ li { margin: 0.25rem 0; }
 
 /* ── Images ─────────────────────────────────────────────────────────────── */
 img { max-width: 100%; height: auto; border-radius: 4px; }
-</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#hybrid-mode--mixing-claude-and-ollama-per-role">Hybrid mode — mixing Claude and Ollama per role</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a><ul><li><a href="#claude-backend">Claude backend</a></li><li><a href="#ollama-backend">Ollama backend</a></li></ul></li><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#ai-backends">AI backends</a><ul><li><a href="#claude-default">Claude (default)</a></li><li><a href="#ollama-local">Ollama (local)</a></li></ul></li><li><a href="#ollama-agent-tools">Ollama agent tools</a><ul><li><a href="#tool-availability-by-agent">Tool availability by agent</a></li><li><a href="#tool-reference">Tool reference</a></li></ul></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
+</style><script>(function(){var t=localStorage.getItem('md2html-theme');if(t)document.documentElement.setAttribute('data-theme',t);else if(window.matchMedia&&window.matchMedia('(prefers-color-scheme:dark)').matches)document.documentElement.setAttribute('data-theme','dark');})();</script></head><body><header><button id="theme-toggle" aria-label="Toggle theme">&#127769;</button></header><main><div class="page-wrapper"><details id="toc-mobile"><summary>Contents &#9660;</summary><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#hybrid-mode--mixing-claude-and-ollama-per-role">Hybrid mode — mixing Claude and Ollama per role</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a><ul><li><a href="#claude-backend">Claude backend</a></li><li><a href="#ollama-backend">Ollama backend</a></li></ul></li><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#ai-backends">AI backends</a><ul><li><a href="#claude-default">Claude (default)</a></li><li><a href="#ollama-local">Ollama (local)</a></li></ul></li><li><a href="#ollama-agent-tools">Ollama agent tools</a><ul><li><a href="#tool-availability-by-agent">Tool availability by agent</a></li><li><a href="#tool-reference">Tool reference</a></li></ul></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#workspace-layout">Workspace layout</a><ul><li><a href="#story-filename-convention">Story filename convention</a></li></ul></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#development">Development</a></li></ul></li></ul></nav></details><article><h1 id="momo-agents">momo-agents</h1>
 <p>A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the <strong>Claude Agent SDK</strong> (cloud) and a locally running <strong>Ollama</strong> instance (local/offline). Backends can be mixed freely: each agent role (Designer, Business Analyst, Project Initialiser, Junior Coder, Senior Coder, Reviewer) can be independently configured as either Claude or Ollama, letting you balance cost, speed, and capability per role.</p>
 <hr>
 <h2 id="setup">Setup</h2>
@@ -567,32 +567,47 @@ python scripts/ollama_agents/ollama_junior_coding_agent.py \
 │       ├── ollama-junior-coding-agent.md
 │       ├── ollama-senior-coding-agent.md
 │       └── ollama-story-reviewer.md
-├── workspace/                 ← all generated artefacts
-│   ├── CLAUDE.md              ← build/test/lint instructions; start gate for agents
-│   ├── design/                ← Designer Agent outputs
-│   │   ├── &lt;feature&gt;.new.md       ← written by Designer; queued for BA
-│   │   └── &lt;feature&gt;.processed.md ← renamed by BA after stories are generated
-│   ├── stories/               ← story files; complexity + state encoded in filename
-│   │   ├── STORY-001.md                      ← unprocessed (written by BA)
-│   │   ├── STORY-002.easy.ready.md           ← deps met; ready for Junior Agent
-│   │   ├── STORY-003.medium.working.md       ← claimed by a Senior Agent
-│   │   ├── STORY-004.easy.done.md            ← complete
-│   │   ├── STORY-005.hard.failed.md          ← failed; awaiting review
-│   │   ├── STORY-006.medium.reviewing.md     ← claimed by Story Reviewer
-│   │   └── HALT                              ← sentinel: all Coding Agents must stop
-│   ├── .sentinels/            ← runtime coordination files (created by start-team.sh)
-│   │   ├── pipeline_complete      ← written on Ctrl+C; signals all agents to exit
-│   │   ├── config.sh              ← shared env vars sourced by wrapper scripts
-│   │   ├── run-log.jsonl          ← pipeline event log (one JSON entry per line)
-│   │   ├── git_log.jsonl          ← workspace git commits for this run (exported on shutdown)
-│   │   ├── tokens/                ← per-agent JSONL token usage logs
-│   │   └── run_*.sh               ← agent wrapper scripts
-│   ├── src/
-│   └── tests/
 ├── start-team.sh              ← launches all agents simultaneously
 ├── reset-team.sh              ← wipes all artefacts; resets to clean state
 ├── status.sh                  ← live story-state summary
 └── watchdog.sh                ← resets stale .working.md files after 10 min</code></pre>
+<hr>
+<h2 id="workspace-layout">Workspace layout</h2>
+<p>The workspace is a <strong>separate directory</strong> that lives outside the <code>momo-agents</code> repo — pass it to <code>--workspace</code> when starting the team. It can be anywhere on your filesystem; <code>start-team.sh</code> will create it and initialise a git repository inside it if it does not already exist.</p>
+<p>All pipeline artefacts are written here. Nothing inside <code>momo-agents/</code> itself is modified during a run.</p>
+<pre><code>&lt;workspace&gt;/                   ← root of the generated project (any path you choose)
+├── CLAUDE.md                  ← build/test/lint instructions written by the Project Initialiser;
+│                                 acts as the start gate for the Business Analyst and all Coding Agents
+├── design/                    ← Designer Agent outputs
+│   ├── &lt;feature&gt;.new.md           ← written by the Designer; queued for the Business Analyst
+│   └── &lt;feature&gt;.processed.md     ← renamed by the BA after stories are generated
+├── stories/                   ← story files; complexity and state are encoded in the filename
+│   ├── STORY-001.md                       ← unprocessed (just written by BA, awaiting orchestrator)
+│   ├── STORY-002.easy.ready.md            ← deps met; ready for a Junior Coding Agent
+│   ├── STORY-003.medium.working.md        ← claimed by a Senior Coding Agent
+│   ├── STORY-004.easy.done.md             ← implementation complete
+│   ├── STORY-005.hard.failed.md           ← failed; awaiting Story Reviewer
+│   ├── STORY-006.medium.reviewing.md      ← currently being triaged by the Story Reviewer
+│   └── HALT                               ← sentinel: all Coding Agents must stop and wait
+├── .sentinels/                ← runtime coordination files created by start-team.sh;
+│   │                             entire directory is removed on clean shutdown
+│   ├── pipeline_complete          ← written on Ctrl+C; signals all agents to exit
+│   ├── config.sh                  ← shared environment variables sourced by wrapper scripts
+│   ├── run-log.jsonl              ← pipeline event log (one JSON object per line)
+│   ├── git_log.jsonl              ← workspace git commits for this run (exported on shutdown)
+│   ├── tokens/                    ← per-agent JSONL token-usage logs
+│   └── run_*.sh                   ← per-agent wrapper scripts
+├── src/                       ← generated application source code
+├── tests/                     ← generated tests
+└── run-report_YYYY-MM-DD_HH-MM-SS.html   ← self-contained HTML run report (written on shutdown)</code></pre>
+<h3 id="story-filename-convention">Story filename convention</h3>
+<p>Story state and complexity are encoded directly in the filename so agents can claim work with a single atomic rename — no database or lock file required.</p>
+<pre><code>STORY-NNN.&lt;complexity&gt;.&lt;state&gt;.md</code></pre>
+<pre>| Segment | Values | Set by |
+|---|---|---|
+| `complexity` | `easy`, `medium`, `hard` | Business Analyst (when writing the story) |
+| `state` | *(none)* → `ready` → `working` → `done` \| `failed` → `reviewing` | Story Orchestrator, Coding Agents, Story Reviewer |</pre>
+<p>A bare <code>STORY-NNN.md</code> (no complexity or state suffix) is newly written by the BA and not yet evaluated. The Story Orchestrator renames it to <code>STORY-NNN.&lt;complexity&gt;.ready.md</code> once all dependency stories are in <code>done</code> state.</p>
 <hr>
 <h2 id="agent-details">Agent details</h2>
 <h3 id="designer">Designer</h3>
@@ -720,7 +735,7 @@ ruff format .
 mypy scripts/
 
 # Tests
-pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#hybrid-mode--mixing-claude-and-ollama-per-role">Hybrid mode — mixing Claude and Ollama per role</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a><ul><li><a href="#claude-backend">Claude backend</a></li><li><a href="#ollama-backend">Ollama backend</a></li></ul></li><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#ai-backends">AI backends</a><ul><li><a href="#claude-default">Claude (default)</a></li><li><a href="#ollama-local">Ollama (local)</a></li></ul></li><li><a href="#ollama-agent-tools">Ollama agent tools</a><ul><li><a href="#tool-availability-by-agent">Tool availability by agent</a></li><li><a href="#tool-reference">Tool reference</a></li></ul></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
+pytest</code></pre></article><aside id="toc-sidebar"><nav aria-label="Table of contents"><ul><li><a href="#momo-agents">momo-agents</a><ul><li><a href="#setup">Setup</a><ul><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#install">Install</a></li></ul></li><li><a href="#running-the-pipeline">Running the pipeline</a><ul><li><a href="#start-the-full-team">Start the full team</a></li><li><a href="#hybrid-mode--mixing-claude-and-ollama-per-role">Hybrid mode — mixing Claude and Ollama per role</a></li><li><a href="#monitor-progress">Monitor progress</a></li><li><a href="#shut-down">Shut down</a></li><li><a href="#reset">Reset</a></li></ul></li><li><a href="#running-agents-individually">Running agents individually</a><ul><li><a href="#claude-backend">Claude backend</a></li><li><a href="#ollama-backend">Ollama backend</a></li></ul></li><li><a href="#pipeline-overview">Pipeline overview</a></li><li><a href="#ai-backends">AI backends</a><ul><li><a href="#claude-default">Claude (default)</a></li><li><a href="#ollama-local">Ollama (local)</a></li></ul></li><li><a href="#ollama-agent-tools">Ollama agent tools</a><ul><li><a href="#tool-availability-by-agent">Tool availability by agent</a></li><li><a href="#tool-reference">Tool reference</a></li></ul></li><li><a href="#repository-layout">Repository layout</a></li><li><a href="#workspace-layout">Workspace layout</a><ul><li><a href="#story-filename-convention">Story filename convention</a></li></ul></li><li><a href="#agent-details">Agent details</a><ul><li><a href="#designer">Designer</a></li><li><a href="#project-initialiser">Project Initialiser</a></li><li><a href="#business-analyst">Business Analyst</a></li><li><a href="#story-orchestrator">Story Orchestrator</a></li><li><a href="#coding-agents">Coding Agents</a></li><li><a href="#story-reviewer">Story Reviewer</a></li><li><a href="#watchdog">Watchdog</a></li></ul></li><li><a href="#stories">Stories</a><ul><li><a href="#file-format">File format</a></li><li><a href="#states">States</a></li><li><a href="#lifecycle">Lifecycle</a></li><li><a href="#parallel-coordination">Parallel coordination</a></li></ul></li><li><a href="#development">Development</a></li></ul></li></ul></nav></aside></div></main><script>
 (function () {
   'use strict';
 
