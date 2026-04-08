@@ -405,7 +405,7 @@ printf '\033]0;Designer Agent\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 
 echo "╔══════════════════════════════════╗"
 echo "║        Designer Agent            ║"
@@ -448,7 +448,7 @@ printf '\033]0;Business Analyst\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 
 echo "╔══════════════════════════════════╗"
 echo "║      Business Analyst Agent      ║"
@@ -516,7 +516,7 @@ printf '\033]0;Project Initialiser\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 
 echo "╔══════════════════════════════════╗"
 echo "║    Project Initialiser Agent     ║"
@@ -587,7 +587,7 @@ set -euo pipefail
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 # AGENT_ID is exported by the per-agent stub that execs this file.
 
 printf "\033]0;Junior Coding Agent ${AGENT_ID} [easy]\007"
@@ -684,7 +684,7 @@ set -euo pipefail
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 # AGENT_ID is exported by the per-agent stub that execs this file.
 
 printf "\033]0;Senior Coding Agent ${AGENT_ID} [medium/hard]\007"
@@ -781,7 +781,7 @@ set -euo pipefail
 printf '\033]0;Story Orchestrator\007'
 source "$(dirname "$0")/config.sh"
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 
 echo "╔══════════════════════════════════╗"
 echo "║      Story Orchestrator          ║"
@@ -817,7 +817,7 @@ printf '\033]0;Story Reviewer\007'
 source "$(dirname "$0")/config.sh"
 export ANTHROPIC_API_KEY
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/.venv/bin/activate"
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
 
 echo "╔══════════════════════════════════╗"
 echo "║       Story Reviewer Agent       ║"
