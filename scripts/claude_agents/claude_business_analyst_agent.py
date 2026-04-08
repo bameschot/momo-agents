@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+# Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import argparse
@@ -12,7 +12,6 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
 from conversation_logger import log_claude_message
-from token_logger import log_usage, print_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -42,11 +41,6 @@ def _parse_args() -> argparse.Namespace:
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
-        "--tokens-log-dir",
-        default="",
-        help="Directory for token usage JSONL logs; file is named <agent-name>.jsonl (optional)",
-    )
-    parser.add_argument(
         "--run-log",
         default="",
         help="Path to run-log.json file for pipeline event logging (optional)",
@@ -64,9 +58,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
-    token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
-
+async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -102,8 +94,6 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     before = set(stories_dir.glob("STORY-*.md"))
 
     async for message in query(prompt=task, options=options):
-        log_usage(token_log, "ba", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
-        print_message(message)
         log_claude_message(conv_log_dir, agent_name, message, "business-analysis")
 
     after = set(stories_dir.glob("STORY-*.md"))
@@ -122,7 +112,6 @@ if __name__ == "__main__":
     design_path = resolve_path(args.design)
     workspace_dir = resolve_path(args.workspace_dir)
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
-    tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)

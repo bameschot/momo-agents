@@ -13,7 +13,7 @@ Imported by all ollama_* agent scripts. The two agent-loop variants are:
 import sys
 from pathlib import Path
 
-# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+# Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import argparse
@@ -27,7 +27,6 @@ from typing import Any
 from ollama import AsyncClient, Message
 
 from conversation_logger import log_ollama_response, log_ollama_tool_result
-from token_logger import log_usage
 
 # ---------------------------------------------------------------------------
 # Defaults
@@ -362,22 +361,6 @@ def _parse_tool_args(raw: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Helper: log one Ollama chat response's token usage
-# ---------------------------------------------------------------------------
-
-
-def _log_response_usage(response: Any, agent_name: str, token_log: Path | None) -> None:
-    if token_log is None:
-        return
-    usage = {
-        "input_tokens": getattr(response, "prompt_eval_count", 0) or 0,
-        "output_tokens": getattr(response, "eval_count", 0) or 0,
-    }
-    if usage["input_tokens"] or usage["output_tokens"]:
-        log_usage(token_log, agent_name, usage)
-
-
-# ---------------------------------------------------------------------------
 # Helper: execute all tool calls in a response and append tool-result messages
 # ---------------------------------------------------------------------------
 
@@ -508,7 +491,6 @@ async def run_agent_loop(
     tools: list[dict[str, Any]],
     executor: ToolExecutor,
     agent_name: str,
-    token_log: Path | None,
     max_turns: int = MAX_TURNS,
     system_prompt: str = "",
     conv_log_dir: Path | None = None,
@@ -537,7 +519,6 @@ async def run_agent_loop(
             tools=tools,
             options={"num_ctx": 32768},
         )
-        _log_response_usage(response, agent_name, token_log)
         log_ollama_response(conv_log_dir, agent_name, response, context)
 
         msg = response.message
@@ -570,7 +551,6 @@ async def run_chat_loop(
     tools: list[dict[str, Any]],
     executor: ToolExecutor,
     agent_name: str,
-    token_log: Path | None,
     max_turns: int = MAX_TURNS,
     exit_phrases: tuple[str, ...] = ("exit", "quit", "bye"),
     system_prompt: str = "",
@@ -599,7 +579,6 @@ async def run_chat_loop(
             tools=tools,
             options={"num_ctx": 32768},
         )
-        _log_response_usage(response, agent_name, token_log)
         log_ollama_response(conv_log_dir, agent_name, response, context)
 
         msg = response.message
@@ -667,11 +646,6 @@ def add_ollama_args(
         "--ollama-host",
         default=os.environ.get("OLLAMA_HOST", DEFAULT_OLLAMA_HOST),
         help=f"Ollama API base URL (default: {DEFAULT_OLLAMA_HOST}, or $OLLAMA_HOST)",
-    )
-    parser.add_argument(
-        "--tokens-log-dir",
-        default="",
-        help="Directory for token usage JSONL logs; file named <agent-name>.jsonl (optional)",
     )
     parser.add_argument(
         "--conv-log-dir",

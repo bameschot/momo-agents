@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+# Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import argparse
@@ -12,7 +12,6 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
 from conversation_logger import log_claude_message
-from token_logger import log_usage, print_message
 
 POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
 
@@ -35,11 +34,6 @@ def _parse_args() -> argparse.Namespace:
         "--model",
         default=DEFAULT_MODEL,
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--tokens-log-dir",
-        default="",
-        help="Directory for token usage JSONL logs; file is named <agent-name>.jsonl (optional)",
     )
     parser.add_argument(
         "--run-log",
@@ -95,9 +89,7 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
     )
 
 
-async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir: Path | None, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
-    token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
-
+async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
     halt_file = stories_dir / "HALT"
 
@@ -131,8 +123,6 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, tokens_log_dir
         story_context = story_path.stem.split(".")[0]  # e.g. STORY-001
 
         async for message in query(prompt=task, options=options):
-            log_usage(token_log, "junior", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
-            print_message(message)
             log_claude_message(conv_log_dir, agent_name, message, story_context)
 
         stem = story_path.name.replace(".working.md", "")
@@ -148,7 +138,6 @@ if __name__ == "__main__":
     args = _parse_args()
     workspace_dir = resolve_path(args.workspace_dir)
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
-    tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, stories_dir, workspace_dir, args.model, tokens_log_dir, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)

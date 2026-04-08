@@ -321,7 +321,7 @@ _workspace_initialized() {
 # Setup — create sentinel directory; clear any stale pipeline_complete sentinel
 # ─────────────────────────────────────────────────────────────────────────────
 TEAM_START_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/tokens" "$SENTINEL_DIR/agent_conversation_logs"
+mkdir -p "$SENTINEL_DIR" "$SENTINEL_DIR/agent_conversation_logs"
 rm -f "$SENTINEL_DIR/pipeline_complete" 2>/dev/null || true
 touch "$SENTINEL_DIR/run-log.jsonl"
 
@@ -420,7 +420,7 @@ if [ "$AGENT_TYPE_DESIGNER" = "ollama" ]; then
         --model "${MODEL_DESIGNER}" \
         --ollama-host "${OLLAMA_HOST}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "ollama-designer"
@@ -428,7 +428,7 @@ else
     "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_designer_agent.py" \
         --model "${MODEL_DESIGNER}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "designer"
@@ -479,7 +479,7 @@ while true; do
                 --workspace-dir "${WORKSPACE_DIR}" \
                 --model "${MODEL_BA}" \
                 --ollama-host "${OLLAMA_HOST}" \
-                --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        
                 --conv-log-dir "${CONV_LOG_DIR}" \
                 --run-log "${RUN_LOG}" \
                 --agent-name "ollama-business-analyst"
@@ -489,7 +489,7 @@ while true; do
                 --stories-dir "${STORIES_DIR}" \
                 --workspace-dir "${WORKSPACE_DIR}" \
                 --model "${MODEL_BA}" \
-                --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+        
                 --conv-log-dir "${CONV_LOG_DIR}" \
                 --run-log "${RUN_LOG}" \
                 --agent-name "business-analyst"
@@ -560,7 +560,7 @@ if [ "$AGENT_TYPE_PI" = "ollama" ]; then
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_PI}" \
         --ollama-host "${OLLAMA_HOST}" \
-        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "ollama-project-initialiser"
@@ -569,7 +569,7 @@ else
         --design "${design_file}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_PI}" \
-        --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "project-initialiser"
@@ -618,7 +618,7 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
-            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "ollama-junior-coding-agent-${AGENT_ID}"
@@ -627,7 +627,7 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
-            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "junior-coding-agent-${AGENT_ID}"
@@ -715,7 +715,7 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
-            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "ollama-senior-coding-agent-${AGENT_ID}"
@@ -724,7 +724,7 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
-            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "senior-coding-agent-${AGENT_ID}"
@@ -846,14 +846,14 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_REVIEWER}" \
             --ollama-host "${OLLAMA_HOST}" \
-            --tokens-log-dir "${SENTINEL_DIR}/tokens" \
+    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --agent-name "ollama-story-reviewer"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_reviewer_agent.py" \
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_REVIEWER}" \
-            --token-log "${SENTINEL_DIR}/tokens/reviewer.jsonl" \
+
             --conv-log-dir "${CONV_LOG_DIR}"
     fi
     echo ""
@@ -930,87 +930,7 @@ _count_stories() {
     echo "$count"
 }
 
-# Print per-agent token totals from JSONL log files (inline Python for portability).
-_token_summary() {
-    local tokens_dir="$SENTINEL_DIR/tokens"
-    [ -d "$tokens_dir" ] || return 0
-    shopt -s nullglob
-    local logs=("$tokens_dir"/*.jsonl)
-    shopt -u nullglob
-    [ "${#logs[@]}" -eq 0 ] && return 0
-
-    "$PYTHON" - "$tokens_dir" \
-        "designer=${MODEL_DESIGNER}" \
-        "ba=${MODEL_BA}" \
-        "pi=${MODEL_PI}" \
-        "junior=${MODEL_JUNIOR}" \
-        "senior=${MODEL_SENIOR}" \
-        "reviewer=${MODEL_REVIEWER}" <<'PYEOF'
-import sys, json, os, glob
-
-tokens_dir = sys.argv[1]
-# Parse "agentprefix=model-name" args into a lookup dict
-models = {}
-for arg in sys.argv[2:]:
-    if '=' in arg:
-        k, v = arg.split('=', 1)
-        models[k] = v
-
-def get_model(agent):
-    if agent in models:
-        return models[agent]
-    # junior_1, senior_2 etc. — strip the numeric suffix
-    for prefix, model in models.items():
-        if agent.startswith(prefix + '_') or agent == prefix:
-            return model
-    return ''
-
-totals = {}
-for path in sorted(glob.glob(os.path.join(tokens_dir, "*.jsonl"))):
-    agent = os.path.basename(path).replace(".jsonl", "")
-    inp = out = cache_r = cache_w = 0
-    cost = 0.0
-    try:
-        with open(path) as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                    inp     += rec.get("input_tokens", 0)
-                    out     += rec.get("output_tokens", 0)
-                    cache_r += rec.get("cache_read_tokens", 0)
-                    cache_w += rec.get("cache_write_tokens", 0)
-                    cost    += rec.get("cost_usd", 0.0)
-                except json.JSONDecodeError:
-                    pass
-    except OSError:
-        pass
-    totals[agent] = (inp, out, cache_r, cache_w, cost)
-
-if not totals:
-    sys.exit(0)
-
-grand_total_inp     = sum(t[0] for t in totals.values())
-grand_total_out     = sum(t[1] for t in totals.values())
-grand_total_cache_r = sum(t[2] for t in totals.values())
-grand_total_cache_w = sum(t[3] for t in totals.values())
-grand_total_cost    = sum(t[4] for t in totals.values())
-
-print("  Tokens:")
-for agent, (inp, out, cache_r, cache_w, cost) in totals.items():
-    model = get_model(agent)
-    model_note = f"  [{model}]" if model else ""
-    cache_note = f"  cache r={cache_r:,} w={cache_w:,}" if cache_r or cache_w else ""
-    cost_note = f"  cost=${cost:.4f}" if cost else ""
-    print(f"    {agent:<20}  in={inp:>8,}  out={out:>7,}{cache_note}{cost_note}{model_note}")
-grand_cache_note = f"  cache r={grand_total_cache_r:,} w={grand_total_cache_w:,}" if grand_total_cache_r or grand_total_cache_w else ""
-print(f"    {'TOTAL':<20}  in={grand_total_inp:>8,}  out={grand_total_out:>7,}{grand_cache_note}  cost=${grand_total_cost:.4f}")
-PYEOF
-}
-
-# On Ctrl+C / SIGTERM: signal all agents to exit, print final status and token report.
+# On Ctrl+C / SIGTERM: signal all agents to exit, print final status and generate the run report.
 _teardown() {
     echo ""
     echo "Shutting down team..."
@@ -1023,8 +943,6 @@ _teardown() {
     echo "╚══════════════════════════════════════════════════╝"
     echo ""
     bash "$SCRIPT_DIR/status.sh"
-    echo ""
-    _token_summary
     echo ""
     echo "  Exporting git log..."
     "$PYTHON" "$SCRIPT_DIR/git_log_exporter.py" \
@@ -1046,7 +964,6 @@ _teardown() {
 trap '_teardown' INT TERM
 
 LAST_STATUS=""
-TOKEN_TICK=0
 while true; do
     unproc="$(_count_stories unprocessed)"
     ready="$(_count_stories ready)"
@@ -1059,18 +976,7 @@ while true; do
     if [ "$STATUS" != "$LAST_STATUS" ]; then
         echo ""
         echo "  $(date '+%H:%M:%S')  stories: $STATUS"
-        _token_summary
         LAST_STATUS="$STATUS"
-        TOKEN_TICK=0
-    fi
-
-    # Also refresh token summary every ~30s even when story counts haven't changed.
-    TOKEN_TICK=$(( TOKEN_TICK + 1 ))
-    if [ "$TOKEN_TICK" -ge 3 ]; then
-        echo ""
-        echo "  $(date '+%H:%M:%S')  stories: $STATUS"
-        _token_summary
-        TOKEN_TICK=0
     fi
 
     sleep 10

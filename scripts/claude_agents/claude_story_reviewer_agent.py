@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+# Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import argparse
@@ -12,7 +12,6 @@ from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, load_role, resolve_path
 from conversation_logger import log_claude_message
-from token_logger import log_usage, print_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
@@ -30,11 +29,6 @@ def _parse_args() -> argparse.Namespace:
         help=f"Claude model to use (default: {DEFAULT_MODEL})",
     )
     parser.add_argument(
-        "--token-log",
-        default="",
-        help="Path to JSONL file for token usage logging (optional)",
-    )
-    parser.add_argument(
         "--conv-log-dir",
         default="",
         help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
@@ -42,7 +36,7 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def run(stories_dir: Path, model: str, token_log: Path | None, conv_log_dir: Path | None) -> None:
+async def run(stories_dir: Path, model: str, conv_log_dir: Path | None) -> None:
 
     halt_file = stories_dir / "HALT"
     # Glob matches STORY-NNN.[complexity].failed.md
@@ -95,8 +89,6 @@ async def run(stories_dir: Path, model: str, token_log: Path | None, conv_log_di
     )
 
     async for message in query(prompt=task, options=options):
-        log_usage(token_log, "reviewer", getattr(message, "usage", None), getattr(message, "total_cost_usd", None))
-        print_message(message)
         log_claude_message(conv_log_dir, "story-reviewer", message, "review")
 
     if halt_file.exists():
@@ -110,6 +102,5 @@ async def run(stories_dir: Path, model: str, token_log: Path | None, conv_log_di
 if __name__ == "__main__":
     args = _parse_args()
     stories_dir = resolve_path(args.stories_dir)
-    token_log = Path(args.token_log) if args.token_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, stories_dir, args.model, token_log, conv_log_dir)
+    anyio.run(run, stories_dir, args.model, conv_log_dir)

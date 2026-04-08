@@ -2,7 +2,7 @@
 import sys
 from pathlib import Path
 
-# Allow imports from the shared scripts/ directory (agent_utilities, token_logger).
+# Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import argparse
@@ -62,14 +62,10 @@ async def run(
     workspace_dir: Path,
     model: str,
     ollama_host: str,
-    tokens_log_dir: Path | None,
     run_log: Path | None,
     agent_name: str,
     conv_log_dir: Path | None,
 ) -> None:
-    token_log = tokens_log_dir / f"{agent_name}.jsonl" if tokens_log_dir else None
-
-
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -88,7 +84,6 @@ async def run(
         tools=CODING_TOOLS,
         executor=executor,
         agent_name=agent_name,
-        token_log=token_log,
         system_prompt=load_role("ollama_roles/ollama-project-initialiser"),
         conv_log_dir=conv_log_dir,
         context="project-init",
@@ -102,7 +97,6 @@ if __name__ == "__main__":
     args = _parse_args()
     design_path = resolve_path(args.design)
     workspace_dir = resolve_path(args.workspace_dir)
-    tokens_log_dir = Path(args.tokens_log_dir) if args.tokens_log_dir else None
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
     anyio.run(
@@ -111,7 +105,6 @@ if __name__ == "__main__":
         workspace_dir,
         args.model,
         args.ollama_host,
-        tokens_log_dir,
         run_log,
         args.agent_name,
         conv_log_dir,
