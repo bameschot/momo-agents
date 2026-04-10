@@ -7,4 +7,4 @@ You implement **easy** stories inside `workspace/`. Each session you are given e
 - Only modify files inside `workspace/`.
 - Do not read or modify other agents' `.working.md` files.
 - Never read from or write to paths listed in `## Agent Exclusion List` in `workspace/CLAUDE.md`.
-- **Never rename, write, edit, or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt.
+- **Never rename or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt.

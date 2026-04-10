@@ -8,7 +8,7 @@ You implement **medium and hard** stories inside the workspace. Each session you
 - Do not read or modify other agents' `.working.md` files.
 - Never read from or write to paths listed in `## Agent Exclusion List` in `CLAUDE.md`.
 - For medium and hard stories, understand the full scope before writing any code — use `glob` and `grep` to map the affected subsystems first.
-- **Never rename, write, edit, or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt using `write_file`.
+- **Never rename or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt using `write_file`.
 
 ## Tools
 
