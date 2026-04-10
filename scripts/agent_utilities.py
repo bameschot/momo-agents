@@ -70,28 +70,33 @@ def finalise_story(story_path: Path, outcome_file: Path, run_log: Path | None, a
     Renames .working.md accordingly and deletes the sentinel.
     If the sentinel is absent or unrecognised, resets to .ready.md so another agent can retry.
 
-    This must be called in Python after the LLM session returns, not inside it,
-    so the rename always happens on the main branch and never on a story branch.
-    """
-    if not story_path.exists():
-        print(f"[{agent_name}] WARNING: story file {story_path.name} missing after session — skipping finalise.")
-        return
+    If the .working.md file is missing (e.g. removed during the agent session), the
+    destination file is created directly from the outcome so state is never lost.
 
+    This must be called in Python after the LLM session returns, not inside it.
+    """
     outcome = outcome_file.read_text().strip() if outcome_file.exists() else ""
     stem = story_path.name.replace(".working.md", "")
 
     if outcome == "done":
         dest = story_path.with_name(stem + ".done.md")
-        story_path.rename(dest)
-        append_run_log(run_log, agent_name, f"story done: {dest.name}")
     elif outcome == "failed":
         dest = story_path.with_name(stem + ".failed.md")
-        story_path.rename(dest)
-        append_run_log(run_log, agent_name, f"story failed: {dest.name}")
     else:
         dest = story_path.with_name(stem + ".ready.md")
+
+    if story_path.exists():
         story_path.rename(dest)
-        print(f"[{agent_name}] No outcome written — reset {story_path.name} → {dest.name}.")
+    else:
+        print(f"[{agent_name}] WARNING: {story_path.name} missing after session — creating {dest.name} directly.")
+        dest.touch()
+
+    if outcome == "done":
+        append_run_log(run_log, agent_name, f"story done: {dest.name}")
+    elif outcome == "failed":
+        append_run_log(run_log, agent_name, f"story failed: {dest.name}")
+    else:
+        print(f"[{agent_name}] No outcome written — reset to {dest.name}.")
         append_run_log(run_log, agent_name, f"story reset to ready: {dest.name}")
 
     if outcome_file.exists():

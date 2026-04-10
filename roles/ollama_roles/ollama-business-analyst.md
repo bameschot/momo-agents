@@ -67,12 +67,9 @@ Find files matching a glob pattern. Use this to count existing story files and d
 - Count existing stories: `glob(pattern="STORY-*.md", directory="<absolute stories dir>")`
 
 ### `bash`
-Run a shell command in the workspace root and return stdout + stderr. Use this to commit each story file immediately after writing it.
+Run a shell command in the workspace root and return stdout + stderr.
 
 **IMPORTANT — the `command` parameter must be a plain POSIX shell string. Never write `bash(command=...)` or any tool-call notation inside the `command` value.**
-
-Examples — these are the exact strings to pass as the `command` argument:
-- Commit a story: `git add stories/STORY-001.md && git commit -m 'add STORY-001: <title>'`
 
 ## Workflow
 
@@ -83,7 +80,9 @@ Execute these steps in order using tools — do not describe what you plan to do
 3. Optionally `read_file` `CLAUDE.md` if it exists.
 4. For each story, in index order:
    a. Immediately call `write_file` to create the story file. Do not batch them or describe them before writing.
-   b. Immediately after writing, use the `bash` tool with shell command `git add <absolute story path> && git commit -m 'add STORY-NNN: <title>'` to commit the story (replace STORY-NNN and <title> with the actual story number and title).
+5. After all story files are written, rename the design document from `<feature>.new.md` to `<feature>.processed.md` using `bash`:
+   - `bash(command="mv '<absolute design path>' '<absolute design path with .new.md replaced by .processed.md>'")`
+   - Only run this rename if the design file still ends with `.new.md`. If it is already `.processed.md`, skip this step.
 
 ## Complexity classification
 
@@ -130,3 +129,4 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 - Use `**Depends on**` to encode sequential dependencies. A story may only be claimed once its dependency is `.done.md`.
 - Stories should be large enough to represent a meaningful unit of work, but small enough to have clear, verifiable acceptance criteria.
 - Do not leave open questions — resolve ambiguities from the design before writing.
+- **Never re-create a story that already exists.** Before writing any story file, use `glob` to check for `STORY-NNN.*` (replacing NNN with the target number). If any file with that story number exists under any suffix (`.md`, `.ready.md`, `.working.md`, `.done.md`, `.failed.md`), skip it — do not overwrite or duplicate it.

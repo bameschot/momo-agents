@@ -47,7 +47,6 @@ The design document path is provided in the task prompt. Read it before doing an
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
-   - commit the changes as 'initial-commit'
 
 5. Do **not** implement any business logic from the stories.
 6. Do **not** write files outside the workspace root.

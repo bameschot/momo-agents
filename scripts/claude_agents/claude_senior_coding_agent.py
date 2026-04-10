@@ -69,7 +69,7 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_
         "4. Implement the acceptance criteria.\n"
         "5. Run tests and linter per CLAUDE.md.\n"
         f"6. Check {halt_file} — if found, perform the halt procedure.\n"
-        f"7. Success → write the word 'done' to {outcome_file}, then commit and merge the story branch back to main.\n"
+        f"7. Success → write the word 'done' to {outcome_file}.\n"
         f"8. Failure → create {halt_file}, write the word 'failed' to {outcome_file}, perform halt procedure.\n\n"
         "IMPORTANT: Never rename, write, edit, or delete story files "
         "(.ready.md / .working.md / .done.md / .failed.md). "

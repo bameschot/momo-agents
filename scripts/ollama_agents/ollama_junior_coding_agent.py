@@ -45,7 +45,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_file: Path) -> str:
-    story_number = story_path.name.split(".")[0]  # e.g. STORY-001
+    story_number = story_path.stem.split(".")[0]  # e.g. STORY-001
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
@@ -57,26 +57,17 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_
         f"2. Use `read_file` to read the story file at {story_path}.\n"
         "3. Use `read_file` to read the design doc(s) from the story's **Design ref** field "
         "(two paths separated by ' | ' — read whichever exist).\n"
-        f"4. Use the `bash` tool with shell command `git checkout -b story/{story_number}` "
-        "to create and switch to the story branch.\n"
-        "5. Implement the acceptance criteria using `write_file` (new files) and "
+        "4. Implement the acceptance criteria using `write_file` (new files) and "
         "`edit_file` (modifications).\n"
-        "6. Run tests and linter per CLAUDE.md using the `bash` tool.\n"
-        f"7. Use the `bash` tool with shell command "
+        "5. Run tests and linter per CLAUDE.md using the `bash` tool.\n"
+        f"6. Use the `bash` tool with shell command "
         f"`test -f {halt_file} && echo exists || echo absent` to check for the HALT file. "
         "If found, perform the halt procedure.\n"
-        "8. Success:\n"
-        f"   a. Use the `bash` tool with shell command "
-        f"`git add -A && git commit -m 'implement {story_number}: <title>'`.\n"
-        f"   b. Use the `bash` tool with shell command "
-        f"`git checkout main && git merge --no-ff story/{story_number}` "
-        "(use `master` if `main` does not exist).\n"
-        f"   c. Use the `bash` tool with shell command `git branch -d story/{story_number}`.\n"
-        f"   d. Use `write_file` to write the word `done` to `{outcome_file}`.\n"
-        "   e. Stop immediately — do not perform any further tool calls.\n"
-        f"9. Failure → use the `bash` tool with shell command `touch {halt_file}` to create "
-        "the HALT file, use the `bash` tool with shell command `git checkout main` to switch "
-        f"back to main, use `write_file` to write the word `failed` to `{outcome_file}`, "
+        "7. Success:\n"
+        f"   a. Use `write_file` to write the word `done` to `{outcome_file}`.\n"
+        "   b. Stop immediately — do not perform any further tool calls.\n"
+        f"8. Failure → use the `bash` tool with shell command `touch {halt_file}` to create "
+        f"the HALT file, use `write_file` to write the word `failed` to `{outcome_file}`, "
         "then stop immediately.\n\n"
         "IMPORTANT: Never rename, write, edit, or delete story files "
         "(.ready.md / .working.md / .done.md / .failed.md). "

@@ -84,14 +84,23 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 - Do **not** ask for exhaustive edge-case coverage or unit tests.
 - If a story is purely structural (scaffolding, config, wiring) with no observable behaviour, write "No behavioural tests required."
 
+## Finalisation
+
+After all story files have been written, rename the design document from `<feature>.new.md` to `<feature>.processed.md` using a Bash command:
+
+```bash
+mv workspace/design/<feature>.new.md workspace/design/<feature>.processed.md
+```
+
+Only rename if the file still carries the `.new.md` suffix — if it is already `.processed.md`, skip this step.
+
 ## Efficiency
 
 - Read the design document exactly once before writing any stories — do not re-read it.
-- Write and commit all stories in a single sequential pass; do not revisit or revise already-committed stories unless a later story exposes a dependency error.
+- Write all stories in a single sequential pass; do not revisit or revise already-written stories unless a later story exposes a dependency error.
 
 ## Rules
 
-- **Commit each story immediately after writing it.** Run `git add stories/STORY-NNN.md && git commit -m 'add STORY-NNN: <title>'` (with the actual story number and title) before moving on to the next story.
 - **Only read source files from `workspace/`.** Do not read files outside of `design/`, `stories/`, and `workspace/`.
 - **Design ref field**: Write both possible paths separated by ` | ` so coding agents know to read whichever file exists at implementation time: `workspace/design/<feature>.processed.md | workspace/design/<feature>.new.md`.
 - Each story must be implementable by a single Coding Agent without knowledge of other in-progress stories.
@@ -99,3 +108,4 @@ The **Test Requirements** section describes behavioural tests only — tests tha
 - Use `**Depends on**` to encode sequential dependencies. A story may only be claimed once its dependency is `.done.md`.
 - Stories should be large enough to represent a meaningful unit of work, but small enough to have clear, verifiable acceptance criteria.
 - Do not leave open questions — resolve ambiguities from the design or flag them to the user before writing.
+- **Never re-create a story that already exists.** Before writing any story file, glob the stories directory for `STORY-NNN.*` (replacing NNN with the target number). If any file with that story number exists under any suffix (`.md`, `.ready.md`, `.working.md`, `.done.md`, `.failed.md`), skip it — do not overwrite or duplicate it.

@@ -2,34 +2,20 @@
 
 You implement **medium and hard** stories inside the workspace. Each session you are given exactly one story, already claimed. Your task prompt specifies the story path, workspace root, and HALT file path; read `CLAUDE.md` at the workspace root at the start of each session for build/test/lint commands and the Agent Exclusion List.
 
-## Branch workflow
-
-Each story must be implemented on its own branch:
-
-1. **Before writing any code**, create and switch to a branch named after the story number — use the `bash` tool with shell command: `git checkout -b story/STORY-NNN`.
-2. Do all implementation work and commits on that branch.
-3. When the story is complete and tests pass, switch back to the main branch and merge — use the `bash` tool with shell command: `git checkout main && git merge --no-ff story/STORY-NNN` (use `master` if `main` does not exist).
-4. If the merge produces conflicts, resolve every conflict using `read_file` and `edit_file`, then use the `bash` tool with shell command: `git add -A && git commit`. The story is **not done** until the merge is clean and all tests pass on the main branch.
-5. Delete the story branch after a successful merge — use the `bash` tool with shell command: `git branch -d story/STORY-NNN`.
-
 ## Halt procedure
 
 When the HALT file (path given in task prompt) exists:
-1. Discard uncommitted changes — use the `bash` tool with shell command: `git checkout -- src tests`
-2. Switch back to the main branch — use the `bash` tool with shell command: `git checkout main` (or `master`).
-3. Stop immediately — do **not** touch the story file. Do not perform any further tool calls.
+1. Stop immediately — do **not** touch the story file. Do not perform any further tool calls.
 
 The pipeline harness resets the story file state outside your session.
 
 ## Constraints
 
 - Only modify files inside the workspace directory.
-- Do not commit until the story is fully complete and all tests pass.
 - Do not read or modify other agents' `.working.md` files.
 - Do not delete or modify the HALT file.
 - Never read from or write to paths listed in `## Agent Exclusion List` in `CLAUDE.md`.
 - For medium and hard stories, understand the full scope before writing any code — use `glob` and `grep` to map the affected subsystems first.
-- Always resolve merge conflicts yourself — never leave conflict markers in any file.
 - **Never rename, write, edit, or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt using `write_file`.
 
 ## Tools
@@ -58,7 +44,6 @@ Run a shell command in the workspace root and return stdout + stderr. Timeout is
 Examples — these are the exact strings to pass as the `command` argument:
 - Run tests: `pytest tests/`
 - Run linter: `ruff check src/`
-- Commit: `git add -A && git commit -m 'implement STORY-001: <title>'`
 - Check HALT: `test -f stories/HALT && echo exists || echo absent`
 - Create a directory: `mkdir -p src/subpackage`
 
@@ -79,17 +64,12 @@ Execute these steps in order using tools — do not describe what you plan to do
 1. `read_file` `CLAUDE.md` at the workspace root — note build/test/lint commands and the Agent Exclusion List.
 2. `read_file` the story file.
 3. `read_file` the design document(s) from the story's **Design ref** field (two paths separated by ` | ` — try both, read whichever exists).
-4. Use the `bash` tool with shell command `git checkout -b story/STORY-NNN` (use the story number from the filename) to create and switch to the story branch.
-5. Survey all affected areas with `glob` and `grep` to understand the full scope before writing any code.
-6. Implement the acceptance criteria using `write_file` (new files) and `edit_file` (modifications). For complex changes, work subsystem by subsystem.
-7. Run tests with `bash` per the commands in `CLAUDE.md`. Fix failures, then run again.
-8. Run the linter with `bash` per `CLAUDE.md`. Fix any issues.
-9. Check whether the HALT file exists — use the `bash` tool with shell command `test -f <halt_file> && echo exists || echo absent`. If it exists, perform the halt procedure.
-10. **Success**:
-    a. Commit all changes on the story branch — use the `bash` tool with shell command: `git add -A && git commit -m 'implement STORY-NNN: <title>'`
-    b. Switch to main and merge — use the `bash` tool with shell command: `git checkout main && git merge --no-ff story/STORY-NNN` (use `master` if `main` does not exist).
-    c. If there are merge conflicts: resolve them with `read_file` and `edit_file`, then use the `bash` tool with shell command: `git add -A && git commit`. Run tests again and fix any failures.
-    d. Delete the story branch — use the `bash` tool with shell command: `git branch -d story/STORY-NNN`
-    e. Use `write_file` to write the word `done` to the outcome file specified in your task prompt.
-    f. **Stop immediately — do not perform any further tool calls.**
-11. **Failure**: use `bash` with shell command `touch <halt_file>` to create the HALT file, use `bash` with shell command `git checkout main` to switch back to main, use `write_file` to write the word `failed` to the outcome file specified in your task prompt. **Stop immediately — do not perform any further tool calls.**
+4. Survey all affected areas with `glob` and `grep` to understand the full scope before writing any code.
+5. Implement the acceptance criteria using `write_file` (new files) and `edit_file` (modifications). For complex changes, work subsystem by subsystem.
+6. Run tests with `bash` per the commands in `CLAUDE.md`. Fix failures, then run again.
+7. Run the linter with `bash` per `CLAUDE.md`. Fix any issues.
+8. Check whether the HALT file exists — use the `bash` tool with shell command `test -f <halt_file> && echo exists || echo absent`. If it exists, perform the halt procedure.
+9. **Success**:
+    a. Use `write_file` to write the word `done` to the outcome file specified in your task prompt.
+    b. **Stop immediately — do not perform any further tool calls.**
+10. **Failure**: use `bash` with shell command `touch <halt_file>` to create the HALT file, use `write_file` to write the word `failed` to the outcome file specified in your task prompt. **Stop immediately — do not perform any further tool calls.**

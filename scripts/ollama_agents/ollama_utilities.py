@@ -205,7 +205,7 @@ CODING_TOOLS: list[dict[str, Any]] = [
     _TOOL_GREP,
 ]
 
-#: Business Analyst toolkit: read/write/list files + shell for git commits.
+#: Business Analyst toolkit: read/write/list files + shell.
 BA_TOOLS: list[dict[str, Any]] = [
     _TOOL_READ_FILE,
     _TOOL_WRITE_FILE,

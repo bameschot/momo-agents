@@ -16,14 +16,15 @@ from conversation_logger import log_claude_message
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
 POLL_INTERVAL = 10  # seconds between polls while waiting for workspace/CLAUDE.md
+DESIGN_POLL_INTERVAL = 10  # seconds between polls while watching for new designs
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Business Analyst Agent")
     parser.add_argument(
-        "--design",
-        required=True,
-        help="Path to the design document (e.g. design/my-feature.md)",
+        "--design-dir",
+        default="",
+        help="Directory to watch for *.new.md design files (default: <workspace-dir>/design)",
     )
     parser.add_argument(
         "--stories-dir",
@@ -70,15 +71,12 @@ def _design_stem(design_path: Path) -> str:
 
 async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     if not design_path.exists():
-        print(f"Error: design file not found: {design_path}", file=sys.stderr)
-        sys.exit(1)
-
-    await wait_for_workspace(workspace_dir, "Business Analyst Agent", POLL_INTERVAL)
+        print(f"[{agent_name}] Design file no longer exists (already processed?): {design_path}", flush=True)
+        return
 
     stories_dir.mkdir(parents=True, exist_ok=True)
 
     next_index = len(list(stories_dir.glob("STORY-*.md"))) + 1
-    branch_name = f"ba/{_design_stem(design_path)}"
 
     task = (
         f"Project root: {workspace_dir}\n"
@@ -88,15 +86,9 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         "Read the design document in full. Decompose it into an ordered set of discrete, "
         "implementable stories and write each one to the stories directory as STORY-NNN.md. "
         "Follow the story file format and all rules defined in your role exactly.\n\n"
-        "Follow this git workflow exactly:\n"
-        f"1. Before writing any stories, capture the current branch name with: git branch --show-current\n"
-        f"2. Create and switch to a new branch: git checkout -b {branch_name}\n"
-        "3. Write ALL story files to the stories directory. Do NOT commit between stories.\n"
-        "4. After all stories are written, stage and commit them in a single commit:\n"
-        f"   git add {stories_dir} && git commit -m 'add stories for {_design_stem(design_path)}'\n"
-        "5. Merge the story branch back into the original branch:\n"
-        f"   git checkout <original-branch> && git merge {branch_name}\n"
-        "(Replace <original-branch> with the branch name captured in step 1.)"
+        "Write story files for each story in the design, starting at the next story number provided above. "
+        "Do NOT re-create or overwrite stories that already exist under any state suffix "
+        "(e.g. STORY-NNN.ready.md, STORY-NNN.working.md, STORY-NNN.done.md, STORY-NNN.failed.md).\n"
     )
 
     options = ClaudeAgentOptions(
@@ -117,18 +109,32 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     for story_file in sorted(after - before, key=lambda p: p.name):
         append_run_log(run_log, agent_name, f"story created: {story_file.name}")
 
-    if design_path.name.endswith(".new.md"):
+    if design_path.name.endswith(".new.md") and design_path.exists():
         processed_path = design_path.with_name(design_path.name.replace(".new.md", ".processed.md"))
         design_path.rename(processed_path)
         print(f"[{agent_name}] Design marked as processed: {processed_path.name}", flush=True)
         append_run_log(run_log, agent_name, f"design processed: {processed_path.name}")
 
 
+async def watch_and_run(design_dir: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
+    await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
+    print(f"[{agent_name}] Watching {design_dir}/ for *.new.md files...", flush=True)
+
+    while True:
+        for design_path in sorted(design_dir.glob("*.new.md")):
+            feature = _design_stem(design_path)
+            print(f"[{agent_name}] New design: {feature} — decomposing into stories...", flush=True)
+            await run(design_path, stories_dir, workspace_dir, model, run_log, agent_name, conv_log_dir)
+            print(f"[{agent_name}] {feature} → done. Resuming watch...", flush=True)
+
+        await anyio.sleep(DESIGN_POLL_INTERVAL)
+
+
 if __name__ == "__main__":
     args = _parse_args()
-    design_path = resolve_path(args.design)
     workspace_dir = resolve_path(args.workspace_dir)
+    design_dir = resolve_path(args.design_dir) if args.design_dir else workspace_dir / "design"
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, design_path, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(watch_and_run, design_dir, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)

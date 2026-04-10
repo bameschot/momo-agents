@@ -437,8 +437,7 @@ WRAPPER
 
 # ── Business Analyst ──────────────────────────────────────────────────────────
 # Watches design/ for *.new.md files produced by the Designer Agent.
-# Processes each one and renames it to *.processed.md when done.
-# Re-triggers automatically if the Designer re-saves a design as *.new.md.
+# The Python agent handles polling, processing, and renaming internally.
 cat > "$SENTINEL_DIR/run_ba.sh" << 'WRAPPER'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -454,52 +453,27 @@ echo "╚═══════════════════════�
 echo "  Mode  : ${AGENT_TYPE_BA}"
 echo "  Model : ${MODEL_BA}"
 echo ""
-echo "Watching ${DESIGN_DIR}/ for *.new.md files..."
-echo ""
 
-while true; do
-    if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
-        echo "[Business Analyst] Pipeline complete — exiting."
-        break
-    fi
-
-    shopt -s nullglob
-    for design_file in "$DESIGN_DIR"/*.new.md; do
-        processed="${design_file%.new.md}.processed.md"
-        feature="$(basename "${design_file%.new.md}")"
-
-        echo "[Business Analyst] New design: ${feature} — decomposing into stories..."
-        echo ""
-        if [ "$AGENT_TYPE_BA" = "ollama" ]; then
-            "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_business_analyst_agent.py" \
-                --design "$design_file" \
-                --stories-dir "${STORIES_DIR}" \
-                --workspace-dir "${WORKSPACE_DIR}" \
-                --model "${MODEL_BA}" \
-                --ollama-host "${OLLAMA_HOST}" \
-                --conv-log-dir "${CONV_LOG_DIR}" \
-                --run-log "${RUN_LOG}" \
-                --agent-name "ollama-business-analyst"
-        else
-            "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_business_analyst_agent.py" \
-                --design "$design_file" \
-                --stories-dir "${STORIES_DIR}" \
-                --workspace-dir "${WORKSPACE_DIR}" \
-                --model "${MODEL_BA}" \
-                --conv-log-dir "${CONV_LOG_DIR}" \
-                --run-log "${RUN_LOG}" \
-                --agent-name "business-analyst"
-        fi
-
-        mv "$design_file" "$processed"
-        echo ""
-        echo "[Business Analyst] ${feature} → processed. Resuming watch..."
-        echo ""
-    done
-    shopt -u nullglob
-
-    sleep 5
-done
+if [ "$AGENT_TYPE_BA" = "ollama" ]; then
+    "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_business_analyst_agent.py" \
+        --design-dir "${DESIGN_DIR}" \
+        --stories-dir "${STORIES_DIR}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_BA}" \
+        --ollama-host "${OLLAMA_HOST}" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "ollama-business-analyst"
+else
+    "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_business_analyst_agent.py" \
+        --design-dir "${DESIGN_DIR}" \
+        --stories-dir "${STORIES_DIR}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_BA}" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "business-analyst"
+fi
 WRAPPER
 
 # ── Project Initialiser ───────────────────────────────────────────────────────
