@@ -1,6 +1,6 @@
 # momo-agents
 
-A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline). Backends can be mixed freely: each agent role (Designer, Business Analyst, Project Initialiser, Junior Coder, Senior Coder, Reviewer) can be independently configured as either Claude or Ollama, letting you balance cost, speed, and capability per role.
+A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline). Backends can be mixed freely: each agent role (Designer, Business Analyst, Project Initialiser, Junior Coder, Senior Coder) can be independently configured as either Claude or Ollama, letting you balance cost, speed, and capability per role.
 
 ---
 
@@ -58,7 +58,6 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--pi-agent-type TYPE` | Backend override for the Project Initialiser | inherits `--agent-type` |
 | `--junior-agent-type TYPE` | Backend override for Junior Coding Agents | inherits `--agent-type` |
 | `--senior-agent-type TYPE` | Backend override for Senior Coding Agents | inherits `--agent-type` |
-| `--reviewer-agent-type TYPE` | Backend override for the Story Reviewer | inherits `--agent-type` |
 | `--ollama-host URL` | Ollama API base URL (used by any role configured as ollama) | `http://localhost:11434` |
 | `--junior-agents N` | Number of parallel Junior Coding Agents (easy stories) | `2` |
 | `--senior-agents N` | Number of parallel Senior Coding Agents (medium/hard stories) | `1` |
@@ -67,7 +66,6 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--model-pi M` | Model for the Project Initialiser | see defaults below |
 | `--model-junior M` | Model for Junior Coding Agents | see defaults below |
 | `--model-senior M` | Model for Senior Coding Agents | see defaults below |
-| `--model-reviewer M` | Model for the Story Reviewer | see defaults below |
 
 **Model defaults** (each role uses the default for its own configured backend):
 
@@ -78,7 +76,6 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | Project Initialiser | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
 | Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
 | Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
-| Story Reviewer | `claude-sonnet-4-6` | `qwen3.5:4b` |
 
 **Agent windows opened:**
 
@@ -89,7 +86,6 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `📋 Business Analyst` | Design watcher | Polls `<workspace>/design/` every 5 s; waits for `<workspace>/CLAUDE.md` |
 | `🎯 Story Orchestrator` | Readiness manager | Continuously marks stories ready as deps complete |
 | `🐕 Watchdog` | Stale story reset | Resets stories idle > 10 min back to `.ready.md` |
-| `🔍 Story Reviewer` | Failed-story triage | Wakes on HALT; interactive with you |
 | `🟢 Junior Coding Agent N` | Easy story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.easy.ready.md` |
 | `🔵 Senior Coding Agent N` | Medium/hard story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.medium/hard.ready.md` |
 
@@ -108,8 +104,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
   --model-junior   qwen3.5:9b  \
   --model-senior   qwen3.5:9b \
   --model-pi       qwen3.5:9b \
-  --model-ba       qwen2.5:7b       \
-  --model-reviewer qwen2.5:7b
+  --model-ba       qwen2.5:7b
 
 # Ollama on a remote host
 ./start-team.sh --workspace /path/to/my-project \
@@ -130,7 +125,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 
 Each agent role can be configured independently as either `claude` or `ollama`. Use `--agent-type` to set the global default and then override individual roles with the per-role flags. This lets you use cloud models where quality matters most and local models where speed or cost is the priority.
 
-Per-role flags: `--designer-agent-type`, `--ba-agent-type`, `--pi-agent-type`, `--junior-agent-type`, `--senior-agent-type`, `--reviewer-agent-type`. Each accepts `claude` or `ollama` and defaults to `--agent-type` when not set.
+Per-role flags: `--designer-agent-type`, `--ba-agent-type`, `--pi-agent-type`, `--junior-agent-type`, `--senior-agent-type`. Each accepts `claude` or `ollama` and defaults to `--agent-type` when not set.
 
 Each role's model default is derived from its own configured backend, so you only need to pass `--model-<role>` when you want to override the default for that backend.
 
@@ -152,12 +147,11 @@ Each role's model default is derived from its own configured backend, so you onl
   --ba-agent-type ollama  --model-ba qwen2.5:7b \
   --pi-agent-type ollama  --model-pi qwen3.5:9b
 
-# All Ollama with a stronger model for senior stories, Claude only for review
+# All Ollama with a stronger model for senior stories
 ./start-team.sh --workspace /path/to/my-project \
   --agent-type ollama \
   --model-junior qwen3.5:9b \
-  --model-senior qwen2.5-coder:14b \
-  --reviewer-agent-type claude
+  --model-senior qwen2.5-coder:14b
 ```
 
 ### Monitor progress
@@ -174,8 +168,6 @@ Prints a live snapshot of how many stories are in each state:
   working        1   STORY-003.medium.working.md
   done           3   STORY-005.easy.done.md  ...
   failed         0
-  reviewing      0
-  HALT           no
 ```
 
 ### Shut down
@@ -201,7 +193,7 @@ Open it in any browser after the run.
 **Reset stories only** (keep generated code):
 
 ```bash
-rm -f <workspace>/stories/STORY-*.md <workspace>/stories/HALT
+rm -f <workspace>/stories/STORY-*.md
 ```
 
 **Full reset** — wipe everything generated:
@@ -213,7 +205,7 @@ rm -f <workspace>/stories/STORY-*.md <workspace>/stories/HALT
 
 | Path | What gets deleted |
 |---|---|
-| `<workspace>/stories/` | All `STORY-*` files in every state and the `HALT` sentinel |
+| `<workspace>/stories/` | All `STORY-*` files in every state |
 | `<workspace>/design/` | All `*.md` design documents |
 | `<workspace>/.sentinels/` | Entire directory (wrapper scripts, tokens, sentinels) |
 | `<workspace>/` | All generated source code, tests, `CLAUDE.md`, and build artefacts |
@@ -251,10 +243,6 @@ python scripts/claude_agents/claude_junior_coding_agent.py \
 # Senior Coding Agent (medium/hard stories; waits for workspace/CLAUDE.md)
 python scripts/claude_agents/claude_senior_coding_agent.py \
   --model claude-sonnet-4-6
-
-# Story Reviewer
-python scripts/claude_agents/claude_story_reviewer_agent.py \
-  --model claude-sonnet-4-6
 ```
 
 ### Ollama backend
@@ -279,9 +267,6 @@ python scripts/ollama_agents/ollama_junior_coding_agent.py --model qwen3.5:9b
 
 # Senior Coding Agent (medium/hard stories)
 python scripts/ollama_agents/ollama_senior_coding_agent.py --model qwen3.5:9b
-
-# Story Reviewer
-python scripts/ollama_agents/ollama_story_reviewer_agent.py --model qwen3.5:9b
 
 # Override Ollama host for any agent:
 python scripts/ollama_agents/ollama_junior_coding_agent.py \
@@ -314,10 +299,7 @@ All path arguments default to `workspace/` relative to the `momo-agents` repo ro
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
      Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► <workspace>/
            [easy]            │         [medium/hard]      │
-                             └─────────────┬──────────────┘
-                                     (on failure)
-                                           ▼
-                                    Story Reviewer ──► You
+                             └──────────────────────────-─┘
 ```
 
 The pipeline has one hard sequencing constraint: the **Project Initialiser** runs first and writes `CLAUDE.md` at the workspace root. The **Business Analyst** and all **Coding Agents** poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.
@@ -330,7 +312,6 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
 | **Junior Coding Agent** (×N) | Claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
 | **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
-| **Story Reviewer** | Wakes on `HALT`; triages failed stories with you, rewrites and resets them so the orchestrator can re-evaluate | `<workspace>/stories/*.failed.md` | `<workspace>/stories/` |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `<workspace>/stories/` | `<workspace>/stories/` |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
@@ -360,9 +341,9 @@ The Ollama agents implement their own agentic tool-call loop (`run_agent_loop` i
 |---|---|---|
 | Best overall | `qwen2.5-coder:14b` | Senior agent, Project Initialiser |
 | Good, faster | `qwen3.5:9b` | Junior agent |
-| Better prose | `qwen2.5:14b` | Business Analyst, Story Reviewer |
+| Better prose | `qwen2.5:14b` | Business Analyst |
 | Strong code | `codestral:22b` | Senior agent (less consistent tool calling) |
-| Compact reasoning | `phi4:14b` | BA / Reviewer alternative |
+| Compact reasoning | `phi4:14b` | BA alternative |
 
 ---
 
@@ -372,15 +353,14 @@ Each Ollama agent is given a fixed set of tools at startup. All tool implementat
 
 ### Tool availability by agent
 
-| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding | Story Reviewer |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `edit_file` | | | ✓ | ✓ | ✓ | |
-| `bash` | | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `grep` | | | ✓ | ✓ | ✓ | |
-| `ask_user` | | | | | | ✓ |
+| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `edit_file` | | | ✓ | ✓ | ✓ |
+| `bash` | | ✓ | ✓ | ✓ | ✓ |
+| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `grep` | | | ✓ | ✓ | ✓ |
 
 The tools are grouped into five named collections in `ollama_utilities.py`:
 
@@ -390,7 +370,6 @@ The tools are grouped into five named collections in `ollama_utilities.py`:
 | `ANALYST_TOOLS` | `read_file`, `write_file`, `glob` | *(base set; not used directly)* |
 | `BA_TOOLS` | `read_file`, `write_file`, `glob`, `bash` | Business Analyst |
 | `CODING_TOOLS` | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` | Project Initialiser, Junior Coding, Senior Coding |
-| `REVIEWER_TOOLS` | `read_file`, `write_file`, `glob`, `bash`, `ask_user` | Story Reviewer |
 
 ### Tool reference
 
@@ -437,7 +416,7 @@ Execute a shell command in the agent's working directory and return its output.
 |---|---|:---:|---|
 | `command` | string | ✓ | Shell command to run — must be a plain POSIX shell string; never nest tool-call syntax inside this value |
 
-Runs via `subprocess.run()` with a **120-second timeout**. Returns the combined stdout and stderr. The working directory is set to the workspace root automatically — no `cd` prefix is needed. Used by coding agents to run build tools, test runners, and linters; and by the Story Reviewer to rename story files and delete the HALT sentinel.
+Runs via `subprocess.run()` with a **120-second timeout**. Returns the combined stdout and stderr. The working directory is set to the workspace root automatically — no `cd` prefix is needed. Used by coding agents to run build tools, test runners, and linters.
 
 ---
 
@@ -466,18 +445,6 @@ Used by coding agents and the Project Initialiser to locate definitions, imports
 
 ---
 
-#### `ask_user`
-Present a question to the user and block until they reply.
-
-| Parameter | Type | Required | Description |
-|---|---|:---:|---|
-| `question` | string | ✓ | The question or prompt to display |
-| `choices` | array of strings | | Optional list of options; printed as a numbered menu alongside the question |
-
-Writes the question to stdout and reads a line from stdin. Used exclusively by the Story Reviewer to gather human guidance on how to handle a failed story — for example, whether to change the approach, relax acceptance criteria, or split the story into smaller pieces.
-
----
-
 ## Repository layout
 
 ```
@@ -493,31 +460,27 @@ momo-agents/
 │   │   ├── claude_business_analyst_agent.py
 │   │   ├── claude_project_initialiser_agent.py
 │   │   ├── claude_junior_coding_agent.py      ← claims easy stories
-│   │   ├── claude_senior_coding_agent.py      ← claims medium/hard stories
-│   │   └── claude_story_reviewer_agent.py
+│   │   └── claude_senior_coding_agent.py      ← claims medium/hard stories
 │   └── ollama_agents/             ← agents backed by a local Ollama instance
 │       ├── ollama_utilities.py            ← shared tool defs, ToolExecutor, agent loops, text-tool-call fallback
 │       ├── ollama_designer_agent.py
 │       ├── ollama_business_analyst_agent.py
 │       ├── ollama_project_initialiser_agent.py
 │       ├── ollama_junior_coding_agent.py
-│       ├── ollama_senior_coding_agent.py
-│       └── ollama_story_reviewer_agent.py
+│       └── ollama_senior_coding_agent.py
 ├── roles/                     ← system prompt files (one per LLM agent)
 │   ├── claude_roles/                  ← prompts for the Claude backend
 │   │   ├── claude_designer.md
 │   │   ├── claude_business-analyst.md
 │   │   ├── claude_project-initialiser.md
 │   │   ├── claude_junior-coding-agent.md
-│   │   ├── claude_senior-coding-agent.md
-│   │   └── claude_story-reviewer.md
+│   │   └── claude_senior-coding-agent.md
 │   └── ollama_roles/                  ← prompts for the Ollama backend
 │       ├── ollama-designer.md
 │       ├── ollama-business-analyst.md
 │       ├── ollama-project-initialiser.md
 │       ├── ollama-junior-coding-agent.md
-│       ├── ollama-senior-coding-agent.md
-│       └── ollama-story-reviewer.md
+│       └── ollama-senior-coding-agent.md
 ├── start-team.sh              ← launches all agents simultaneously
 ├── reset-team.sh              ← wipes all artefacts; resets to clean state
 ├── status.sh                  ← live story-state summary
@@ -544,9 +507,7 @@ All pipeline artefacts are written here. Nothing inside `momo-agents/` itself is
 │   ├── STORY-002.easy.ready.md            ← deps met; ready for a Junior Coding Agent
 │   ├── STORY-003.medium.working.md        ← claimed by a Senior Coding Agent
 │   ├── STORY-004.easy.done.md             ← implementation complete
-│   ├── STORY-005.hard.failed.md           ← failed; awaiting Story Reviewer
-│   ├── STORY-006.medium.reviewing.md      ← currently being triaged by the Story Reviewer
-│   └── HALT                               ← sentinel: all Coding Agents must stop and wait
+│   └── STORY-005.hard.failed.md           ← implementation failed
 ├── .sentinels/                ← runtime coordination files created by start-team.sh;
 │   │                             entire directory is removed on clean shutdown
 │   ├── pipeline_complete          ← written on Ctrl+C; signals all agents to exit
@@ -573,7 +534,7 @@ STORY-NNN.<complexity>.<state>.md
 | Segment | Values | Set by |
 |---|---|---|
 | `complexity` | `easy`, `medium`, `hard` | Business Analyst (when writing the story) |
-| `state` | *(none)* → `ready` → `working` → `done` \| `failed` → `reviewing` | Story Orchestrator, Coding Agents, Story Reviewer |
+| `state` | *(none)* → `ready` → `working` → `done` \| `failed` | Story Orchestrator, Coding Agents |
 
 A bare `STORY-NNN.md` (no complexity or state suffix) is newly written by the BA and not yet evaluated. The Story Orchestrator renames it to `STORY-NNN.<complexity>.ready.md` once all dependency stories are in `done` state.
 
@@ -684,53 +645,28 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 1. Poll every 10 s until `<workspace>/CLAUDE.md` exists.
 
 **Python outer loop**:
-1. Check for `<workspace>/stories/HALT` or `<workspace>/.sentinels/pipeline_complete` — exit if either exists.
+1. Check for `<workspace>/.sentinels/pipeline_complete` — exit if it exists.
 2. Atomically claim the lowest-numbered `.ready.md` story of the correct complexity tier by renaming it to `.working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
 3. If no story can be claimed, sleep 10 s and retry.
 4. Determine the **outcome sentinel path**: `<workspace>/.sentinels/STORY-NNN.outcome`.
-5. Start a **fresh LLM session** for the claimed story, passing the story path, workspace root, HALT file path, and outcome sentinel path in the task prompt.
-6. After the session ends: read the outcome sentinel written by the LLM and **rename the story file in Python** accordingly (`.working.md` → `.done.md`, `.failed.md`, or back to `.ready.md`), then delete the sentinel. Loop back to step 1.
+5. Start a **fresh LLM session** for the claimed story, passing the story path, workspace root, and outcome sentinel path in the task prompt.
+6. After the session ends: read the outcome sentinel written by the LLM and **rename the story file in Python** accordingly (`.working.md` → `.done.md` or `.failed.md`), then delete the sentinel. Loop back to step 1.
 
 **Per-story LLM session**:
 1. Read `<workspace>/CLAUDE.md` — note build/test/lint commands and the Agent Exclusion List (never read from or write to those paths).
 2. Read the story file and design document(s) from the story's **Design ref** field.
 3. Implement the acceptance criteria in `<workspace>/`.
 4. Run tests and linter as instructed in `CLAUDE.md`. Fix all failures.
-5. Check for `<workspace>/stories/HALT` before proceeding — if found, stop immediately — do **not** touch the story file.
-6. **On success**:
+5. **On success**:
    - Write `done` to the outcome sentinel file.
    - Stop immediately — do not perform any further tool calls.
-7. **On failure**: create `<workspace>/stories/HALT`, write `failed` to the outcome sentinel file, then stop immediately.
+6. **On failure**: write `failed` to the outcome sentinel file, then stop immediately.
 
 The LLM session **never renames, writes, or deletes story files**. Story file state transitions always happen in Python after the LLM session returns.
 
-**Outcome sentinel behaviour**: if the LLM session ends without writing an outcome (e.g. because a HALT was detected mid-session), Python resets the story to `.ready.md` so another agent can retry it.
+**Outcome sentinel behaviour**: if the LLM session ends without writing an outcome, Python resets the story to `.ready.md` so another agent can retry it.
 
 > `<workspace>/CLAUDE.md` is read at the start of every story session rather than being pre-loaded and injected into the task prompt. This keeps each session's initial context lean — for real projects CLAUDE.md can be several hundred lines — and avoids inflating input token costs across a large story backlog.
-
----
-
-### Story Reviewer
-
-A **one-shot agent** — `start-team.sh` invokes it when it detects that `<workspace>/stories/HALT` exists. The agent processes all currently-failed stories in a single LLM session and then exits. The continuous watch loop for the HALT file lives in `start-team.sh`.
-
-**Python startup**:
-1. Checks whether `<workspace>/stories/HALT` exists — if not, prints a message and exits immediately.
-2. Globs all `STORY-*.failed.md` files.
-3. If HALT exists but no failed stories are found: removes the stale HALT file and exits.
-4. Starts a single LLM session covering all failed stories, then waits for completion.
-5. After the session: warns if the HALT file still exists (some stories may not have been resolved).
-
-**LLM session behaviour** (per failed story, in order):
-1. Atomically claims the next `.failed.md` story by renaming it to `.[complexity].reviewing.md`.
-2. Reads the full story file, including any appended failure notes.
-3. Presents the user with the story goal, acceptance criteria, and a plain-language summary of each failed attempt.
-4. Asks the user how to proceed — new approach, relaxed constraints, split the story, or skip it.
-5. Rewrites the story file based on the user's guidance; preserves `**Index**` and `**Depends on**`; removes all failure notes.
-6. Renames `.[complexity].reviewing.md` → bare `STORY-NNN.md` — returns it to the unprocessed queue so the Story Orchestrator re-evaluates it with the rewritten content.
-7. Repeats steps 1–6 for each remaining failed story.
-8. Deletes `<workspace>/stories/HALT` once all failed stories have been resolved.
-9. Notifies the user that the pipeline is ready to resume.
 
 ---
 
@@ -777,9 +713,7 @@ Complexity and state are encoded directly in the filename — no database or ext
 | `STORY-NNN.[c].ready.md` | **Ready** | Story Orchestrator (or Coding Agent harness on reset) | Coding Agent (matching complexity) |
 | `STORY-NNN.[c].working.md` | **In progress** | Coding Agent harness (Python) | — (owned by one agent) |
 | `STORY-NNN.[c].done.md` | **Complete** | Coding Agent harness (Python) | Nobody |
-| `STORY-NNN.[c].failed.md` | **Failed** | Coding Agent harness (Python) | Story Reviewer |
-| `STORY-NNN.[c].reviewing.md` | **Under review** | Story Reviewer | — (owned by reviewer) |
-| `HALT` *(sentinel)* | **System paused** | Coding Agent (LLM, via bash) | Triggers stop in all Coding Agents |
+| `STORY-NNN.[c].failed.md` | **Failed** | Coding Agent harness (Python) | Nobody |
 
 Note: the **Coding Agent harness** means the Python `run()` loop, not the LLM session. The LLM writes an outcome sentinel (`done` or `failed`) to `<workspace>/.sentinels/STORY-NNN.outcome`; Python reads it and performs the story file rename. This ensures all story file state transitions happen on the main branch, never inside a story branch.
 
@@ -803,24 +737,14 @@ STORY-NNN.[complexity].working.md  ← owned by exactly one Coding Agent
       │  Agent implements story
       │
    ┌──┴────────────────────────┐
-success                     failure (no retry)
+success                     failure
    │                            │
-   │  write 'done' to           │  create workspace/stories/HALT
-   │  outcome sentinel          │  write 'failed' to outcome sentinel
-   │  stop immediately          │  stop immediately
-   ▼                            │
-   Python harness reads sentinel │
-   renames .working → .done.md  │  Python harness reads sentinel
-                                 │  renames .working → .failed.md
-                                 ▼
-                      Story Reviewer claims:
-                      .failed.md → .reviewing.md
-                      rewrites story with user guidance
-                      renames → bare STORY-NNN.md
-                      deletes HALT when all .failed.md resolved
-                                 │
-                      Story Orchestrator re-evaluates bare .md
-                      → marks .ready.md again
+   │  write 'done' to           │  write 'failed' to outcome sentinel
+   │  outcome sentinel          │  stop immediately
+   │  stop immediately          │
+   ▼                            ▼
+   Python harness reads sentinel Python harness reads sentinel
+   renames .working → .done.md  renames .working → .failed.md
 ```
 
 ### Parallel coordination
@@ -833,8 +757,6 @@ All coordination is via atomic filesystem operations — no database, no message
 | Claim a story | Python agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic; LLM session starts only after a claim succeeds |
 | Story file state transition | Python reads `<workspace>/.sentinels/STORY-NNN.outcome` after each LLM session and renames the `.working.md` file accordingly — never done inside the LLM session |
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
-| Halt detection | Check for `workspace/stories/HALT` before and after implementation; exit immediately if found |
-| Workspace revert | Python resets story to `.ready.md` on HALT detection (no outcome sentinel written) |
 | Pipeline shutdown | `workspace/.sentinels/pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
 | Stale agent recovery | Watchdog resets `.[c].working.md` files idle > 10 minutes → `.[c].ready.md` |
 

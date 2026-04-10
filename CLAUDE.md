@@ -31,31 +31,27 @@ momo-agents/
 │   │   ├── claude_business_analyst_agent.py     # Decomposes design doc into story files
 │   │   ├── claude_project_initialiser_agent.py  # Scaffolds workspace/ from design; writes workspace/CLAUDE.md
 │   │   ├── claude_junior_coding_agent.py        # Claims and implements easy stories
-│   │   ├── claude_senior_coding_agent.py        # Claims and implements medium/hard stories
-│   │   └── claude_story_reviewer_agent.py       # Triages failed stories with user
+│   │   └── claude_senior_coding_agent.py        # Claims and implements medium/hard stories
 │   └── ollama_agents/              # Agents backed by a local Ollama instance
 │       ├── ollama_utilities.py                      # Shared tool defs, ToolExecutor, agent loops, and text-tool-call fallback helpers
 │       ├── ollama_designer_agent.py                 # Interactive design session (chat loop)
 │       ├── ollama_business_analyst_agent.py         # Decomposes design doc into story files
 │       ├── ollama_project_initialiser_agent.py      # Scaffolds workspace/ from design doc
 │       ├── ollama_junior_coding_agent.py            # Claims and implements easy stories
-│       ├── ollama_senior_coding_agent.py            # Claims and implements medium/hard stories
-│       └── ollama_story_reviewer_agent.py           # Triages failed stories with user
+│       └── ollama_senior_coding_agent.py            # Claims and implements medium/hard stories
 ├── roles/                  # System prompt files (one per LLM agent)
 │   ├── claude_roles/                    # Prompts for the Claude backend
 │   │   ├── claude_designer.md
 │   │   ├── claude_business-analyst.md
 │   │   ├── claude_project-initialiser.md
 │   │   ├── claude_junior-coding-agent.md
-│   │   ├── claude_senior-coding-agent.md
-│   │   └── claude_story-reviewer.md
+│   │   └── claude_senior-coding-agent.md
 │   └── ollama_roles/                    # Prompts for the Ollama backend (tool-aware variants)
 │       ├── ollama-designer.md
 │       ├── ollama-business-analyst.md
 │       ├── ollama-project-initialiser.md
 │       ├── ollama-junior-coding-agent.md
-│       ├── ollama-senior-coding-agent.md
-│       └── ollama-story-reviewer.md
+│       └── ollama-senior-coding-agent.md
 ├── generated-test-applications/  # Sample outputs from pipeline test runs
 ├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
@@ -121,7 +117,6 @@ python scripts/claude_agents/claude_project_initialiser_agent.py --design worksp
 python scripts/story_orchestrator.py
 python scripts/claude_agents/claude_junior_coding_agent.py
 python scripts/claude_agents/claude_senior_coding_agent.py
-python scripts/claude_agents/claude_story_reviewer_agent.py
 
 # Run an agent directly (Ollama backend — requires a running Ollama instance)
 python scripts/ollama_agents/ollama_designer_agent.py --model qwen2.5-coder
@@ -129,7 +124,6 @@ python scripts/ollama_agents/ollama_business_analyst_agent.py --design workspace
 python scripts/ollama_agents/ollama_project_initialiser_agent.py --design workspace/design/my-feature.new.md
 python scripts/ollama_agents/ollama_junior_coding_agent.py
 python scripts/ollama_agents/ollama_senior_coding_agent.py
-python scripts/ollama_agents/ollama_story_reviewer_agent.py
 # Override host:  --ollama-host http://192.168.1.10:11434
 # Override model: --model llama3.1
 

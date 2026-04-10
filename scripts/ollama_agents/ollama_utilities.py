@@ -3,8 +3,7 @@
 Imported by all ollama_* agent scripts. The two agent-loop variants are:
 
 - ``run_agent_loop``: task-oriented; runs until the model stops requesting tool
-  calls or ``max_turns`` is reached. Suited for coding agents, the BA agent,
-  and the story reviewer (which uses the ``ask_user`` tool to gather input).
+  calls or ``max_turns`` is reached. Suited for coding agents and the BA agent.
 
 - ``run_chat_loop``: interactive; after each model text response (no tool calls),
   prompts the user for input and feeds it back as a user message. Suited for
@@ -165,32 +164,6 @@ _TOOL_GREP: dict[str, Any] = {
     },
 }
 
-_TOOL_ASK_USER: dict[str, Any] = {
-    "type": "function",
-    "function": {
-        "name": "ask_user",
-        "description": (
-            "Present a question to the user and wait for their response. "
-            "Use this when you need clarification or a decision before proceeding."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "question": {
-                    "type": "string",
-                    "description": "The question or prompt to show the user",
-                },
-                "choices": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Optional list of choices to present alongside the question",
-                },
-            },
-            "required": ["question"],
-        },
-    },
-}
-
 # ---------------------------------------------------------------------------
 # Tool groupings — import and use these in agent scripts
 # ---------------------------------------------------------------------------
@@ -218,15 +191,6 @@ DESIGNER_TOOLS: list[dict[str, Any]] = [
     _TOOL_READ_FILE,
     _TOOL_WRITE_FILE,
     _TOOL_GLOB,
-]
-
-#: Reviewer toolkit: read/write/shell + user interaction via ask_user tool.
-REVIEWER_TOOLS: list[dict[str, Any]] = [
-    _TOOL_READ_FILE,
-    _TOOL_WRITE_FILE,
-    _TOOL_GLOB,
-    _TOOL_BASH,
-    _TOOL_ASK_USER,
 ]
 
 # ---------------------------------------------------------------------------
@@ -316,16 +280,6 @@ class ToolExecutor:
         except Exception as exc:
             return f"ERROR: {exc}"
 
-    def ask_user(self, question: str, choices: list[str] | None = None) -> str:
-        print(f"\n[?] {question}", flush=True)
-        if choices:
-            for i, choice in enumerate(choices, 1):
-                print(f"    {i}. {choice}", flush=True)
-        try:
-            return input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            return "(user ended session)"
-
     # --- dispatch -----------------------------------------------------------
 
     def execute(self, name: str, arguments: dict[str, Any]) -> str:
@@ -337,7 +291,6 @@ class ToolExecutor:
             "bash": lambda a: self.bash(a["command"]),
             "glob": lambda a: self.glob(a["pattern"], a.get("directory", "")),
             "grep": lambda a: self.grep(a["pattern"], a.get("path", ""), a.get("glob", "")),
-            "ask_user": lambda a: self.ask_user(a["question"], a.get("choices")),
         }
         handler = handlers.get(name)
         if handler is None:
@@ -500,8 +453,7 @@ async def run_agent_loop(
 
     Sends *messages* to the model, executes any tool calls, appends results,
     and repeats until the model produces a response with no tool calls or
-    *max_turns* is reached. The ``ask_user`` tool can be included in *tools*
-    to allow the model to interactively ask the user questions mid-task.
+    *max_turns* is reached.
 
     If *system_prompt* is provided it is inserted as a ``system`` message at
     index 0 of *messages* before the first call so the full history remains

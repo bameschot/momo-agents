@@ -44,12 +44,10 @@ def _parse_args() -> argparse.Namespace:
 
 
 
-def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_file: Path) -> str:
-    story_number = story_path.stem.split(".")[0]  # e.g. STORY-001
+def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> str:
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
-        f"HALT file: {halt_file}\n"
         f"Outcome file: {outcome_file}\n\n"
         "## Task\n"
         f"1. Use `read_file` to read `{workspace_dir}/CLAUDE.md` — note build/test/lint commands "
@@ -60,14 +58,10 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_
         "4. Implement the acceptance criteria using `write_file` (new files) and "
         "`edit_file` (modifications).\n"
         "5. Run tests and linter per CLAUDE.md using the `bash` tool.\n"
-        f"6. Use the `bash` tool with shell command "
-        f"`test -f {halt_file} && echo exists || echo absent` to check for the HALT file. "
-        "If found, perform the halt procedure.\n"
-        "7. Success:\n"
+        "6. Success:\n"
         f"   a. Use `write_file` to write the word `done` to `{outcome_file}`.\n"
         "   b. Stop immediately — do not perform any further tool calls.\n"
-        f"8. Failure → use the `bash` tool with shell command `touch {halt_file}` to create "
-        f"the HALT file, use `write_file` to write the word `failed` to `{outcome_file}`, "
+        f"7. Failure → use `write_file` to write the word `failed` to `{outcome_file}`, "
         "then stop immediately.\n\n"
         "IMPORTANT: Never rename, write, edit, or delete story files "
         "(.ready.md / .working.md / .done.md / .failed.md). "
@@ -86,7 +80,6 @@ async def run(
     conv_log_dir: Path | None,
 ) -> None:
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
-    halt_file = stories_dir / "HALT"
 
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
 
@@ -96,9 +89,6 @@ async def run(
     print(f"[{agent_name}] Connected to Ollama at {ollama_host}, model={model}", flush=True)
 
     while True:
-        if halt_file.exists():
-            print(f"[{agent_name}] HALT detected — exiting.")
-            return
         if pipeline_complete.exists():
             print(f"[{agent_name}] Pipeline complete — exiting.")
             return
@@ -115,7 +105,7 @@ async def run(
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.", flush=True)
         story_id = story_path.stem.split(".")[0]  # e.g. STORY-001
         outcome_file = workspace_dir / ".sentinels" / f"{story_id}.outcome"
-        task = _build_task(story_path, workspace_dir, halt_file, outcome_file)
+        task = _build_task(story_path, workspace_dir, outcome_file)
 
         messages: list[Message] = [Message(role="user", content=task)]
         await run_agent_loop(

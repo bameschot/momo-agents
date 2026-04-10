@@ -54,12 +54,11 @@ def _parse_args() -> argparse.Namespace:
 
 
 
-def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_file: Path) -> str:
+def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> str:
     """Build a focused single-story task prompt."""
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
-        f"HALT file: {halt_file}\n"
         f"Outcome file: {outcome_file}\n\n"
         "## Task\n"
         "1. Read workspace/CLAUDE.md — note build/test/lint commands and the Agent Exclusion List.\n"
@@ -68,9 +67,8 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_
         "(two paths separated by ' | ' — read whichever exist).\n"
         "4. Implement the acceptance criteria.\n"
         "5. Run tests and linter per CLAUDE.md.\n"
-        f"6. Check {halt_file} — if found, perform the halt procedure.\n"
-        f"7. Success → write the word 'done' to {outcome_file}.\n"
-        f"8. Failure → create {halt_file}, write the word 'failed' to {outcome_file}, perform halt procedure.\n\n"
+        f"6. Success → write the word 'done' to {outcome_file}.\n"
+        f"7. Failure → write the word 'failed' to {outcome_file}.\n\n"
         "IMPORTANT: Never rename, write, edit, or delete story files "
         "(.ready.md / .working.md / .done.md / .failed.md). "
         "Story file state transitions are managed by the pipeline harness outside the LLM session."
@@ -80,7 +78,6 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_
 
 async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
-    halt_file = stories_dir / "HALT"
 
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
 
@@ -94,9 +91,6 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path 
     )
 
     while True:
-        if halt_file.exists():
-            print(f"[{agent_name}] HALT detected — exiting.")
-            return
         if pipeline_complete.exists():
             print(f"[{agent_name}] Pipeline complete — exiting.")
             return
@@ -110,7 +104,7 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path 
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.")
         story_id = story_path.stem.split(".")[0]  # e.g. STORY-001
         outcome_file = workspace_dir / ".sentinels" / f"{story_id}.outcome"
-        task = _build_task(story_path, workspace_dir, halt_file, outcome_file)
+        task = _build_task(story_path, workspace_dir, outcome_file)
 
         async for message in query(prompt=task, options=options):
             log_claude_message(conv_log_dir, agent_name, message, story_id)
