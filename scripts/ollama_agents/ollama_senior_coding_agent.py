@@ -10,7 +10,7 @@ import argparse
 import anyio
 from ollama import Message
 
-from agent_utilities import append_run_log, load_role, resolve_path, wait_for_workspace
+from agent_utilities import claim_story, finalise_story, load_role, resolve_path, wait_for_workspace
 from ollama_utilities import (
     CODING_TOOLS,
     DEFAULT_MODEL,
@@ -43,34 +43,14 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _claim_story(stories_dir: Path) -> Path | None:
-    """Atomically claim the lowest-numbered medium or hard .ready story.
 
-    Renames ``STORY-NNN.[complexity].ready.md`` → ``STORY-NNN.[complexity].working.md``.
-    Returns the working path on success, None if nothing could be claimed.
-    """
-    medium = list(stories_dir.glob("STORY-*.medium.ready.md"))
-    hard = list(stories_dir.glob("STORY-*.hard.ready.md"))
-    candidates = sorted(medium + hard, key=lambda p: p.name)
-    for candidate in candidates:
-        working = candidate.with_name(candidate.name.replace(".ready.md", ".working.md"))
-        try:
-            candidate.rename(working)
-            return working
-        except OSError:
-            continue
-    return None
-
-
-def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
-    parts = story_path.stem.split(".")  # STORY-001.medium.working → ['STORY-001', 'medium', 'working']
-    story_number = parts[0]  # e.g. STORY-001
-    done_path = story_path.with_name(story_path.name.replace(".working.md", ".done.md"))
-    failed_path = story_path.with_name(story_path.name.replace(".working.md", ".failed.md"))
+def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_file: Path) -> str:
+    story_number = story_path.stem.split(".")[0]  # e.g. STORY-001
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
-        f"HALT file: {halt_file}\n\n"
+        f"HALT file: {halt_file}\n"
+        f"Outcome file: {outcome_file}\n\n"
         "## Task\n"
         f"1. Use `read_file` to read `{workspace_dir}/CLAUDE.md` — note build/test/lint commands "
         "and the Agent Exclusion List (never read from or write to those paths).\n"
@@ -92,13 +72,17 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
         f"`git checkout main && git merge --no-ff story/{story_number}` "
         "(use `master` if `main` does not exist).\n"
         f"   c. Use the `bash` tool with shell command `git branch -d story/{story_number}`.\n"
-        f"   d. Use the `bash` tool with shell command `mv {story_path} {done_path}`.\n"
+        f"   d. Use `write_file` to write the word `done` to `{outcome_file}`.\n"
         "   e. Stop immediately — do not perform any further tool calls.\n"
         f"9. Failure → use the `bash` tool with shell command `touch {halt_file}` to create "
         "the HALT file, use the `bash` tool with shell command `git checkout main` to switch "
-        f"back to main, use the `bash` tool with shell command `mv {story_path} {failed_path}` "
-        "to rename the story, append a failure note with `edit_file`, then stop immediately."
+        f"back to main, use `write_file` to write the word `failed` to `{outcome_file}`, "
+        "then stop immediately.\n\n"
+        "IMPORTANT: Never rename, write, edit, or delete story files "
+        "(.ready.md / .working.md / .done.md / .failed.md). "
+        "Story file state transitions are managed by the pipeline harness outside the LLM session."
     )
+
 
 
 async def run(
@@ -128,7 +112,7 @@ async def run(
             print(f"[{agent_name}] Pipeline complete — exiting.")
             return
 
-        story_path = _claim_story(stories_dir)
+        story_path = claim_story(stories_dir, ["STORY-*.medium.ready.md", "STORY-*.hard.ready.md"])
         if story_path is None:
             print(
                 f"[{agent_name}] No medium/hard.ready stories available — "
@@ -138,8 +122,9 @@ async def run(
             continue
 
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.", flush=True)
-        task = _build_task(story_path, workspace_dir, halt_file)
-        story_context = story_path.stem.split(".")[0]  # e.g. STORY-001
+        story_id = story_path.stem.split(".")[0]  # e.g. STORY-001
+        outcome_file = workspace_dir / ".sentinels" / f"{story_id}.outcome"
+        task = _build_task(story_path, workspace_dir, halt_file, outcome_file)
 
         messages: list[Message] = [Message(role="user", content=task)]
         await run_agent_loop(
@@ -151,16 +136,10 @@ async def run(
             agent_name=agent_name,
             system_prompt=system_prompt,
             conv_log_dir=conv_log_dir,
-            context=story_context,
+            context=story_id,
         )
 
-        stem = story_path.name.replace(".working.md", "")
-        done_path = story_path.with_name(stem + ".done.md")
-        failed_path = story_path.with_name(stem + ".failed.md")
-        if done_path.exists():
-            append_run_log(run_log, agent_name, f"story done: {done_path.name}")
-        elif failed_path.exists():
-            append_run_log(run_log, agent_name, f"story failed: {failed_path.name}")
+        finalise_story(story_path, outcome_file, run_log, agent_name)
 
 
 if __name__ == "__main__":

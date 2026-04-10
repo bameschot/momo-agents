@@ -17,8 +17,9 @@ Each story must be implemented on its own branch:
 When the HALT file (path given in task prompt) exists:
 1. Discard uncommitted changes — use the `bash` tool with shell command: `git checkout -- src tests`
 2. Switch back to the main branch — use the `bash` tool with shell command: `git checkout main` (or `master`).
-3. Rename your `.[complexity].working.md` story back to `.[complexity].ready.md` — use the `bash` tool with shell command: `mv <story>.[complexity].working.md <story>.[complexity].ready.md`.
-4. Stop immediately — do not perform any further tool calls.
+3. Stop immediately — do **not** touch the story file. Do not perform any further tool calls.
+
+The pipeline harness resets the story file state outside your session.
 
 ## Constraints
 
@@ -29,6 +30,7 @@ When the HALT file (path given in task prompt) exists:
 - Never read from or write to paths listed in `## Agent Exclusion List` in `CLAUDE.md`.
 - For medium and hard stories, understand the full scope before writing any code — use `glob` and `grep` to map the affected subsystems first.
 - Always resolve merge conflicts yourself — never leave conflict markers in any file.
+- **Never rename, write, edit, or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt using `write_file`.
 
 ## Tools
 
@@ -56,7 +58,6 @@ Run a shell command in the workspace root and return stdout + stderr. Timeout is
 Examples — these are the exact strings to pass as the `command` argument:
 - Run tests: `pytest tests/`
 - Run linter: `ruff check src/`
-- Rename story to done: `mv stories/STORY-001.medium.working.md stories/STORY-001.medium.done.md`
 - Commit: `git add -A && git commit -m 'implement STORY-001: <title>'`
 - Check HALT: `test -f stories/HALT && echo exists || echo absent`
 - Create a directory: `mkdir -p src/subpackage`
@@ -89,6 +90,6 @@ Execute these steps in order using tools — do not describe what you plan to do
     b. Switch to main and merge — use the `bash` tool with shell command: `git checkout main && git merge --no-ff story/STORY-NNN` (use `master` if `main` does not exist).
     c. If there are merge conflicts: resolve them with `read_file` and `edit_file`, then use the `bash` tool with shell command: `git add -A && git commit`. Run tests again and fix any failures.
     d. Delete the story branch — use the `bash` tool with shell command: `git branch -d story/STORY-NNN`
-    e. Rename the story file from `.[complexity].working.md` to `.[complexity].done.md` — use the `bash` tool with the appropriate `mv` command.
+    e. Use `write_file` to write the word `done` to the outcome file specified in your task prompt.
     f. **Stop immediately — do not perform any further tool calls.**
-11. **Failure**: use `bash` with shell command `touch <halt_file>` to create the HALT file, use `bash` with shell command `git checkout main` to switch back to main, rename the story file from `.[complexity].working.md` to `.[complexity].failed.md` using `bash` with the appropriate `mv` command, then append a failure note to the story file with `edit_file`. **Stop immediately — do not perform any further tool calls.**
+11. **Failure**: use `bash` with shell command `touch <halt_file>` to create the HALT file, use `bash` with shell command `git checkout main` to switch back to main, use `write_file` to write the word `failed` to the outcome file specified in your task prompt. **Stop immediately — do not perform any further tool calls.**

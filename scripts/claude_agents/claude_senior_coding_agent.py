@@ -10,7 +10,7 @@ import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
+from agent_utilities import claim_story, finalise_story, load_role, resolve_path, wait_for_workspace
 from conversation_logger import log_claude_message
 
 POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
@@ -53,31 +53,14 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _claim_story(stories_dir: Path) -> Path | None:
-    """Atomically claim the lowest-numbered medium or hard .ready story.
 
-    Renames STORY-NNN.[complexity].ready.md → STORY-NNN.[complexity].working.md.
-    Returns the working path on success, None if nothing could be claimed.
-    """
-    medium = list(stories_dir.glob("STORY-*.medium.ready.md"))
-    hard = list(stories_dir.glob("STORY-*.hard.ready.md"))
-    candidates = sorted(medium + hard, key=lambda p: p.name)
-    for candidate in candidates:
-        working = candidate.with_name(candidate.name.replace(".ready.md", ".working.md"))
-        try:
-            candidate.rename(working)
-            return working
-        except OSError:
-            continue
-    return None
-
-
-def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
+def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path, outcome_file: Path) -> str:
     """Build a focused single-story task prompt."""
     return (
         f"Story: {story_path}\n"
         f"Workspace: {workspace_dir}\n"
-        f"HALT file: {halt_file}\n\n"
+        f"HALT file: {halt_file}\n"
+        f"Outcome file: {outcome_file}\n\n"
         "## Task\n"
         "1. Read workspace/CLAUDE.md — note build/test/lint commands and the Agent Exclusion List.\n"
         "2. Read the story file.\n"
@@ -86,10 +69,13 @@ def _build_task(story_path: Path, workspace_dir: Path, halt_file: Path) -> str:
         "4. Implement the acceptance criteria.\n"
         "5. Run tests and linter per CLAUDE.md.\n"
         f"6. Check {halt_file} — if found, perform the halt procedure.\n"
-        "7. Success → rename .[complexity].working.md → .[complexity].done.md, commit.\n"
-        f"8. Failure → create {halt_file}, rename .[complexity].working.md → "
-        ".[complexity].failed.md, perform halt procedure."
+        f"7. Success → write the word 'done' to {outcome_file}, then commit and merge the story branch back to main.\n"
+        f"8. Failure → create {halt_file}, write the word 'failed' to {outcome_file}, perform halt procedure.\n\n"
+        "IMPORTANT: Never rename, write, edit, or delete story files "
+        "(.ready.md / .working.md / .done.md / .failed.md). "
+        "Story file state transitions are managed by the pipeline harness outside the LLM session."
     )
+
 
 
 async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
@@ -115,26 +101,21 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path 
             print(f"[{agent_name}] Pipeline complete — exiting.")
             return
 
-        story_path = _claim_story(stories_dir)
+        story_path = claim_story(stories_dir, ["STORY-*.medium.ready.md", "STORY-*.hard.ready.md"])
         if story_path is None:
             print(f"[{agent_name}] No medium/hard.ready stories available — polling every {POLL_INTERVAL}s...")
             await anyio.sleep(POLL_INTERVAL)
             continue
 
         print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.")
-        task = _build_task(story_path, workspace_dir, halt_file)
-        story_context = story_path.stem.split(".")[0]  # e.g. STORY-001
+        story_id = story_path.stem.split(".")[0]  # e.g. STORY-001
+        outcome_file = workspace_dir / ".sentinels" / f"{story_id}.outcome"
+        task = _build_task(story_path, workspace_dir, halt_file, outcome_file)
 
         async for message in query(prompt=task, options=options):
-            log_claude_message(conv_log_dir, agent_name, message, story_context)
+            log_claude_message(conv_log_dir, agent_name, message, story_id)
 
-        stem = story_path.name.replace(".working.md", "")
-        done_path = story_path.with_name(stem + ".done.md")
-        failed_path = story_path.with_name(stem + ".failed.md")
-        if done_path.exists():
-            append_run_log(run_log, agent_name, f"story done: {done_path.name}")
-        elif failed_path.exists():
-            append_run_log(run_log, agent_name, f"story failed: {failed_path.name}")
+        finalise_story(story_path, outcome_file, run_log, agent_name)
 
 
 if __name__ == "__main__":

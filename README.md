@@ -553,6 +553,8 @@ All pipeline artefacts are written here. Nothing inside `momo-agents/` itself is
 │   ├── config.sh                  ← shared environment variables sourced by wrapper scripts
 │   ├── run-log.jsonl              ← pipeline event log (one JSON object per line)
 │   ├── git_log.jsonl              ← workspace git commits for this run (exported on shutdown)
+│   ├── STORY-NNN.outcome          ← per-story outcome written by LLM ('done' or 'failed');
+│   │                                 read by Python harness to rename the story file; deleted after use
 │   ├── tokens/                    ← per-agent JSONL token-usage logs
 │   └── run_*.sh                   ← per-agent wrapper scripts
 ├── src/                       ← generated application source code
@@ -685,8 +687,9 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 1. Check for `<workspace>/stories/HALT` or `<workspace>/.sentinels/pipeline_complete` — exit if either exists.
 2. Atomically claim the lowest-numbered `.ready.md` story of the correct complexity tier by renaming it to `.working.md`. POSIX `rename(2)` is atomic — if two agents race, exactly one succeeds; the other moves to the next candidate.
 3. If no story can be claimed, sleep 10 s and retry.
-4. Start a **fresh LLM session** for the claimed story, passing the story path, workspace root, and HALT file path in the task prompt.
-5. After the session ends: check whether `.done.md` or `.failed.md` now exists and log accordingly, then loop back to step 1.
+4. Determine the **outcome sentinel path**: `<workspace>/.sentinels/STORY-NNN.outcome`.
+5. Start a **fresh LLM session** for the claimed story, passing the story path, workspace root, HALT file path, and outcome sentinel path in the task prompt.
+6. After the session ends: read the outcome sentinel written by the LLM and **rename the story file in Python** accordingly (`.working.md` → `.done.md`, `.failed.md`, or back to `.ready.md`), then delete the sentinel. Loop back to step 1.
 
 **Per-story LLM session**:
 1. Read `<workspace>/CLAUDE.md` — note build/test/lint commands and the Agent Exclusion List (never read from or write to those paths).
@@ -694,15 +697,19 @@ Both agents follow the same structure: **Python owns the outer loop; a fresh LLM
 3. Create a dedicated git branch: `git checkout -b story/STORY-NNN`.
 4. Implement the acceptance criteria in `<workspace>/`.
 5. Run tests and linter as instructed in `CLAUDE.md`. Fix all failures.
-6. Check for `<workspace>/stories/HALT` before proceeding — if found, perform the halt procedure immediately (switch back to main, rename story to `.ready.md`, stop).
+6. Check for `<workspace>/stories/HALT` before proceeding — if found, perform the halt procedure immediately (discard uncommitted changes, switch back to main, stop — do **not** touch the story file).
 7. **On success**:
    - Commit all changes on the story branch.
    - Switch to the main branch and merge: `git checkout main && git merge --no-ff story/STORY-NNN`.
    - If the merge produces conflicts, resolve every conflict, re-run tests, and complete the merge. The story is **not done** until the merge is clean and tests pass on main.
    - Delete the story branch: `git branch -d story/STORY-NNN`.
-   - Rename `.[complexity].working.md` → `.[complexity].done.md`.
+   - Write `done` to the outcome sentinel file.
    - Stop immediately — do not perform any further tool calls.
-8. **On failure**: create `<workspace>/stories/HALT`, switch back to main, rename `.[complexity].working.md` → `.[complexity].failed.md`, append a failure note, then stop immediately.
+8. **On failure**: create `<workspace>/stories/HALT`, switch back to main, write `failed` to the outcome sentinel file, then stop immediately.
+
+The LLM session **never renames, writes, or deletes story files**. Story file state transitions always happen in Python, on the main branch, after the LLM session returns. This prevents a story rename that occurred on a story branch from being committed to that branch and then conflicting with the main branch state when merged.
+
+**Outcome sentinel behaviour**: if the LLM session ends without writing an outcome (e.g. because a HALT was detected mid-session), Python resets the story to `.ready.md` so another agent can retry it.
 
 > `<workspace>/CLAUDE.md` is read at the start of every story session rather than being pre-loaded and injected into the task prompt. This keeps each session's initial context lean — for real projects CLAUDE.md can be several hundred lines — and avoids inflating input token costs across a large story backlog.
 
@@ -772,12 +779,14 @@ Complexity and state are encoded directly in the filename — no database or ext
 | Filename pattern | State | Written by | Who acts next |
 |---|---|---|---|
 | `STORY-NNN.md` | **Unprocessed** | Business Analyst | Story Orchestrator |
-| `STORY-NNN.[c].ready.md` | **Ready** | Story Orchestrator | Coding Agent (matching complexity) |
-| `STORY-NNN.[c].working.md` | **In progress** | Coding Agent | — (owned by one agent) |
-| `STORY-NNN.[c].done.md` | **Complete** | Coding Agent | Nobody |
-| `STORY-NNN.[c].failed.md` | **Failed** | Coding Agent | Story Reviewer |
+| `STORY-NNN.[c].ready.md` | **Ready** | Story Orchestrator (or Coding Agent harness on reset) | Coding Agent (matching complexity) |
+| `STORY-NNN.[c].working.md` | **In progress** | Coding Agent harness (Python) | — (owned by one agent) |
+| `STORY-NNN.[c].done.md` | **Complete** | Coding Agent harness (Python) | Nobody |
+| `STORY-NNN.[c].failed.md` | **Failed** | Coding Agent harness (Python) | Story Reviewer |
 | `STORY-NNN.[c].reviewing.md` | **Under review** | Story Reviewer | — (owned by reviewer) |
-| `HALT` *(sentinel)* | **System paused** | Coding Agent | Triggers stop + revert in all Coding Agents |
+| `HALT` *(sentinel)* | **System paused** | Coding Agent (LLM, via bash) | Triggers stop in all Coding Agents |
+
+Note: the **Coding Agent harness** means the Python `run()` loop, not the LLM session. The LLM writes an outcome sentinel (`done` or `failed`) to `<workspace>/.sentinels/STORY-NNN.outcome`; Python reads it and performs the story file rename. This ensures all story file state transitions happen on the main branch, never inside a story branch.
 
 `[c]` = `easy`, `medium`, or `hard`.
 
@@ -804,10 +813,15 @@ success                     failure (no retry)
    │                            │
    │  merge story/STORY-NNN     │  create workspace/stories/HALT
    │  into main; resolve        │  switch back to main
-   │  any conflicts             │  rename to .failed.md
+   │  any conflicts             │  write 'failed' to outcome sentinel
    │  delete branch             │  stop immediately
+   │  write 'done' to           │
+   │  outcome sentinel          │
+   │  stop immediately          │
    ▼                            │
-STORY-NNN.[complexity].done.md   │
+   Python harness reads sentinel │
+   renames .working → .done.md  │  Python harness reads sentinel
+                                 │  renames .working → .failed.md
                                  ▼
                       Story Reviewer claims:
                       .failed.md → .reviewing.md
@@ -828,10 +842,11 @@ All coordination is via atomic filesystem operations — no database, no message
 | Mark story ready | Story Orchestrator renames `STORY-NNN.md` → `STORY-NNN.[c].ready.md` after dep check |
 | Claim a story | Python agent renames `STORY-NNN.[c].ready.md` → `STORY-NNN.[c].working.md` — POSIX atomic; LLM session starts only after a claim succeeds |
 | Story branch | Agent creates `story/STORY-NNN` from main before writing any code; all commits land on this branch |
-| Merge & integrate | On success the agent merges `story/STORY-NNN` back into main with `--no-ff`; any conflicts must be fully resolved by the agent before the story is marked done |
+| Merge & integrate | On success the LLM merges `story/STORY-NNN` back into main with `--no-ff`; any conflicts must be fully resolved before writing the outcome sentinel |
+| Story file state transition | Python reads `<workspace>/.sentinels/STORY-NNN.outcome` after each LLM session and renames the `.working.md` file accordingly — never done inside the LLM session or on a story branch |
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
 | Halt detection | Check for `workspace/stories/HALT` before and after implementation; exit immediately if found |
-| Workspace revert | Discard uncommitted changes on HALT detection |
+| Workspace revert | Discard uncommitted changes and switch to main on HALT detection; Python resets story to `.ready.md` (no outcome sentinel written) |
 | Pipeline shutdown | `workspace/.sentinels/pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
 | Stale agent recovery | Watchdog resets `.[c].working.md` files idle > 10 minutes → `.[c].ready.md` |
 

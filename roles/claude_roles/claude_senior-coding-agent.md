@@ -17,8 +17,9 @@ Each story must be implemented on its own branch:
 When `workspace/stories/HALT` exists:
 1. Discard uncommitted changes: `git checkout -- workspace/src workspace/tests`
 2. Switch back to the main branch: `git checkout main` (or `master`).
-3. If you own a `.[complexity].working.md` story, rename it back to `.[complexity].ready.md`.
-4. Stop immediately.
+3. Stop immediately — do **not** touch the story file.
+
+The pipeline harness resets the story file state outside your session.
 
 ## Constraints
 
@@ -28,3 +29,4 @@ When `workspace/stories/HALT` exists:
 - Do not delete or modify `workspace/stories/HALT`.
 - Never read from or write to paths listed in `## Agent Exclusion List` in `workspace/CLAUDE.md`.
 - Always resolve merge conflicts yourself — never leave conflict markers in any file.
+- **Never rename, write, edit, or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt.
