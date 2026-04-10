@@ -420,7 +420,6 @@ if [ "$AGENT_TYPE_DESIGNER" = "ollama" ]; then
         --model "${MODEL_DESIGNER}" \
         --ollama-host "${OLLAMA_HOST}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "ollama-designer"
@@ -428,7 +427,6 @@ else
     "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_designer_agent.py" \
         --model "${MODEL_DESIGNER}" \
         --workspace-dir "${WORKSPACE_DIR}" \
-
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "designer"
@@ -479,7 +477,6 @@ while true; do
                 --workspace-dir "${WORKSPACE_DIR}" \
                 --model "${MODEL_BA}" \
                 --ollama-host "${OLLAMA_HOST}" \
-        
                 --conv-log-dir "${CONV_LOG_DIR}" \
                 --run-log "${RUN_LOG}" \
                 --agent-name "ollama-business-analyst"
@@ -489,7 +486,6 @@ while true; do
                 --stories-dir "${STORIES_DIR}" \
                 --workspace-dir "${WORKSPACE_DIR}" \
                 --model "${MODEL_BA}" \
-        
                 --conv-log-dir "${CONV_LOG_DIR}" \
                 --run-log "${RUN_LOG}" \
                 --agent-name "business-analyst"
@@ -560,7 +556,6 @@ if [ "$AGENT_TYPE_PI" = "ollama" ]; then
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_PI}" \
         --ollama-host "${OLLAMA_HOST}" \
-
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "ollama-project-initialiser"
@@ -569,7 +564,6 @@ else
         --design "${design_file}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_PI}" \
-
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
         --agent-name "project-initialiser"
@@ -618,7 +612,6 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
-    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "ollama-junior-coding-agent-${AGENT_ID}"
@@ -627,7 +620,6 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
-    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "junior-coding-agent-${AGENT_ID}"
@@ -715,7 +707,6 @@ while true; do
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
-    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "ollama-senior-coding-agent-${AGENT_ID}"
@@ -724,7 +715,6 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
-    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
             --agent-name "senior-coding-agent-${AGENT_ID}"
@@ -846,14 +836,12 @@ while true; do
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_REVIEWER}" \
             --ollama-host "${OLLAMA_HOST}" \
-    
             --conv-log-dir "${CONV_LOG_DIR}" \
             --agent-name "ollama-story-reviewer"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_reviewer_agent.py" \
             --stories-dir "${STORIES_DIR}" \
             --model "${MODEL_REVIEWER}" \
-
             --conv-log-dir "${CONV_LOG_DIR}"
     fi
     echo ""
