@@ -36,6 +36,19 @@ DEFAULT_OLLAMA_HOST = "http://localhost:11434"
 MAX_TURNS = 200
 _PREVIEW_CHARS = 500
 
+
+# ---------------------------------------------------------------------------
+# Interactive session exceptions
+# ---------------------------------------------------------------------------
+
+
+class UserSkipRequest(Exception):
+    """Raised by ask_user when the user types 'skip' — skip this story."""
+
+
+class UserExitRequest(Exception):
+    """Raised by ask_user when the user types 'exit'/'quit' or sends EOF."""
+
 # ---------------------------------------------------------------------------
 # Tool specifications (Ollama / OpenAI function-call format)
 # ---------------------------------------------------------------------------
@@ -164,6 +177,29 @@ _TOOL_GREP: dict[str, Any] = {
     },
 }
 
+_TOOL_ASK_USER: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "ask_user",
+        "description": (
+            "Display a message or question to the user and return their typed response. "
+            "Use this for all user interaction: presenting findings, asking clarifying "
+            "questions, proposing solutions, and confirming before making changes. "
+            "The user may type 'skip' to abandon this story or 'exit' to stop the resolver."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "The message or question to display to the user",
+                },
+            },
+            "required": ["question"],
+        },
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Tool groupings — import and use these in agent scripts
 # ---------------------------------------------------------------------------
@@ -191,6 +227,16 @@ DESIGNER_TOOLS: list[dict[str, Any]] = [
     _TOOL_READ_FILE,
     _TOOL_WRITE_FILE,
     _TOOL_GLOB,
+]
+
+#: Resolver toolkit: inspect workspace + interactive user communication.
+RESOLVER_TOOLS: list[dict[str, Any]] = [
+    _TOOL_READ_FILE,
+    _TOOL_WRITE_FILE,
+    _TOOL_EDIT_FILE,
+    _TOOL_GLOB,
+    _TOOL_GREP,
+    _TOOL_ASK_USER,
 ]
 
 # ---------------------------------------------------------------------------
@@ -280,10 +326,33 @@ class ToolExecutor:
         except Exception as exc:
             return f"ERROR: {exc}"
 
+    def ask_user(self, question: str) -> str:
+        """Print *question* and return the user's typed response.
+
+        Raises :class:`UserSkipRequest` if the user types ``skip``.
+        Raises :class:`UserExitRequest` if the user types ``exit``/``quit``
+        or sends EOF/Ctrl-C.
+        """
+        print(f"\n{question}", flush=True)
+        try:
+            response = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            raise UserExitRequest()
+        if response.lower() in ("exit", "quit"):
+            raise UserExitRequest()
+        if response.lower() == "skip":
+            raise UserSkipRequest()
+        return response
+
     # --- dispatch -----------------------------------------------------------
 
     def execute(self, name: str, arguments: dict[str, Any]) -> str:
-        """Dispatch a tool call by name and return its string result."""
+        """Dispatch a tool call by name and return its string result.
+
+        Note: ``ask_user`` may raise :class:`UserSkipRequest` or
+        :class:`UserExitRequest` — these are intentionally not caught here
+        so they propagate through the agent loop to the caller.
+        """
         handlers: dict[str, Any] = {
             "read_file": lambda a: self.read_file(a["path"]),
             "write_file": lambda a: self.write_file(a["path"], a["content"]),
@@ -291,6 +360,7 @@ class ToolExecutor:
             "bash": lambda a: self.bash(a["command"]),
             "glob": lambda a: self.glob(a["pattern"], a.get("directory", "")),
             "grep": lambda a: self.grep(a["pattern"], a.get("path", ""), a.get("glob", "")),
+            "ask_user": lambda a: self.ask_user(a["question"]),
         }
         handler = handlers.get(name)
         if handler is None:

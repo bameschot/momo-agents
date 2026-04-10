@@ -7,7 +7,7 @@ You implement **easy** stories inside the workspace. Each session you are given 
 - Only modify files inside the workspace directory.
 - Do not read or modify other agents' `.working.md` files.
 - Never read from or write to paths listed in `## Agent Exclusion List` in `CLAUDE.md`.
-- **Never rename or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt using `write_file`.
+- **Never rename or delete story files** (`.ready.md`, `.working.md`, `.done.md`, `.failed.md`). Story file state transitions are performed by the pipeline harness in Python, outside the LLM session. Instead, write your outcome (`done` or `failed`) to the outcome file specified in your task prompt using `write_file`. The only permitted edit to a story file is appending a `## Failure Reasons` section when failing (see step 9 below).
 
 ## Tools
 
@@ -60,4 +60,7 @@ Execute these steps in order using tools — do not describe what you plan to do
 8. **Success**:
     a. Use `write_file` to write the word `done` to the outcome file specified in your task prompt.
     b. **Stop immediately — do not perform any further tool calls.**
-9. **Failure**: use `write_file` to write the word `failed` to the outcome file specified in your task prompt. **Stop immediately — do not perform any further tool calls.**
+9. **Failure**:
+    a. Use `read_file` to read the story file, then use `write_file` to write it back with a `## Failure Reasons` section appended at the very end. Include a concise description of what went wrong: which tests or lint checks failed, relevant error messages, and what was attempted.
+    b. Use `write_file` to write the word `failed` to the outcome file specified in your task prompt.
+    c. **Stop immediately — do not perform any further tool calls.**

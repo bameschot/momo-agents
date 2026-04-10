@@ -58,6 +58,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--pi-agent-type TYPE` | Backend override for the Project Initialiser | inherits `--agent-type` |
 | `--junior-agent-type TYPE` | Backend override for Junior Coding Agents | inherits `--agent-type` |
 | `--senior-agent-type TYPE` | Backend override for Senior Coding Agents | inherits `--agent-type` |
+| `--resolver-agent-type TYPE` | Backend override for Story Resolver Agent | inherits `--agent-type` |
 | `--ollama-host URL` | Ollama API base URL (used by any role configured as ollama) | `http://localhost:11434` |
 | `--junior-agents N` | Number of parallel Junior Coding Agents (easy stories) | `2` |
 | `--senior-agents N` | Number of parallel Senior Coding Agents (medium/hard stories) | `1` |
@@ -66,6 +67,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--model-pi M` | Model for the Project Initialiser | see defaults below |
 | `--model-junior M` | Model for Junior Coding Agents | see defaults below |
 | `--model-senior M` | Model for Senior Coding Agents | see defaults below |
+| `--model-resolver M` | Model for Story Resolver Agent | see defaults below |
 
 **Model defaults** (each role uses the default for its own configured backend):
 
@@ -76,6 +78,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | Project Initialiser | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
 | Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
 | Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
+| Story Resolver | `claude-sonnet-4-6` | `qwen3.5:4b` |
 
 **Agent windows opened:**
 
@@ -88,6 +91,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `🐕 Watchdog` | Stale story reset | Resets stories idle > 10 min back to `.ready.md` |
 | `🟢 Junior Coding Agent N` | Easy story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.easy.ready.md` |
 | `🔵 Senior Coding Agent N` | Medium/hard story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.medium/hard.ready.md` |
+| `🔧 Story Resolver` | Interactive failed-story triage | Polls for `*.failed.md`; prompts you to resolve each one interactively |
 
 **Examples:**
 
@@ -214,70 +218,6 @@ After a full reset, re-running `./start-team.sh --workspace <path>` goes through
 
 ---
 
-## Running agents individually
-
-### Claude backend
-
-```bash
-# Designer (interactive)
-python scripts/claude_agents/claude_designer_agent.py --model claude-sonnet-4-6
-
-# Project Initialiser
-python scripts/claude_agents/claude_project_initialiser_agent.py \
-  --design workspace/design/my-feature.new.md \
-  --model claude-sonnet-4-6
-
-# Business Analyst (waits for workspace/CLAUDE.md before starting)
-python scripts/claude_agents/claude_business_analyst_agent.py \
-  --design workspace/design/my-feature.new.md \
-  --workspace-dir workspace \
-  --model claude-sonnet-4-6
-
-# Story Orchestrator (no LLM — agent-type agnostic)
-python scripts/story_orchestrator.py
-
-# Junior Coding Agent (easy stories; waits for workspace/CLAUDE.md)
-python scripts/claude_agents/claude_junior_coding_agent.py \
-  --model claude-haiku-4-5-20251001
-
-# Senior Coding Agent (medium/hard stories; waits for workspace/CLAUDE.md)
-python scripts/claude_agents/claude_senior_coding_agent.py \
-  --model claude-sonnet-4-6
-```
-
-### Ollama backend
-
-```bash
-# Designer (interactive)
-python scripts/ollama_agents/ollama_designer_agent.py --model qwen3.5:9b
-
-# Project Initialiser
-python scripts/ollama_agents/ollama_project_initialiser_agent.py \
-  --design workspace/design/my-feature.new.md \
-  --model qwen3.5:9b
-
-# Business Analyst
-python scripts/ollama_agents/ollama_business_analyst_agent.py \
-  --design workspace/design/my-feature.new.md \
-  --workspace-dir workspace \
-  --model qwen3.5:9b
-
-# Junior Coding Agent (easy stories)
-python scripts/ollama_agents/ollama_junior_coding_agent.py --model qwen3.5:9b
-
-# Senior Coding Agent (medium/hard stories)
-python scripts/ollama_agents/ollama_senior_coding_agent.py --model qwen3.5:9b
-
-# Override Ollama host for any agent:
-python scripts/ollama_agents/ollama_junior_coding_agent.py \
-  --model llama3.1 \
-  --ollama-host http://192.168.1.10:11434
-```
-
-All path arguments default to `workspace/` relative to the `momo-agents` repo root when running agents individually. Pass `--workspace-dir <path>` to point them at any workspace directory.
-
----
-
 ## Pipeline overview
 
 ```
@@ -299,7 +239,15 @@ All path arguments default to `workspace/` relative to the `momo-agents` repo ro
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
      Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► <workspace>/
            [easy]            │         [medium/hard]      │
-                             └──────────────────────────-─┘
+                             └──────────┬───────────────-─┘
+                                        │ (on failure)
+                                        ▼
+                               *.failed.md stories
+                                        │
+                                        ▼
+                               Story Resolver ◄── You
+                              (interactive; fix &
+                               reset to *.ready.md)
 ```
 
 The pipeline has one hard sequencing constraint: the **Project Initialiser** runs first and writes `CLAUDE.md` at the workspace root. The **Business Analyst** and all **Coding Agents** poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.
@@ -313,6 +261,7 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Junior Coding Agent** (×N) | Claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work; on failure appends a `## Failure Reasons` section to the story file | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/`, `<workspace>/stories/*.working.md` (failure reasons only) |
 | **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely; on failure appends a `## Failure Reasons` section to the story file | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/`, `<workspace>/stories/*.working.md` (failure reasons only) |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `<workspace>/stories/` | `<workspace>/stories/` |
+| **Story Resolver** | Interactive (Claude only); polls for `*.failed.md` stories; when found, opens a conversation with you to diagnose the failure, propose fixes, and reset the story to `*.ready.md` | `<workspace>/stories/*.failed.md`, `<workspace>/` (read-only for context) | `<workspace>/stories/*.failed.md` (edits then renames to `*.ready.md`) |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
 
@@ -329,6 +278,29 @@ When a coding agent cannot complete a story it appends a `## Failure Reasons` se
 ```
 
 This section is written directly to the `.working.md` file (the only permitted in-session edit to a story file). It survives the rename to `.failed.md` so it is readable by any subsequent agent or developer inspecting the failure without needing to dig through logs.
+
+### Story Resolver Agent
+
+The **Story Resolver** (`scripts/claude_agents/claude_story_resolver_agent.py`) runs alongside the team and polls for `.failed.md` stories. When one is found it opens an interactive Claude session directly in your terminal:
+
+1. The agent reads the story (including `## Failure Reasons`) and presents the failure clearly.
+2. You discuss the root cause — the agent can read workspace source files, tests, and `CLAUDE.md` for context.
+3. You agree on a resolution: correct an acceptance criterion, fix a wrong assumption, clarify scope, etc.
+4. When you are satisfied, tell the agent **"update the story"**. Claude:
+   - Removes the `## Failure Reasons` section from the story.
+   - Applies any agreed changes to the acceptance criteria or other sections.
+   - Writes a `resolved` sentinel to signal the Python harness.
+5. The Python harness renames the story from `.failed.md` back to `.ready.md` so a coding agent picks it up again.
+
+**Session commands:**
+
+| Command | Effect |
+|---|---|
+| `update the story` | Apply agreed fixes and reset the story to ready |
+| `skip` | Leave this story as `.failed.md` and scan for the next |
+| `exit` | Stop the resolver |
+
+Both Claude and Ollama backends are supported. The Ollama resolver uses the `ask_user` tool (see [Ollama agent tools](#ollama-agent-tools)) instead of raw `input()` calls, so the model controls all user interaction — it asks questions, presents findings, and confirms before writing changes. Override the backend with `--resolver-agent-type` and the model with `--model-resolver`.
 
 ---
 
@@ -367,16 +339,17 @@ Each Ollama agent is given a fixed set of tools at startup. All tool implementat
 
 ### Tool availability by agent
 
-| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding |
-|---|:---:|:---:|:---:|:---:|:---:|
-| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `edit_file` | | | ✓ | ✓ | ✓ |
-| `bash` | | ✓ | ✓ | ✓ | ✓ |
-| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `grep` | | | ✓ | ✓ | ✓ |
+| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding | Story Resolver |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `edit_file` | | | ✓ | ✓ | ✓ | ✓ |
+| `bash` | | ✓ | ✓ | ✓ | ✓ | |
+| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `grep` | | | ✓ | ✓ | ✓ | ✓ |
+| `ask_user` | | | | | | ✓ |
 
-The tools are grouped into five named collections in `ollama_utilities.py`:
+The tools are grouped into named collections in `ollama_utilities.py`:
 
 | Collection | Tools | Used by |
 |---|---|---|
@@ -384,6 +357,7 @@ The tools are grouped into five named collections in `ollama_utilities.py`:
 | `ANALYST_TOOLS` | `read_file`, `write_file`, `glob` | *(base set; not used directly)* |
 | `BA_TOOLS` | `read_file`, `write_file`, `glob`, `bash` | Business Analyst |
 | `CODING_TOOLS` | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` | Project Initialiser, Junior Coding, Senior Coding |
+| `RESOLVER_TOOLS` | `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `ask_user` | Story Resolver |
 
 ### Tool reference
 
@@ -456,6 +430,17 @@ Search file contents for a regular expression, returning matching lines with fil
 | `glob` | string | | Restrict search to files matching this glob, e.g. `*.py` |
 
 Used by coding agents and the Project Initialiser to locate definitions, imports, usages, or configuration values across the workspace without reading every file individually.
+
+---
+
+#### `ask_user`
+Display a message or question to the user and return their typed response. The call blocks until the user submits input.
+
+| Parameter | Type | Required | Description |
+|---|---|:---:|---|
+| `question` | string | ✓ | The message or question to display |
+
+Returns the user's response as a string. If the user types `skip`, raises `UserSkipRequest` (bubbles up through the agent loop, causing the resolver to skip the current story). If the user types `exit` or `quit`, or sends EOF/Ctrl-C, raises `UserExitRequest` (stops the resolver). Used exclusively by the Story Resolver to drive the interactive triage conversation — it replaces the alternating `input()` loop used by the Claude resolver and gives the model full control over when to prompt, what to ask, and in what order.
 
 ---
 

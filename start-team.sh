@@ -9,9 +9,10 @@
 #                 [--pi-agent-type claude|ollama]        (override for Project Initialiser)
 #                 [--junior-agent-type claude|ollama]    (override for Junior Coding Agents)
 #                 [--senior-agent-type claude|ollama]    (override for Senior Coding Agents)
+#                 [--resolver-agent-type claude|ollama]  (override for Story Resolver Agent)
 #                 [--junior-agents N] [--senior-agents N]
 #                 [--model-designer M] [--model-ba M] [--model-pi M]
-#                 [--model-junior M] [--model-senior M]
+#                 [--model-junior M] [--model-senior M] [--model-resolver M]
 #                 [--ollama-host URL]
 #
 # Supported terminal environments (auto-detected in priority order):
@@ -42,6 +43,7 @@ AGENT_TYPE_BA=""
 AGENT_TYPE_PI=""
 AGENT_TYPE_JUNIOR=""
 AGENT_TYPE_SENIOR=""
+AGENT_TYPE_RESOLVER=""
 
 # Model placeholders — finalised after arg parsing once per-role agent types are known.
 MODEL_DESIGNER=""
@@ -49,6 +51,7 @@ MODEL_BA=""
 MODEL_PI=""
 MODEL_JUNIOR=""
 MODEL_SENIOR=""
+MODEL_RESOLVER=""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
@@ -86,6 +89,10 @@ for ((i = 0; i < ${#args[@]}; i++)); do
         --model-junior)             MODEL_JUNIOR="${args[$((i + 1))]:-}" ;;
         --model-senior=*)           MODEL_SENIOR="${args[$i]#*=}" ;;
         --model-senior)             MODEL_SENIOR="${args[$((i + 1))]:-}" ;;
+        --model-resolver=*)         MODEL_RESOLVER="${args[$i]#*=}" ;;
+        --model-resolver)           MODEL_RESOLVER="${args[$((i + 1))]:-}" ;;
+        --resolver-agent-type=*)    AGENT_TYPE_RESOLVER="${args[$i]#*=}" ;;
+        --resolver-agent-type)      AGENT_TYPE_RESOLVER="${args[$((i + 1))]:-}" ;;
     esac
 done
 
@@ -106,8 +113,9 @@ AGENT_TYPE_BA="${AGENT_TYPE_BA:-$AGENT_TYPE}"
 AGENT_TYPE_PI="${AGENT_TYPE_PI:-$AGENT_TYPE}"
 AGENT_TYPE_JUNIOR="${AGENT_TYPE_JUNIOR:-$AGENT_TYPE}"
 AGENT_TYPE_SENIOR="${AGENT_TYPE_SENIOR:-$AGENT_TYPE}"
+AGENT_TYPE_RESOLVER="${AGENT_TYPE_RESOLVER:-$AGENT_TYPE}"
 
-for _role_var in AGENT_TYPE_DESIGNER AGENT_TYPE_BA AGENT_TYPE_PI AGENT_TYPE_JUNIOR AGENT_TYPE_SENIOR; do
+for _role_var in AGENT_TYPE_DESIGNER AGENT_TYPE_BA AGENT_TYPE_PI AGENT_TYPE_JUNIOR AGENT_TYPE_SENIOR AGENT_TYPE_RESOLVER; do
     _val="${!_role_var}"
     if [ "$_val" != "claude" ] && [ "$_val" != "ollama" ]; then
         echo "Error: --${_role_var/AGENT_TYPE_/} must be 'claude' or 'ollama', got: '$_val'" >&2
@@ -135,6 +143,7 @@ MODEL_BA="${MODEL_BA:-$(_default_model "$AGENT_TYPE_BA" ba)}"
 MODEL_PI="${MODEL_PI:-$(_default_model "$AGENT_TYPE_PI" pi)}"
 MODEL_JUNIOR="${MODEL_JUNIOR:-$(_default_model "$AGENT_TYPE_JUNIOR" junior)}"
 MODEL_SENIOR="${MODEL_SENIOR:-$(_default_model "$AGENT_TYPE_SENIOR" senior)}"
+MODEL_RESOLVER="${MODEL_RESOLVER:-$(_default_model "$AGENT_TYPE_RESOLVER" resolver)}"
 
 if [ -z "$WORKSPACE_DIR" ]; then
     echo "Usage: $0 --workspace <path> [options]"
@@ -153,6 +162,7 @@ if [ -z "$WORKSPACE_DIR" ]; then
     echo "  --pi-agent-type TYPE        Agent type for the Project Initialiser"
     echo "  --junior-agent-type TYPE    Agent type for Junior Coding Agents"
     echo "  --senior-agent-type TYPE    Agent type for Senior Coding Agents"
+    echo "  --resolver-agent-type TYPE  Agent type for Story Resolver Agent"
     echo ""
     echo "  --junior-agents N           Junior Coding Agents to spawn — handle easy stories    (default: 2)"
     echo "  --senior-agents N           Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
@@ -162,8 +172,9 @@ if [ -z "$WORKSPACE_DIR" ]; then
     echo "  --model-pi M                Model for Project Initialiser"
     echo "  --model-junior M            Model for Junior Coding Agents"
     echo "  --model-senior M            Model for Senior Coding Agents"
+    echo "  --model-resolver M          Model for Story Resolver Agent (default: claude-sonnet-4-6)"
     echo ""
-    echo "  claude defaults:  designer/ba/senior=claude-sonnet-4-6"
+    echo "  claude defaults:  designer/ba/senior/resolver=claude-sonnet-4-6"
     echo "                    junior/pi=claude-haiku-4-5-20251001"
     echo "  ollama defaults:  all roles=qwen3.5:4b"
     exit 1
@@ -332,6 +343,7 @@ AGENT_TYPE_BA='$AGENT_TYPE_BA'
 AGENT_TYPE_PI='$AGENT_TYPE_PI'
 AGENT_TYPE_JUNIOR='$AGENT_TYPE_JUNIOR'
 AGENT_TYPE_SENIOR='$AGENT_TYPE_SENIOR'
+AGENT_TYPE_RESOLVER='$AGENT_TYPE_RESOLVER'
 OLLAMA_HOST='$OLLAMA_HOST'
 ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
 MODEL_DESIGNER='$MODEL_DESIGNER'
@@ -339,6 +351,7 @@ MODEL_BA='$MODEL_BA'
 MODEL_PI='$MODEL_PI'
 MODEL_JUNIOR='$MODEL_JUNIOR'
 MODEL_SENIOR='$MODEL_SENIOR'
+MODEL_RESOLVER='$MODEL_RESOLVER'
 RUN_LOG='$SENTINEL_DIR/run-log.jsonl'
 CONV_LOG_DIR='$SENTINEL_DIR/agent_conversation_logs'
 CONFIG
@@ -375,6 +388,7 @@ echo "    BA         : [$AGENT_TYPE_BA] $MODEL_BA"
 echo "    PI         : [$AGENT_TYPE_PI] $MODEL_PI"
 echo "    Junior     : [$AGENT_TYPE_JUNIOR] $MODEL_JUNIOR"
 echo "    Senior     : [$AGENT_TYPE_SENIOR] $MODEL_SENIOR"
+echo "    Resolver   : [$AGENT_TYPE_RESOLVER] $MODEL_RESOLVER"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -733,6 +747,54 @@ echo "╚═══════════════════════�
 exec bash "${SCRIPT_DIR}/watchdog.sh"
 WRAPPER
 
+# ── Story Resolver Agent ──────────────────────────────────────────────────────
+# Interactive agent — prompts the user when failed stories are found.
+# Always Claude (interactive session); polls when no failed stories exist.
+cat > "$SENTINEL_DIR/run_resolver.sh" << 'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '\033]0;Story Resolver Agent\007'
+source "$(dirname "$0")/config.sh"
+export ANTHROPIC_API_KEY
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
+
+echo "╔══════════════════════════════════╗"
+echo "║     Story Resolver Agent         ║"
+echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE_RESOLVER}"
+echo "  Model : ${MODEL_RESOLVER}"
+echo ""
+echo "Scans for failed stories and guides you through resolution interactively."
+echo "Commands during a session:"
+echo "  'update the story' — apply agreed fixes and reset the story to ready  (claude mode)"
+echo "  'skip'             — skip this story and scan for the next"
+echo "  'exit'             — stop the resolver"
+echo ""
+
+if [ "$AGENT_TYPE_RESOLVER" = "ollama" ]; then
+    "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_story_resolver_agent.py" \
+        --stories-dir "${STORIES_DIR}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_RESOLVER}" \
+        --ollama-host "${OLLAMA_HOST}" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "ollama-story-resolver"
+else
+    "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_resolver_agent.py" \
+        --stories-dir "${STORIES_DIR}" \
+        --workspace-dir "${WORKSPACE_DIR}" \
+        --model "${MODEL_RESOLVER}" \
+        --conv-log-dir "${CONV_LOG_DIR}" \
+        --run-log "${RUN_LOG}" \
+        --agent-name "story-resolver"
+fi
+
+echo ""
+echo "[Story Resolver Agent complete]"
+WRAPPER
+
 chmod +x \
     "$SENTINEL_DIR/run_designer.sh" \
     "$SENTINEL_DIR/run_ba.sh" \
@@ -740,13 +802,14 @@ chmod +x \
     "$SENTINEL_DIR/run_orchestrator.sh" \
     "$SENTINEL_DIR/junior_coding_agent_body.sh" \
     "$SENTINEL_DIR/senior_coding_agent_body.sh" \
-    "$SENTINEL_DIR/run_watchdog.sh"
+    "$SENTINEL_DIR/run_watchdog.sh" \
+    "$SENTINEL_DIR/run_resolver.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Launch all windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
-TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 5 ))
-echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 5 fixed agents)..."
+TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 6 ))
+echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 6 fixed agents)..."
 echo ""
 
 open_window "🎨 Designer Agent"        "$SENTINEL_DIR/run_designer.sh"
@@ -754,6 +817,7 @@ open_window "📋 Business Analyst"      "$SENTINEL_DIR/run_ba.sh"
 open_window "🏗️  Project Initialiser"  "$SENTINEL_DIR/run_pi.sh"
 open_window "🎯 Story Orchestrator"    "$SENTINEL_DIR/run_orchestrator.sh"
 open_window "🐕 Watchdog"              "$SENTINEL_DIR/run_watchdog.sh"
+open_window "🔧 Story Resolver"        "$SENTINEL_DIR/run_resolver.sh"
 
 for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
     open_window "🟢 Junior Coding Agent $i [easy]"        "$SENTINEL_DIR/run_junior_${i}.sh"
