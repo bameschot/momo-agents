@@ -310,11 +310,25 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `CLAUDE.md` at the workspace root; all other agents gate on this file | `<workspace>/design/` | `<workspace>/` |
 | **Business Analyst** | Waits for `CLAUDE.md`, then decomposes the design into story files | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
 | **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
-| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
-| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
+| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work; on failure appends a `## Failure Reasons` section to the story file | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/`, `<workspace>/stories/*.working.md` (failure reasons only) |
+| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely; on failure appends a `## Failure Reasons` section to the story file | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/`, `<workspace>/stories/*.working.md` (failure reasons only) |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `<workspace>/stories/` | `<workspace>/stories/` |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
+
+### Story failure reasons
+
+When a coding agent cannot complete a story it appends a `## Failure Reasons` section to the story file before the pipeline harness renames it to `.failed.md`. The section contains a concise human- and machine-readable summary of what went wrong — failed test names, lint errors, and a brief description of what was attempted.
+
+```markdown
+## Failure Reasons
+
+- `pytest tests/test_foo.py` failed: `AssertionError: expected 42, got None` in `test_bar`
+- Linter reported 3 errors in `src/foo.py` (unused import, type mismatch)
+- Root cause: the `Bar` dependency was not yet implemented; story may have an unresolved dependency
+```
+
+This section is written directly to the `.working.md` file (the only permitted in-session edit to a story file). It survives the rename to `.failed.md` so it is readable by any subsequent agent or developer inspecting the failure without needing to dig through logs.
 
 ---
 

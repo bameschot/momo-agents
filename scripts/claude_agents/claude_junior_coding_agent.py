@@ -67,10 +67,16 @@ def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> st
         "4. Implement the acceptance criteria.\n"
         "5. Run tests and linter per CLAUDE.md.\n"
         f"6. Success → write the word 'done' to {outcome_file}.\n"
-        f"7. Failure → write the word 'failed' to {outcome_file}.\n\n"
-        "IMPORTANT: Never rename, write, edit, or delete story files "
-        "(.ready.md / .working.md / .done.md / .failed.md). "
-        "Story file state transitions are managed by the pipeline harness outside the LLM session."
+        f"7. Failure:\n"
+        f"   a. Read the story file at {story_path}, then use Edit to append a "
+        f"'## Failure Reasons' section at the very end of the file. "
+        f"Include a concise description of what went wrong: which tests or lint checks failed, "
+        f"relevant error messages, and what was attempted.\n"
+        f"   b. Write the word 'failed' to {outcome_file}.\n\n"
+        "IMPORTANT: Never rename, delete, or change the file extension of story files "
+        "(.ready.md / .working.md / .done.md / .failed.md) — "
+        "story file state transitions are managed by the pipeline harness outside the LLM session. "
+        "The only permitted edit to a story file is appending a '## Failure Reasons' section when a story fails."
     )
 
 
