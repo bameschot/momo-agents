@@ -918,6 +918,34 @@ _count_stories() {
     echo "$count"
 }
 
+# Return a compact one-line token total from the current run's conversation logs.
+_token_totals() {
+    local conv_dir="$SENTINEL_DIR/agent_conversation_logs"
+    [ -d "$conv_dir" ] || { echo "(no token data)"; return; }
+    "$PYTHON" - "$conv_dir" << 'PYEOF'
+import json, sys
+from pathlib import Path
+
+conv_log_dir = Path(sys.argv[1])
+total_in = total_out = 0
+total_cost = 0.0
+for f in conv_log_dir.glob('*_log.jsonl'):
+    with open(f) as fh:
+        for line in fh:
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            role = e.get('role')
+            if role == 'assistant':
+                total_in += e.get('input_tokens', 0)
+                total_out += e.get('output_tokens', 0)
+            elif role == 'result':
+                total_cost += e.get('cost_usd', 0.0)
+print(f'in={total_in:,}  out={total_out:,}  cost=${total_cost:.4f}')
+PYEOF
+}
+
 # On Ctrl+C / SIGTERM: signal all agents to exit, print final status and generate the run report.
 _teardown() {
     echo ""
@@ -930,7 +958,7 @@ _teardown() {
     echo "║               Team shut down  👋                ║"
     echo "╚══════════════════════════════════════════════════╝"
     echo ""
-    bash "$SCRIPT_DIR/status.sh"
+    bash "$SCRIPT_DIR/status.sh" --workspace "$WORKSPACE_DIR"
     echo ""
     echo "  Exporting git log..."
     "$PYTHON" "$SCRIPT_DIR/git_log_exporter.py" \
@@ -964,6 +992,7 @@ while true; do
     if [ "$STATUS" != "$LAST_STATUS" ]; then
         echo ""
         echo "  $(date '+%H:%M:%S')  stories: $STATUS"
+        echo "  $(date '+%H:%M:%S')  tokens:  $(_token_totals)"
         LAST_STATUS="$STATUS"
     fi
 
