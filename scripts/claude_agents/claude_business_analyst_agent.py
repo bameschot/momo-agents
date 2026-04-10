@@ -58,6 +58,16 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _design_stem(design_path: Path) -> str:
+    """Return a git-safe stem derived from the design file name."""
+    name = design_path.name
+    for suffix in (".new.md", ".processed.md", ".md"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return name
+
+
 async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
@@ -68,6 +78,7 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
     stories_dir.mkdir(parents=True, exist_ok=True)
 
     next_index = len(list(stories_dir.glob("STORY-*.md"))) + 1
+    branch_name = f"ba/{_design_stem(design_path)}"
 
     task = (
         f"Project root: {workspace_dir}\n"
@@ -77,9 +88,15 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         "Read the design document in full. Decompose it into an ordered set of discrete, "
         "implementable stories and write each one to the stories directory as STORY-NNN.md. "
         "Follow the story file format and all rules defined in your role exactly.\n\n"
-        "After writing each story file, immediately commit it with: "
-        f"git add {stories_dir}/STORY-NNN.md && git commit -m 'add STORY-NNN: <title>' "
-        "(replace STORY-NNN and <title> with the actual story number and title)."
+        "Follow this git workflow exactly:\n"
+        f"1. Before writing any stories, capture the current branch name with: git branch --show-current\n"
+        f"2. Create and switch to a new branch: git checkout -b {branch_name}\n"
+        "3. Write ALL story files to the stories directory. Do NOT commit between stories.\n"
+        "4. After all stories are written, stage and commit them in a single commit:\n"
+        f"   git add {stories_dir} && git commit -m 'add stories for {_design_stem(design_path)}'\n"
+        "5. Merge the story branch back into the original branch:\n"
+        f"   git checkout <original-branch> && git merge {branch_name}\n"
+        "(Replace <original-branch> with the branch name captured in step 1.)"
     )
 
     options = ClaudeAgentOptions(

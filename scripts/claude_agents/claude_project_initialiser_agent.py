@@ -51,22 +51,43 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def _design_stem(design_path: Path) -> str:
+    """Return a git-safe stem derived from the design file name."""
+    name = design_path.name
+    for suffix in (".new.md", ".processed.md", ".md"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return name
+
+
 async def run(design_path: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
 
+    stem = _design_stem(design_path)
+    branch_name = f"pi/{stem}"
+
     task = (
         f"Workspace: {workspace_dir}\n"
         f"Design document: {design_path}\n\n"
-        "Read the design document in full. Then:\n"
-        f"1. Create {workspace_dir}/CLAUDE.md with build, test, and lint commands "
+        "Read the design document in full. Then follow this workflow exactly:\n\n"
+        "**Git setup** (do this first, before any file changes):\n"
+        "1. Capture the current branch name: git branch --show-current\n"
+        f"2. Create and switch to a new branch: git checkout -b {branch_name}\n\n"
+        "**Scaffolding** (do all of this on the new branch):\n"
+        f"3. Create {workspace_dir}/CLAUDE.md with build, test, and lint commands "
         "appropriate for the technology stack described in the design.\n"
-        "2. Scaffold the initial project structure inside the workspace directory: "
+        "4. Scaffold the initial project structure inside the workspace directory: "
         "directory layout, configuration files, empty entry points, and dependency "
         "manifests with required packages listed.\n"
         "Do not implement any story logic — only the skeleton that lets Coding Agents "
-        "start implementing immediately."
+        "start implementing immediately.\n\n"
+        "**Commit and merge** (do this after all scaffolding is complete):\n"
+        f"5. Stage and commit all changes in a single commit: git add -A && git commit -m 'scaffold project for {stem}'\n"
+        f"6. Merge back into the original branch: git checkout <original-branch> && git merge {branch_name}\n"
+        "(Replace <original-branch> with the branch name captured in step 1.)"
     )
 
     options = ClaudeAgentOptions(

@@ -326,7 +326,7 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 |---|---|---|---|
 | **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `<workspace>/design/` |
 | **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `CLAUDE.md` at the workspace root; all other agents gate on this file | `<workspace>/design/` | `<workspace>/` |
-| **Business Analyst** | Waits for `CLAUDE.md`, then decomposes the design into story files; commits each story immediately after writing it | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
+| **Business Analyst** | Waits for `CLAUDE.md`, then decomposes the design into story files on a dedicated `ba/<design>` branch; merges all stories back in a single commit | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
 | **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
 | **Junior Coding Agent** (×N) | Claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
 | **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/` |
@@ -437,7 +437,7 @@ Execute a shell command in the agent's working directory and return its output.
 |---|---|:---:|---|
 | `command` | string | ✓ | Shell command to run — must be a plain POSIX shell string; never nest tool-call syntax inside this value |
 
-Runs via `subprocess.run()` with a **120-second timeout**. Returns the combined stdout and stderr. The working directory is set to the workspace root automatically — no `cd` prefix is needed. Used by the Business Analyst to commit each story after writing it; by coding agents to run build tools, test runners, linters, and git commands; and by the Story Reviewer to rename story files and delete the HALT sentinel.
+Runs via `subprocess.run()` with a **120-second timeout**. Returns the combined stdout and stderr. The working directory is set to the workspace root automatically — no `cd` prefix is needed. Used by the Business Analyst to manage its story branch and commit; by coding agents to run build tools, test runners, linters, and git commands; and by the Story Reviewer to rename story files and delete the HALT sentinel.
 
 ---
 
@@ -633,8 +633,9 @@ A **one-shot agent** — `start-team.sh` invokes it once per design file when a 
 **LLM session behaviour**:
 1. Reads the design document in full.
 2. Decomposes it into an ordered set of discrete, implementable stories.
-3. For each story in index order: writes `<workspace>/stories/STORY-NNN.md` (bare, unprocessed — awaiting the Story Orchestrator), then **immediately commits it** with `git add stories/STORY-NNN.md && git commit -m 'add STORY-NNN: <title>'` before moving on to the next story.
-4. Does not leave open questions — resolves ambiguities from the design before writing.
+3. Creates a dedicated branch `ba/<design-stem>` (e.g. `ba/my-feature`) from the current branch, then writes all `<workspace>/stories/STORY-NNN.md` files (bare, unprocessed — awaiting the Story Orchestrator) without committing between them.
+4. After all stories are written, stages and commits them in a **single commit** (`git add <stories-dir> && git commit -m 'add stories for <design-stem>'`), then merges the branch back into the original branch.
+5. Does not leave open questions — resolves ambiguities from the design before writing.
 
 Each story includes a `**Complexity**: easy | medium | hard` field and a `**Depends on**` field. The BA **strongly prefers easy and medium stories** and only uses hard when splitting would produce incoherent or non-implementable units of work.
 
