@@ -918,18 +918,18 @@ _count_stories() {
     echo "$count"
 }
 
-# Return a compact one-line token total from the current run's conversation logs.
+# Print per-agent and total token/cost breakdown from the current run's conversation logs.
 _token_totals() {
     local conv_dir="$SENTINEL_DIR/agent_conversation_logs"
-    [ -d "$conv_dir" ] || { echo "(no token data)"; return; }
+    [ -d "$conv_dir" ] || { echo "  (no token data)"; return; }
     "$PYTHON" - "$conv_dir" << 'PYEOF'
 import json, sys
 from pathlib import Path
+from collections import defaultdict
 
 conv_log_dir = Path(sys.argv[1])
-total_in = total_out = 0
-total_cost = 0.0
-for f in conv_log_dir.glob('*_log.jsonl'):
+agents = defaultdict(lambda: {'input': 0, 'output': 0, 'cache_read': 0, 'cache_write': 0, 'cost': 0.0})
+for f in sorted(conv_log_dir.glob('*_log.jsonl')):
     with open(f) as fh:
         for line in fh:
             try:
@@ -937,12 +937,30 @@ for f in conv_log_dir.glob('*_log.jsonl'):
             except Exception:
                 continue
             role = e.get('role')
+            agent = e.get('agent', f.stem.replace('_log', ''))
             if role == 'assistant':
-                total_in += e.get('input_tokens', 0)
-                total_out += e.get('output_tokens', 0)
+                agents[agent]['input'] += e.get('input_tokens', 0)
+                agents[agent]['output'] += e.get('output_tokens', 0)
+                agents[agent]['cache_read'] += e.get('cache_read_tokens', 0)
+                agents[agent]['cache_write'] += e.get('cache_write_tokens', 0)
             elif role == 'result':
-                total_cost += e.get('cost_usd', 0.0)
-print(f'in={total_in:,}  out={total_out:,}  cost=${total_cost:.4f}')
+                agents[agent]['cost'] += e.get('cost_usd', 0.0)
+
+if not agents:
+    print('  (no token data)')
+    sys.exit(0)
+
+total_in = total_out = total_cr = total_cw = 0
+total_cost = 0.0
+for agent, d in sorted(agents.items()):
+    print(f'  {agent:<36}  in={d["input"]:>8,}  out={d["output"]:>7,}  cr={d["cache_read"]:>8,}  cw={d["cache_write"]:>8,}  ${d["cost"]:.4f}')
+    total_in += d['input']
+    total_out += d['output']
+    total_cr += d['cache_read']
+    total_cw += d['cache_write']
+    total_cost += d['cost']
+print()
+print(f'  {"TOTAL":<36}  in={total_in:>8,}  out={total_out:>7,}  cr={total_cr:>8,}  cw={total_cw:>8,}  ${total_cost:.4f}')
 PYEOF
 }
 
@@ -992,7 +1010,8 @@ while true; do
     if [ "$STATUS" != "$LAST_STATUS" ]; then
         echo ""
         echo "  $(date '+%H:%M:%S')  stories: $STATUS"
-        echo "  $(date '+%H:%M:%S')  tokens:  $(_token_totals)"
+        echo "  $(date '+%H:%M:%S')  tokens:"
+        _token_totals
         LAST_STATUS="$STATUS"
     fi
 

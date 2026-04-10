@@ -77,7 +77,7 @@ from pathlib import Path
 from collections import defaultdict
 
 conv_log_dir = Path(sys.argv[1])
-agents = defaultdict(lambda: {'input': 0, 'output': 0, 'cost': 0.0})
+agents = defaultdict(lambda: {'input': 0, 'output': 0, 'cache_read': 0, 'cache_write': 0, 'cost': 0.0})
 for f in sorted(conv_log_dir.glob('*_log.jsonl')):
     with open(f) as fh:
         for line in fh:
@@ -90,6 +90,8 @@ for f in sorted(conv_log_dir.glob('*_log.jsonl')):
             if role == 'assistant':
                 agents[agent]['input'] += e.get('input_tokens', 0)
                 agents[agent]['output'] += e.get('output_tokens', 0)
+                agents[agent]['cache_read'] += e.get('cache_read_tokens', 0)
+                agents[agent]['cache_write'] += e.get('cache_write_tokens', 0)
             elif role == 'result':
                 agents[agent]['cost'] += e.get('cost_usd', 0.0)
 
@@ -97,15 +99,17 @@ if not agents:
     print('  (no token data)')
     sys.exit(0)
 
-total_in = total_out = 0
+total_in = total_out = total_cr = total_cw = 0
 total_cost = 0.0
 for agent, d in sorted(agents.items()):
-    print(f'  {agent:<36}  in={d["input"]:>8,}  out={d["output"]:>7,}  ${d["cost"]:.4f}')
+    print(f'  {agent:<36}  in={d["input"]:>8,}  out={d["output"]:>7,}  cr={d["cache_read"]:>8,}  cw={d["cache_write"]:>8,}  ${d["cost"]:.4f}')
     total_in += d['input']
     total_out += d['output']
+    total_cr += d['cache_read']
+    total_cw += d['cache_write']
     total_cost += d['cost']
 print()
-print(f'  {"TOTAL":<36}  in={total_in:>8,}  out={total_out:>7,}  ${total_cost:.4f}')
+print(f'  {"TOTAL":<36}  in={total_in:>8,}  out={total_out:>7,}  cr={total_cr:>8,}  cw={total_cw:>8,}  ${total_cost:.4f}')
 print()
 PYEOF
 fi
