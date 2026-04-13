@@ -6,6 +6,8 @@ This file provides guidance for AI assistants (Claude Code and others) working i
 
 **momo-agents** is a Python project for building coding agents powered by the Claude Agent SDK. A team of specialised agents collaborate over the filesystem to take a feature idea from concept through to working, tested code.
 
+Coding agents work in **isolated workspace copies** — each story is implemented in a private temp directory inside `.sentinels/` so parallel agents never touch each other's files. Completed workspaces are zipped into a `merge-queue/` folder, and a dedicated **Merger Agent** commits and merges them into the shared workspace git repository in story order.
+
 - **Author**: bameschot
 - **License**: MIT (2026)
 - **Purpose**: Developing AI coding agents using the Claude Agent SDK
@@ -23,48 +25,55 @@ momo-agents/
 ├── git_log_exporter.py     # Exports git commit metadata to JSONL format
 ├── run_report.py           # Generates a pipeline run report from run-log.jsonl and token logs
 ├── scripts/                # Python agent and utility implementations
-│   ├── agent_utilities.py          # Shared helpers (path resolution, run-log, workspace wait)
+│   ├── agent_utilities.py          # Shared helpers (path resolution, run-log, workspace copy/zip/merge)
 │   ├── token_logger.py             # Shared JSONL token-usage logger and console printer
 │   ├── story_orchestrator.py               # Non-LLM utility; shared by all agent types; marks stories ready when deps are met
 │   ├── claude_agents/              # Agents backed by the Claude Agent SDK
 │   │   ├── claude_designer_agent.py             # Interactive design session → workspace/design/<feature>.md
 │   │   ├── claude_business_analyst_agent.py     # Decomposes design doc into story files
 │   │   ├── claude_project_initialiser_agent.py  # Scaffolds workspace/ from design; writes workspace/CLAUDE.md
-│   │   ├── claude_junior_coding_agent.py        # Claims and implements easy stories
-│   │   └── claude_senior_coding_agent.py        # Claims and implements medium/hard stories
+│   │   ├── claude_junior_coding_agent.py        # Claims easy stories; works in isolated workspace copy
+│   │   ├── claude_senior_coding_agent.py        # Claims medium/hard stories; works in isolated workspace copy
+│   │   └── claude_merger_agent.py               # Merges story zips from merge-queue into main branch
 │   └── ollama_agents/              # Agents backed by a local Ollama instance
 │       ├── ollama_utilities.py                      # Shared tool defs, ToolExecutor, agent loops, and text-tool-call fallback helpers
 │       ├── ollama_designer_agent.py                 # Interactive design session (chat loop)
 │       ├── ollama_business_analyst_agent.py         # Decomposes design doc into story files
 │       ├── ollama_project_initialiser_agent.py      # Scaffolds workspace/ from design doc
-│       ├── ollama_junior_coding_agent.py            # Claims and implements easy stories
-│       └── ollama_senior_coding_agent.py            # Claims and implements medium/hard stories
+│       ├── ollama_junior_coding_agent.py            # Claims easy stories; works in isolated workspace copy
+│       ├── ollama_senior_coding_agent.py            # Claims medium/hard stories; works in isolated workspace copy
+│       └── ollama_merger_agent.py                   # Merges story zips from merge-queue into main branch
 ├── roles/                  # System prompt files (one per LLM agent)
 │   ├── claude_roles/                    # Prompts for the Claude backend
 │   │   ├── claude_designer.md
 │   │   ├── claude_business-analyst.md
 │   │   ├── claude_project-initialiser.md
 │   │   ├── claude_junior-coding-agent.md
-│   │   └── claude_senior-coding-agent.md
+│   │   ├── claude_senior-coding-agent.md
+│   │   └── claude_merger-agent.md
 │   └── ollama_roles/                    # Prompts for the Ollama backend (tool-aware variants)
 │       ├── ollama-designer.md
 │       ├── ollama-business-analyst.md
 │       ├── ollama-project-initialiser.md
 │       ├── ollama-junior-coding-agent.md
-│       └── ollama-senior-coding-agent.md
+│       ├── ollama-senior-coding-agent.md
+│       └── ollama-merger-agent.md
 ├── generated-test-applications/  # Sample outputs from pipeline test runs
 ├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
 │   ├── design/             # Designer Agent outputs (<feature>.new.md / <feature>.processed.md)
 │   ├── stories/            # Story files (complexity + state encoded in filename)
 │   ├── .sentinels/         # Runtime coordination files (created by start-team.sh)
+│   │   ├── STORY-NNN/      #   Isolated temp workspace for a coding agent (deleted after use)
+│   │   ├── merge-queue/    #   Zipped temp workspaces awaiting the Merger Agent
+│   │   └── merge-STORY-NNN/ #  Staging dir used by Merger to unzip before git operations
 │   ├── src/
 │   └── tests/
 ├── start-team.sh           # Launches all agents simultaneously in named terminal windows
 ├── reset-team.sh           # Wipes all artefacts; resets to clean state
 ├── reset-stories.sh        # Resets story files only (keeps generated code)
 ├── status.sh               # Live story-state summary
-└── watchdog.sh             # Resets stale .working.md files after 10 min
+└── watchdog.sh             # Resets stale .working.md files after 10 min; skips merge-queued stories
 ```
 
 ## Technology Stack
@@ -117,6 +126,7 @@ python scripts/claude_agents/claude_project_initialiser_agent.py --design worksp
 python scripts/story_orchestrator.py
 python scripts/claude_agents/claude_junior_coding_agent.py
 python scripts/claude_agents/claude_senior_coding_agent.py
+python scripts/claude_agents/claude_merger_agent.py
 
 # Run an agent directly (Ollama backend — requires a running Ollama instance)
 python scripts/ollama_agents/ollama_designer_agent.py --model qwen2.5-coder
@@ -124,6 +134,7 @@ python scripts/ollama_agents/ollama_business_analyst_agent.py --design workspace
 python scripts/ollama_agents/ollama_project_initialiser_agent.py --design workspace/design/my-feature.new.md
 python scripts/ollama_agents/ollama_junior_coding_agent.py
 python scripts/ollama_agents/ollama_senior_coding_agent.py
+python scripts/ollama_agents/ollama_merger_agent.py
 # Override host:  --ollama-host http://192.168.1.10:11434
 # Override model: --model llama3.1
 
@@ -175,6 +186,35 @@ The Ollama backend uses two complementary mechanisms in `ollama_utilities.py` to
 - **Continuation prompts** (`continuation_prompt`, `max_continuations`): When `run_agent_loop` receives a text-only turn (after the fallback finds nothing), it re-prompts the model with a continuation message up to `max_continuations` times before returning. All task-oriented Ollama agents pass a `continuation_prompt`.
 
 Ollama role files (`roles/ollama-*.md`) contain explicit per-tool documentation and call examples because local models do not reliably infer calling conventions from schema alone. When adding a new Ollama agent, create a dedicated `ollama-<role>.md` alongside the shared `<role>.md`.
+
+The Ollama Merger Agent uses a minimal `MERGER_TOOLS` set (`bash` + `write_file`) defined inline in `ollama_merger_agent.py` rather than the shared `CODING_TOOLS`, since it only needs to run git commands and write the outcome file.
+
+## Isolated Workspace Pipeline
+
+Coding agents (Junior and Senior) no longer write directly to the shared workspace. The flow per story is:
+
+1. **Python** (`copy_workspace_for_story`): copy the full workspace (excluding `.sentinels/`) into `.sentinels/STORY-NNN/`. The copy includes `stories/` and `design/` so the LLM can read context.
+2. **LLM session**: the agent runs entirely inside the temp workspace. `cwd`, story path, and outcome file all point there.
+3. **Post-session (Python)**:
+   - `outcome == "done"` → `zip_workspace_for_merge` zips the temp workspace (excluding `.git/`, `stories/`, `design/`, and `.gitignore` patterns) into `.sentinels/merge-queue/STORY-NNN.zip`. The main workspace story stays in `.working.md`.
+   - `outcome == "failed"` / no outcome → failure reasons are copied back to the main story file; `finalise_story` renames to `.failed.md` / `.ready.md` as before.
+4. **Python**: temp workspace is deleted.
+
+The **Merger Agent** then processes `merge-queue/` in ascending story-number order:
+1. **Python** (`unzip_workspace_for_merge`): unzip to `.sentinels/merge-STORY-NNN/`.
+2. **LLM**: create a git branch named `story-NNN`, `cp -r` staged files into the workspace, `git add -A`, commit, merge to `main`.
+3. **Python** (`mark_story_done_after_merge`): rename `.working.md` → `.done.md` in `workspace/stories/`.
+4. **Python**: delete staging dir and zip.
+
+Key utility functions live in `scripts/agent_utilities.py`:
+- `get_story_id(story_path)` — extracts `STORY-NNN` from any story filename
+- `copy_workspace_for_story(workspace_dir, sentinels_dir, story_id)` — performs the copy
+- `zip_workspace_for_merge(temp_workspace, story_id, merge_queue_dir)` — creates the zip
+- `get_next_merge_story(merge_queue_dir)` — returns the lowest-numbered zip or `None`
+- `unzip_workspace_for_merge(zip_path, sentinels_dir)` — extracts to staging dir
+- `mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name)` — renames to `.done.md`
+
+The **Watchdog** skips `.working.md` files that have a corresponding `merge-queue/STORY-NNN.zip` — those are queued for the Merger and must not be reset to `.ready.md`.
 
 ## AI Agent Guidelines
 

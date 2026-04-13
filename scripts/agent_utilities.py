@@ -1,5 +1,9 @@
 """Shared agent utilities for all momo-agents."""
+import fnmatch
 import json
+import os
+import shutil
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -112,3 +116,142 @@ async def wait_for_workspace(workspace_dir: Path, agent_name: str, poll_interval
     while not claude_md.exists():
         await anyio.sleep(poll_interval)
     print(f"[{agent_name}] Workspace ready — proceeding.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Isolated workspace helpers (git-merge-based pipeline)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Directories always excluded when zipping a temp workspace for the merge-queue.
+# .git    — git metadata of the temp workspace; not needed by merger
+# stories — state-encoded filenames would conflict when merging in order
+# design  — large read-only artefacts already present in main workspace
+_ZIP_ALWAYS_EXCLUDE: frozenset[str] = frozenset({".git", "stories", "design"})
+
+
+def get_story_id(story_path: Path) -> str:
+    """Return the STORY-NNN identifier from a story filename.
+
+    E.g. 'STORY-003.medium.working.md' → 'STORY-003'
+    """
+    return story_path.name.split(".")[0]
+
+
+def copy_workspace_for_story(workspace_dir: Path, sentinels_dir: Path, story_id: str) -> Path:
+    """Copy workspace_dir (excluding .sentinels) into sentinels_dir/<story_id>/.
+
+    Returns the path to the new temporary workspace directory.
+    An existing temp directory for the same story_id is removed first.
+    """
+    temp_dir = sentinels_dir / story_id
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+
+    def _ignore_sentinels(src: str, names: list[str]) -> list[str]:
+        return [n for n in names if n == ".sentinels"]
+
+    shutil.copytree(str(workspace_dir), str(temp_dir), ignore=_ignore_sentinels)
+    return temp_dir
+
+
+def _load_gitignore_patterns(workspace_dir: Path) -> list[str]:
+    """Return non-comment, non-blank lines from workspace_dir/.gitignore."""
+    gitignore = workspace_dir / ".gitignore"
+    if not gitignore.exists():
+        return []
+    patterns: list[str] = []
+    for line in gitignore.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            patterns.append(line)
+    return patterns
+
+
+def _is_gitignored(rel_path: str, name: str, patterns: list[str]) -> bool:
+    """Return True if rel_path or its basename matches any gitignore pattern."""
+    for pattern in patterns:
+        bare = pattern.rstrip("/")
+        if fnmatch.fnmatch(name, bare):
+            return True
+        if fnmatch.fnmatch(rel_path, bare):
+            return True
+        if fnmatch.fnmatch(rel_path, pattern):
+            return True
+    return False
+
+
+def zip_workspace_for_merge(temp_workspace: Path, story_id: str, merge_queue_dir: Path) -> Path:
+    """Zip temp_workspace (excluding stories/, design/, .git/, and .gitignore patterns)
+    and place it as merge_queue_dir/<story_id>.zip.
+
+    Returns the path to the created zip file.
+    """
+    merge_queue_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = merge_queue_dir / f"{story_id}.zip"
+    gitignore_patterns = _load_gitignore_patterns(temp_workspace)
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(temp_workspace):
+            root_path = Path(root)
+            rel_root = root_path.relative_to(temp_workspace)
+            at_top = rel_root == Path(".")
+
+            # Filter directories in-place to prune the walk.
+            filtered: list[str] = []
+            for d in dirs:
+                if at_top and d in _ZIP_ALWAYS_EXCLUDE:
+                    continue
+                rel_d = str(rel_root / d)
+                if _is_gitignored(rel_d, d, gitignore_patterns):
+                    continue
+                filtered.append(d)
+            dirs[:] = filtered
+
+            for fname in files:
+                rel_file = str(rel_root / fname)
+                if not _is_gitignored(rel_file, fname, gitignore_patterns):
+                    zf.write(str(root_path / fname), rel_file)
+
+    return zip_path
+
+
+def get_next_merge_story(merge_queue_dir: Path) -> Path | None:
+    """Return the lowest-numbered STORY-NNN.zip in merge_queue_dir, or None."""
+    if not merge_queue_dir.exists():
+        return None
+    zips = sorted(merge_queue_dir.glob("STORY-*.zip"), key=lambda p: p.name)
+    return zips[0] if zips else None
+
+
+def unzip_workspace_for_merge(zip_path: Path, sentinels_dir: Path) -> Path:
+    """Unzip a merge-queue zip to sentinels_dir/merge-<story_id>/.
+
+    Any pre-existing directory at that path is removed first.
+    Returns the path to the extracted directory.
+    """
+    story_id = zip_path.stem  # STORY-NNN
+    extract_dir = sentinels_dir / f"merge-{story_id}"
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True)
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(str(extract_dir))
+    return extract_dir
+
+
+def mark_story_done_after_merge(
+    stories_dir: Path, story_id: str, run_log: Path | None, agent_name: str
+) -> None:
+    """Rename the story's .working.md file to .done.md after a successful merge.
+
+    If no .working.md is found for story_id, logs a warning and returns.
+    """
+    working_files = list(stories_dir.glob(f"{story_id}.*.working.md"))
+    if not working_files:
+        print(f"[{agent_name}] WARNING: no .working.md for {story_id} — cannot mark done.")
+        return
+    story_path = working_files[0]
+    dest = story_path.with_name(story_path.name.replace(".working.md", ".done.md"))
+    story_path.rename(dest)
+    append_run_log(run_log, agent_name, f"story merged and done: {dest.name}")
+    print(f"[{agent_name}] Marked {dest.name}")

@@ -1,4 +1,12 @@
-"""Senior Coding Agent — claims medium/hard stories one at a time; starts a fresh query per story."""
+"""Senior Coding Agent — claims medium/hard stories one at a time.
+
+Each story is worked on inside an isolated copy of the workspace so that
+parallel agents never interfere with each other's file trees.  When the LLM
+reports success the temp workspace is zipped into the merge-queue; the Merger
+Agent then commits and merges the changes in story order.  Failed or reset
+stories are handled the same as before (finalise_story handles the rename).
+"""
+import shutil
 import sys
 from pathlib import Path
 
@@ -10,7 +18,17 @@ import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-from agent_utilities import claim_story, finalise_story, load_role, resolve_path, wait_for_workspace
+from agent_utilities import (
+    append_run_log,
+    claim_story,
+    copy_workspace_for_story,
+    finalise_story,
+    get_story_id,
+    load_role,
+    resolve_path,
+    wait_for_workspace,
+    zip_workspace_for_merge,
+)
 from conversation_logger import log_claude_message
 
 POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
@@ -53,7 +71,6 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-
 def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> str:
     """Build a focused single-story task prompt."""
     return (
@@ -61,7 +78,7 @@ def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> st
         f"Workspace: {workspace_dir}\n"
         f"Outcome file: {outcome_file}\n\n"
         "## Task\n"
-        "1. Read workspace/CLAUDE.md — note build/test/lint commands and the Agent Exclusion List.\n"
+        f"1. Read {workspace_dir}/CLAUDE.md — note build/test/lint commands and the Agent Exclusion List.\n"
         "2. Read the story file.\n"
         "3. Read the design doc(s) from the story's **Design ref** field "
         "(two paths separated by ' | ' — read whichever exist).\n"
@@ -81,14 +98,21 @@ def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> st
     )
 
 
-
-async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
-    pipeline_complete = workspace_dir / ".sentinels" / "pipeline_complete"
+async def run(
+    stories_dir: Path,
+    workspace_dir: Path,
+    model: str,
+    run_log: Path | None,
+    agent_name: str,
+    conv_log_dir: Path | None,
+) -> None:
+    sentinels_dir = workspace_dir / ".sentinels"
+    merge_queue_dir = sentinels_dir / "merge-queue"
+    pipeline_complete = sentinels_dir / "pipeline_complete"
 
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
 
-    options = ClaudeAgentOptions(
-        cwd=str(workspace_dir),
+    base_options = dict(
         system_prompt=load_role("claude_roles/claude_senior-coding-agent"),
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
         permission_mode="acceptEdits",
@@ -107,15 +131,42 @@ async def run(stories_dir: Path, workspace_dir: Path, model: str, run_log: Path 
             await anyio.sleep(POLL_INTERVAL)
             continue
 
-        print(f"[{agent_name}] Claimed {story_path.name} — starting fresh session.")
-        story_id = story_path.stem.split(".")[0]  # e.g. STORY-001
-        outcome_file = workspace_dir / ".sentinels" / f"{story_id}.outcome"
-        task = _build_task(story_path, workspace_dir, outcome_file)
+        story_id = get_story_id(story_path)
+        print(f"[{agent_name}] Claimed {story_path.name} — copying workspace to temp/{story_id}...")
+
+        # ── Isolate: copy workspace into a temp directory ──────────────────
+        temp_workspace = copy_workspace_for_story(workspace_dir, sentinels_dir, story_id)
+        temp_story_path = temp_workspace / "stories" / story_path.name
+        temp_outcome_file = temp_workspace / f"{story_id}.outcome"
+
+        print(f"[{agent_name}] Starting session in isolated workspace {temp_workspace}...")
+
+        options = ClaudeAgentOptions(
+            cwd=str(temp_workspace),
+            **base_options,
+        )
+        task = _build_task(temp_story_path, temp_workspace, temp_outcome_file)
 
         async for message in query(prompt=task, options=options):
             log_claude_message(conv_log_dir, agent_name, message, story_id)
 
-        finalise_story(story_path, outcome_file, run_log, agent_name)
+        # ── Post-session: dispatch based on outcome ────────────────────────
+        outcome = temp_outcome_file.read_text().strip() if temp_outcome_file.exists() else ""
+
+        if outcome == "done":
+            # Zip temp workspace → merge-queue; leave main story as .working
+            zip_workspace_for_merge(temp_workspace, story_id, merge_queue_dir)
+            append_run_log(run_log, agent_name, f"story queued for merge: {story_id}")
+            print(f"[{agent_name}] {story_id} done — queued for merge.")
+        else:
+            # For failed / no-outcome: copy updated story file back to main workspace
+            # so failure reasons written by the LLM are preserved, then finalise.
+            if temp_story_path.exists():
+                shutil.copy2(str(temp_story_path), str(story_path))
+            finalise_story(story_path, temp_outcome_file, run_log, agent_name)
+
+        # ── Cleanup temp workspace ─────────────────────────────────────────
+        shutil.rmtree(str(temp_workspace), ignore_errors=True)
 
 
 if __name__ == "__main__":
