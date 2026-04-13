@@ -44,6 +44,7 @@ AGENT_TYPE_PI=""
 AGENT_TYPE_JUNIOR=""
 AGENT_TYPE_SENIOR=""
 AGENT_TYPE_RESOLVER=""
+AGENT_TYPE_MERGER=""
 
 # Model placeholders — finalised after arg parsing once per-role agent types are known.
 MODEL_DESIGNER=""
@@ -52,6 +53,7 @@ MODEL_PI=""
 MODEL_JUNIOR=""
 MODEL_SENIOR=""
 MODEL_RESOLVER=""
+MODEL_MERGER=""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
@@ -93,6 +95,10 @@ for ((i = 0; i < ${#args[@]}; i++)); do
         --model-resolver)           MODEL_RESOLVER="${args[$((i + 1))]:-}" ;;
         --resolver-agent-type=*)    AGENT_TYPE_RESOLVER="${args[$i]#*=}" ;;
         --resolver-agent-type)      AGENT_TYPE_RESOLVER="${args[$((i + 1))]:-}" ;;
+        --model-merger=*)           MODEL_MERGER="${args[$i]#*=}" ;;
+        --model-merger)             MODEL_MERGER="${args[$((i + 1))]:-}" ;;
+        --merger-agent-type=*)      AGENT_TYPE_MERGER="${args[$i]#*=}" ;;
+        --merger-agent-type)        AGENT_TYPE_MERGER="${args[$((i + 1))]:-}" ;;
     esac
 done
 
@@ -114,8 +120,9 @@ AGENT_TYPE_PI="${AGENT_TYPE_PI:-$AGENT_TYPE}"
 AGENT_TYPE_JUNIOR="${AGENT_TYPE_JUNIOR:-$AGENT_TYPE}"
 AGENT_TYPE_SENIOR="${AGENT_TYPE_SENIOR:-$AGENT_TYPE}"
 AGENT_TYPE_RESOLVER="${AGENT_TYPE_RESOLVER:-$AGENT_TYPE}"
+AGENT_TYPE_MERGER="${AGENT_TYPE_MERGER:-$AGENT_TYPE}"
 
-for _role_var in AGENT_TYPE_DESIGNER AGENT_TYPE_BA AGENT_TYPE_PI AGENT_TYPE_JUNIOR AGENT_TYPE_SENIOR AGENT_TYPE_RESOLVER; do
+for _role_var in AGENT_TYPE_DESIGNER AGENT_TYPE_BA AGENT_TYPE_PI AGENT_TYPE_JUNIOR AGENT_TYPE_SENIOR AGENT_TYPE_RESOLVER AGENT_TYPE_MERGER; do
     _val="${!_role_var}"
     if [ "$_val" != "claude" ] && [ "$_val" != "ollama" ]; then
         echo "Error: --${_role_var/AGENT_TYPE_/} must be 'claude' or 'ollama', got: '$_val'" >&2
@@ -144,6 +151,7 @@ MODEL_PI="${MODEL_PI:-$(_default_model "$AGENT_TYPE_PI" pi)}"
 MODEL_JUNIOR="${MODEL_JUNIOR:-$(_default_model "$AGENT_TYPE_JUNIOR" junior)}"
 MODEL_SENIOR="${MODEL_SENIOR:-$(_default_model "$AGENT_TYPE_SENIOR" senior)}"
 MODEL_RESOLVER="${MODEL_RESOLVER:-$(_default_model "$AGENT_TYPE_RESOLVER" resolver)}"
+MODEL_MERGER="${MODEL_MERGER:-$(_default_model "$AGENT_TYPE_MERGER" merger)}"
 
 if [ -z "$WORKSPACE_DIR" ]; then
     echo "Usage: $0 --workspace <path> [options]"
@@ -163,6 +171,7 @@ if [ -z "$WORKSPACE_DIR" ]; then
     echo "  --junior-agent-type TYPE    Agent type for Junior Coding Agents"
     echo "  --senior-agent-type TYPE    Agent type for Senior Coding Agents"
     echo "  --resolver-agent-type TYPE  Agent type for Story Resolver Agent"
+    echo "  --merger-agent-type TYPE    Agent type for Merger Agent"
     echo ""
     echo "  --junior-agents N           Junior Coding Agents to spawn — handle easy stories    (default: 2)"
     echo "  --senior-agents N           Senior Coding Agents to spawn — handle medium/hard     (default: 1)"
@@ -173,8 +182,9 @@ if [ -z "$WORKSPACE_DIR" ]; then
     echo "  --model-junior M            Model for Junior Coding Agents"
     echo "  --model-senior M            Model for Senior Coding Agents"
     echo "  --model-resolver M          Model for Story Resolver Agent (default: claude-sonnet-4-6)"
+    echo "  --model-merger M            Model for Merger Agent (default: claude-sonnet-4-6)"
     echo ""
-    echo "  claude defaults:  designer/ba/senior/resolver=claude-sonnet-4-6"
+    echo "  claude defaults:  designer/ba/senior/resolver/merger=claude-sonnet-4-6"
     echo "                    junior/pi=claude-haiku-4-5-20251001"
     echo "  ollama defaults:  all roles=qwen3.5:4b"
     exit 1
@@ -344,6 +354,7 @@ AGENT_TYPE_PI='$AGENT_TYPE_PI'
 AGENT_TYPE_JUNIOR='$AGENT_TYPE_JUNIOR'
 AGENT_TYPE_SENIOR='$AGENT_TYPE_SENIOR'
 AGENT_TYPE_RESOLVER='$AGENT_TYPE_RESOLVER'
+AGENT_TYPE_MERGER='$AGENT_TYPE_MERGER'
 OLLAMA_HOST='$OLLAMA_HOST'
 ANTHROPIC_API_KEY='${ANTHROPIC_API_KEY:-}'
 MODEL_DESIGNER='$MODEL_DESIGNER'
@@ -352,6 +363,7 @@ MODEL_PI='$MODEL_PI'
 MODEL_JUNIOR='$MODEL_JUNIOR'
 MODEL_SENIOR='$MODEL_SENIOR'
 MODEL_RESOLVER='$MODEL_RESOLVER'
+MODEL_MERGER='$MODEL_MERGER'
 RUN_LOG='$SENTINEL_DIR/run-log.jsonl'
 CONV_LOG_DIR='$SENTINEL_DIR/agent_conversation_logs'
 CONFIG
@@ -389,6 +401,7 @@ echo "    PI         : [$AGENT_TYPE_PI] $MODEL_PI"
 echo "    Junior     : [$AGENT_TYPE_JUNIOR] $MODEL_JUNIOR"
 echo "    Senior     : [$AGENT_TYPE_SENIOR] $MODEL_SENIOR"
 echo "    Resolver   : [$AGENT_TYPE_RESOLVER] $MODEL_RESOLVER"
+echo "    Merger     : [$AGENT_TYPE_MERGER] $MODEL_MERGER"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -744,6 +757,8 @@ source "$(dirname "$0")/config.sh"
 echo "╔══════════════════════════════════╗"
 echo "║            Watchdog              ║"
 echo "╚══════════════════════════════════╝"
+export SENTINEL_DIR
+export STORIES_DIR
 exec bash "${SCRIPT_DIR}/watchdog.sh"
 WRAPPER
 
@@ -795,6 +810,62 @@ echo ""
 echo "[Story Resolver Agent complete]"
 WRAPPER
 
+# ── Merger Agent ──────────────────────────────────────────────────────────────
+# Polls merge-queue/ for completed story zips; merges them into main in order.
+cat > "$SENTINEL_DIR/run_merger.sh" << 'WRAPPER'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '\033]0;Merger Agent\007'
+source "$(dirname "$0")/config.sh"
+export ANTHROPIC_API_KEY
+# shellcheck disable=SC1091
+[ -f "${SCRIPT_DIR}/.venv/bin/activate" ] && source "${SCRIPT_DIR}/.venv/bin/activate"
+
+echo "╔══════════════════════════════════╗"
+echo "║        Merger Agent              ║"
+echo "╚══════════════════════════════════╝"
+echo "  Mode  : ${AGENT_TYPE_MERGER}"
+echo "  Model : ${MODEL_MERGER}"
+echo ""
+echo "Polls merge-queue/ and merges completed stories into main in story order."
+echo ""
+
+while true; do
+    if [ "$AGENT_TYPE_MERGER" = "ollama" ]; then
+        "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_merger_agent.py" \
+            --workspace-dir "${WORKSPACE_DIR}" \
+            --model "${MODEL_MERGER}" \
+            --ollama-host "${OLLAMA_HOST}" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
+            --run-log "${RUN_LOG}" \
+            --agent-name "ollama-merger-agent"
+    else
+        "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_merger_agent.py" \
+            --workspace-dir "${WORKSPACE_DIR}" \
+            --model "${MODEL_MERGER}" \
+            --conv-log-dir "${CONV_LOG_DIR}" \
+            --run-log "${RUN_LOG}" \
+            --agent-name "merger-agent"
+    fi
+    EXIT_CODE=$?
+
+    if [ -f "${SENTINEL_DIR}/pipeline_complete" ]; then
+        echo ""
+        echo "[Merger Agent] Pipeline complete — exiting."
+        break
+    fi
+
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo ""
+        echo "[Merger Agent] Agent exited with code $EXIT_CODE — retrying in 10s..."
+        sleep 10
+    fi
+done
+
+echo ""
+echo "[Merger Agent finished]"
+WRAPPER
+
 chmod +x \
     "$SENTINEL_DIR/run_designer.sh" \
     "$SENTINEL_DIR/run_ba.sh" \
@@ -803,13 +874,14 @@ chmod +x \
     "$SENTINEL_DIR/junior_coding_agent_body.sh" \
     "$SENTINEL_DIR/senior_coding_agent_body.sh" \
     "$SENTINEL_DIR/run_watchdog.sh" \
-    "$SENTINEL_DIR/run_resolver.sh"
+    "$SENTINEL_DIR/run_resolver.sh" \
+    "$SENTINEL_DIR/run_merger.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Launch all windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
-TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 6 ))
-echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 6 fixed agents)..."
+TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 7 ))
+echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 7 fixed agents)..."
 echo ""
 
 open_window "🎨 Designer Agent"        "$SENTINEL_DIR/run_designer.sh"
@@ -818,6 +890,7 @@ open_window "🏗️  Project Initialiser"  "$SENTINEL_DIR/run_pi.sh"
 open_window "🎯 Story Orchestrator"    "$SENTINEL_DIR/run_orchestrator.sh"
 open_window "🐕 Watchdog"              "$SENTINEL_DIR/run_watchdog.sh"
 open_window "🔧 Story Resolver"        "$SENTINEL_DIR/run_resolver.sh"
+open_window "🔀 Merger Agent"          "$SENTINEL_DIR/run_merger.sh"
 
 for i in $(seq 1 "$N_JUNIOR_AGENTS"); do
     open_window "🟢 Junior Coding Agent $i [easy]"        "$SENTINEL_DIR/run_junior_${i}.sh"

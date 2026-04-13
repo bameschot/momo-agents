@@ -1,6 +1,8 @@
 # momo-agents
 
-A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline). Backends can be mixed freely: each agent role (Designer, Business Analyst, Project Initialiser, Junior Coder, Senior Coder) can be independently configured as either Claude or Ollama, letting you balance cost, speed, and capability per role.
+A multi-agent coding pipeline that takes a feature idea from concept through to working, tested code — without human intervention between steps. Supports two AI backends: the **Claude Agent SDK** (cloud) and a locally running **Ollama** instance (local/offline). Backends can be mixed freely: each agent role (Designer, Business Analyst, Project Initialiser, Junior Coder, Senior Coder, Merger) can be independently configured as either Claude or Ollama, letting you balance cost, speed, and capability per role.
+
+Coding agents work in **isolated workspace copies** — each story is implemented in a private temp directory so parallel agents never touch each other's files. Completed workspaces are queued as zips and a dedicated **Merger Agent** commits and merges them into the shared workspace git repository in story order.
 
 ---
 
@@ -59,6 +61,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--junior-agent-type TYPE` | Backend override for Junior Coding Agents | inherits `--agent-type` |
 | `--senior-agent-type TYPE` | Backend override for Senior Coding Agents | inherits `--agent-type` |
 | `--resolver-agent-type TYPE` | Backend override for Story Resolver Agent | inherits `--agent-type` |
+| `--merger-agent-type TYPE` | Backend override for Merger Agent | inherits `--agent-type` |
 | `--ollama-host URL` | Ollama API base URL (used by any role configured as ollama) | `http://localhost:11434` |
 | `--junior-agents N` | Number of parallel Junior Coding Agents (easy stories) | `2` |
 | `--senior-agents N` | Number of parallel Senior Coding Agents (medium/hard stories) | `1` |
@@ -68,6 +71,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `--model-junior M` | Model for Junior Coding Agents | see defaults below |
 | `--model-senior M` | Model for Senior Coding Agents | see defaults below |
 | `--model-resolver M` | Model for Story Resolver Agent | see defaults below |
+| `--model-merger M` | Model for Merger Agent | see defaults below |
 
 **Model defaults** (each role uses the default for its own configured backend):
 
@@ -79,6 +83,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
 | Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
 | Story Resolver | `claude-sonnet-4-6` | `qwen3.5:4b` |
+| Merger Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
 
 **Agent windows opened:**
 
@@ -89,8 +94,9 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | `📋 Business Analyst` | Design watcher | Polls `<workspace>/design/` every 5 s; waits for `<workspace>/CLAUDE.md` |
 | `🎯 Story Orchestrator` | Readiness manager | Continuously marks stories ready as deps complete |
 | `🐕 Watchdog` | Stale story reset | Resets stories idle > 10 min back to `.ready.md` |
-| `🟢 Junior Coding Agent N` | Easy story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.easy.ready.md` |
-| `🔵 Senior Coding Agent N` | Medium/hard story implementation | Waits for `<workspace>/CLAUDE.md`; polls for `*.medium/hard.ready.md` |
+| `🟢 Junior Coding Agent N` | Easy story implementation | Works in an isolated workspace copy; queues result to `merge-queue/` on success |
+| `🔵 Senior Coding Agent N` | Medium/hard story implementation | Works in an isolated workspace copy; queues result to `merge-queue/` on success |
+| `🔀 Merger Agent` | Git branch + merge for completed stories | Polls `merge-queue/`; merges story zips into the workspace git repo in story order |
 | `🔧 Story Resolver` | Interactive failed-story triage | Polls for `*.failed.md`; prompts you to resolve each one interactively |
 
 **Examples:**
@@ -129,7 +135,7 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 
 Each agent role can be configured independently as either `claude` or `ollama`. Use `--agent-type` to set the global default and then override individual roles with the per-role flags. This lets you use cloud models where quality matters most and local models where speed or cost is the priority.
 
-Per-role flags: `--designer-agent-type`, `--ba-agent-type`, `--pi-agent-type`, `--junior-agent-type`, `--senior-agent-type`. Each accepts `claude` or `ollama` and defaults to `--agent-type` when not set.
+Per-role flags: `--designer-agent-type`, `--ba-agent-type`, `--pi-agent-type`, `--junior-agent-type`, `--senior-agent-type`, `--merger-agent-type`. Each accepts `claude` or `ollama` and defaults to `--agent-type` when not set.
 
 Each role's model default is derived from its own configured backend, so you only need to pass `--model-<role>` when you want to override the default for that backend.
 
@@ -237,9 +243,19 @@ After a full reset, re-running `./start-team.sh --workspace <path>` goes through
                ┌──────────────┴──────────────┐
                ▼                             ▼
      Junior Coding Agent 1 ──┐   Senior Coding Agent 1 ──┐
-     Junior Coding Agent 2 ──┼►  Senior Coding Agent 2 ──┼──► <workspace>/
+     Junior Coding Agent 2 ──┤   Senior Coding Agent 2 ──┤
            [easy]            │         [medium/hard]      │
-                             └──────────┬───────────────-─┘
+                             │  each works in an isolated │
+                             │  copy of the workspace     │
+                             └──────────┬────────────────-┘
+                                        │ success → STORY-NNN.zip
+                                        ▼
+                              .sentinels/merge-queue/
+                                        │ (in story order)
+                                        ▼
+                                 Merger Agent
+                          (git branch → copy → commit
+                           → merge into main → mark done)
                                         │ (on failure)
                                         ▼
                                *.failed.md stories
@@ -258,9 +274,10 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `CLAUDE.md` at the workspace root; all other agents gate on this file | `<workspace>/design/` | `<workspace>/` |
 | **Business Analyst** | Waits for `CLAUDE.md`, then decomposes the design into story files | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
 | **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
-| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; starts a fresh LLM session per story; polls indefinitely for new work; on failure appends a `## Failure Reasons` section to the story file | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/`, `<workspace>/stories/*.working.md` (failure reasons only) |
-| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; starts a fresh LLM session per story; polls indefinitely; on failure appends a `## Failure Reasons` section to the story file | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `<workspace>/`, `<workspace>/stories/*.working.md` (failure reasons only) |
-| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md` | `<workspace>/stories/` | `<workspace>/stories/` |
+| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; **copies the workspace** into an isolated temp dir before starting; works entirely in isolation; on success zips the temp workspace into `merge-queue/`; on failure copies failure reasons back and marks the story `.failed.md` | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
+| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; same isolated-workspace flow as Junior Coding Agent | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
+| **Merger Agent** | Polls `merge-queue/` in ascending story-number order; for each zip: unzips to a staging dir, asks the LLM to create a git branch, copy the staged files, commit, and merge back to `main`; then marks the story `.done.md` and deletes the staging dir | `.sentinels/merge-queue/STORY-NNN.zip` | `<workspace>/` (git commits), `<workspace>/stories/*.done.md` |
+| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md`; **skips stories already in `merge-queue/`** — those are awaiting the Merger Agent and must not be reset | `<workspace>/stories/`, `.sentinels/merge-queue/` | `<workspace>/stories/` |
 | **Story Resolver** | Interactive (Claude only); polls for `*.failed.md` stories; when found, opens a conversation with you to diagnose the failure, propose fixes, and reset the story to `*.ready.md` | `<workspace>/stories/*.failed.md`, `<workspace>/` (read-only for context) | `<workspace>/stories/*.failed.md` (edits then renames to `*.ready.md`) |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
@@ -339,15 +356,15 @@ Each Ollama agent is given a fixed set of tools at startup. All tool implementat
 
 ### Tool availability by agent
 
-| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding | Story Resolver |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|
-| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `edit_file` | | | ✓ | ✓ | ✓ | ✓ |
-| `bash` | | ✓ | ✓ | ✓ | ✓ | |
-| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `grep` | | | ✓ | ✓ | ✓ | ✓ |
-| `ask_user` | | | | | | ✓ |
+| Tool | Designer | Business Analyst | Project Initialiser | Junior Coding | Senior Coding | Merger | Story Resolver |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| `read_file` | ✓ | ✓ | ✓ | ✓ | ✓ | | ✓ |
+| `write_file` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `edit_file` | | | ✓ | ✓ | ✓ | | ✓ |
+| `bash` | | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| `glob` | ✓ | ✓ | ✓ | ✓ | ✓ | | ✓ |
+| `grep` | | | ✓ | ✓ | ✓ | | ✓ |
+| `ask_user` | | | | | | | ✓ |
 
 The tools are grouped into named collections in `ollama_utilities.py`:
 
@@ -357,6 +374,7 @@ The tools are grouped into named collections in `ollama_utilities.py`:
 | `ANALYST_TOOLS` | `read_file`, `write_file`, `glob` | *(base set; not used directly)* |
 | `BA_TOOLS` | `read_file`, `write_file`, `glob`, `bash` | Business Analyst |
 | `CODING_TOOLS` | `read_file`, `write_file`, `edit_file`, `bash`, `glob`, `grep` | Project Initialiser, Junior Coding, Senior Coding |
+| `MERGER_TOOLS` | `bash`, `write_file` | Merger |
 | `RESOLVER_TOOLS` | `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `ask_user` | Story Resolver |
 
 ### Tool reference
@@ -449,7 +467,7 @@ Returns the user's response as a string. If the user types `skip`, raises `UserS
 ```
 momo-agents/
 ├── scripts/
-│   ├── agent_utilities.py         ← shared helpers (path utils, run-log writer, workspace wait)
+│   ├── agent_utilities.py         ← shared helpers (path utils, run-log, workspace copy/zip/merge)
 │   ├── token_logger.py            ← shared JSONL token-usage logger and console printer
 │   ├── story_orchestrator.py      ← non-LLM; shared by all agent types; marks stories ready
 │   ├── git_log_exporter.py        ← exports workspace git log to JSONL for the run report
@@ -458,32 +476,36 @@ momo-agents/
 │   │   ├── claude_designer_agent.py
 │   │   ├── claude_business_analyst_agent.py
 │   │   ├── claude_project_initialiser_agent.py
-│   │   ├── claude_junior_coding_agent.py      ← claims easy stories
-│   │   └── claude_senior_coding_agent.py      ← claims medium/hard stories
+│   │   ├── claude_junior_coding_agent.py      ← claims easy stories; isolated workspace flow
+│   │   ├── claude_senior_coding_agent.py      ← claims medium/hard stories; isolated workspace flow
+│   │   └── claude_merger_agent.py             ← merges story zips into main branch
 │   └── ollama_agents/             ← agents backed by a local Ollama instance
 │       ├── ollama_utilities.py            ← shared tool defs, ToolExecutor, agent loops, text-tool-call fallback
 │       ├── ollama_designer_agent.py
 │       ├── ollama_business_analyst_agent.py
 │       ├── ollama_project_initialiser_agent.py
-│       ├── ollama_junior_coding_agent.py
-│       └── ollama_senior_coding_agent.py
+│       ├── ollama_junior_coding_agent.py      ← isolated workspace flow
+│       ├── ollama_senior_coding_agent.py      ← isolated workspace flow
+│       └── ollama_merger_agent.py             ← merges story zips into main branch
 ├── roles/                     ← system prompt files (one per LLM agent)
 │   ├── claude_roles/                  ← prompts for the Claude backend
 │   │   ├── claude_designer.md
 │   │   ├── claude_business-analyst.md
 │   │   ├── claude_project-initialiser.md
 │   │   ├── claude_junior-coding-agent.md
-│   │   └── claude_senior-coding-agent.md
+│   │   ├── claude_senior-coding-agent.md
+│   │   └── claude_merger-agent.md
 │   └── ollama_roles/                  ← prompts for the Ollama backend
 │       ├── ollama-designer.md
 │       ├── ollama-business-analyst.md
 │       ├── ollama-project-initialiser.md
 │       ├── ollama-junior-coding-agent.md
-│       └── ollama-senior-coding-agent.md
+│       ├── ollama-senior-coding-agent.md
+│       └── ollama-merger-agent.md
 ├── start-team.sh              ← launches all agents simultaneously
 ├── reset-team.sh              ← wipes all artefacts; resets to clean state
 ├── status.sh                  ← live story-state summary
-└── watchdog.sh                ← resets stale .working.md files after 10 min
+└── watchdog.sh                ← resets stale .working.md files; skips merge-queued stories
 ```
 
 ---
@@ -513,8 +535,15 @@ All pipeline artefacts are written here. Nothing inside `momo-agents/` itself is
 │   ├── config.sh                  ← shared environment variables sourced by wrapper scripts
 │   ├── run-log.jsonl              ← pipeline event log (one JSON object per line)
 │   ├── git_log.jsonl              ← workspace git commits for this run (exported on shutdown)
-│   ├── STORY-NNN.outcome          ← per-story outcome written by LLM ('done' or 'failed');
-│   │                                 read by Python harness to rename the story file; deleted after use
+│   ├── STORY-NNN/                 ← isolated temp workspace for a coding agent working on STORY-NNN;
+│   │                                 full copy of <workspace> (excluding .sentinels);
+│   │                                 deleted after the agent finishes
+│   ├── merge-queue/               ← zipped temp workspaces waiting to be merged by the Merger Agent
+│   │   └── STORY-NNN.zip              ← created by coding agent on success; deleted by Merger after merge
+│   ├── merge-STORY-NNN/           ← staging dir where Merger unzips a story before git operations;
+│   │                                 deleted after merge completes
+│   ├── merge-STORY-NNN.outcome    ← outcome sentinel written by the Merger LLM ('done' or 'failed');
+│   │                                 deleted after use
 │   ├── tokens/                    ← per-agent JSONL token-usage logs
 │   └── run_*.sh                   ← per-agent wrapper scripts
 ├── src/                       ← generated application source code
