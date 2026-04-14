@@ -289,6 +289,19 @@ def _truncate(text: str, limit: int = _MAX_CONTENT_CHARS) -> str:
     return text if len(text) <= limit else text[:limit] + "…"
 
 
+def _expandable_html(text: str, limit: int = _MAX_CONTENT_CHARS) -> str:
+    """Return HTML with a truncated preview and an expand button when text exceeds limit."""
+    if len(text) <= limit:
+        return _esc(text)
+    truncated = _esc(text[:limit])
+    full = _esc(text)
+    return (
+        f'<span class="msg-preview">{truncated}</span>'
+        f'<span class="msg-full" style="display:none">{full}</span>'
+        f'<button class="expand-btn" onclick="toggleExpand(this)">…more</button>'
+    )
+
+
 def _render_content_html(entry: dict) -> str:
     """Return an HTML fragment summarising the content of one conversation entry."""
     role = entry.get("role", "")
@@ -309,18 +322,19 @@ def _render_content_html(entry: dict) -> str:
             for block in content:
                 btype = block.get("type", "")
                 if btype == "text":
-                    parts.append(_esc(_truncate(block.get("text", ""))))
+                    parts.append(_expandable_html(block.get("text", "")))
                 elif btype == "tool_use":
-                    inp_str = _truncate(json.dumps(block.get("input", {}), ensure_ascii=False), 200)
-                    parts.append(f"<code>[tool:{_esc(block.get('name', ''))}] {_esc(inp_str)}</code>")
+                    inp_str = json.dumps(block.get("input", {}), ensure_ascii=False)
+                    parts.append(f"<code>[tool:{_esc(block.get('name', ''))}]</code> {_expandable_html(inp_str, 200)}")
                 elif btype == "tool_result":
                     status = "error" if block.get("is_error") else "ok"
-                    res = _truncate(str(block.get("content", "")), 200)
-                    parts.append(f"<code>[result:{status}] {_esc(res)}</code>")
+                    res = str(block.get("content", ""))
+                    parts.append(f"<code>[result:{status}]</code> {_expandable_html(res, 200)}")
                 elif btype == "thinking":
-                    parts.append(f"<em>[thinking] {_esc(_truncate(block.get('thinking', ''), 200))}</em>")
+                    thinking = block.get("thinking", "")
+                    parts.append(f"<em>[thinking]</em> {_expandable_html(thinking, 200)}")
         elif isinstance(content, str):
-            parts.append(_esc(_truncate(content)))
+            parts.append(_expandable_html(content))
         return "<br>".join(parts) if parts else "<em>(empty)</em>"
 
     if role == "user":
@@ -329,31 +343,31 @@ def _render_content_html(entry: dict) -> str:
             for block in content:
                 if block.get("type") == "tool_result":
                     status = "error" if block.get("is_error") else "ok"
-                    res = _truncate(str(block.get("content", "")), 200)
-                    parts.append(f"<code>[result:{status}] {_esc(res)}</code>")
+                    res = str(block.get("content", ""))
+                    parts.append(f"<code>[result:{status}]</code> {_expandable_html(res, 200)}")
             return "<br>".join(parts) if parts else "<em>(empty)</em>"
-        return _esc(_truncate(str(content)))
+        return _expandable_html(str(content))
 
     if role == "tool":
         tool_name = _esc(entry.get("tool_name", ""))
-        args_str = _truncate(json.dumps(entry.get("arguments", {}), ensure_ascii=False), 200)
-        result = _truncate(str(content))
+        args_str = json.dumps(entry.get("arguments", {}), ensure_ascii=False)
+        result = str(content)
         return (
-            f"<code>[call: {tool_name}]</code> {_esc(args_str)}"
-            f"<br><code>[output]</code> {_esc(result)}"
+            f"<code>[call: {tool_name}]</code> {_expandable_html(args_str, 200)}"
+            f"<br><code>[output]</code> {_expandable_html(result)}"
         )
 
     # Ollama assistant messages or any other role — best-effort
     if isinstance(content, str):
-        rendered = _esc(_truncate(content))
+        rendered = _expandable_html(content)
     else:
-        rendered = _esc(_truncate(json.dumps(content, ensure_ascii=False)))
+        rendered = _expandable_html(json.dumps(content, ensure_ascii=False))
     tool_calls = entry.get("tool_calls")
     if tool_calls:
         tc_parts = []
         for tc in tool_calls:
-            args_str = _truncate(json.dumps(tc.get("arguments", {}), ensure_ascii=False), 200)
-            tc_parts.append(f"<code>[tool:{_esc(tc.get('name', ''))}] {_esc(args_str)}</code>")
+            args_str = json.dumps(tc.get("arguments", {}), ensure_ascii=False)
+            tc_parts.append(f"<code>[tool:{_esc(tc.get('name', ''))}]</code> {_expandable_html(args_str, 200)}")
         rendered = (rendered + "<br>" if rendered else "") + "<br>".join(tc_parts)
     return rendered or "<em>(empty)</em>"
 
@@ -701,6 +715,10 @@ def build_html(
         "    .role-system   code { color: #7d6608; }\n"
         "    .role-result   code { color: #6e2f8a; }\n"
         "    .role-tool     code { color: #784212; }\n"
+        "    .expand-btn { font-size: 0.8em; padding: 0 4px; margin-left: 4px; cursor: pointer;\n"
+        "                  border: 1px solid #aaa; border-radius: 3px; background: #f0f0f0;\n"
+        "                  color: #444; vertical-align: baseline; line-height: 1.4; }\n"
+        "    .expand-btn:hover { background: #e0e0e0; }\n"
         "  </style>\n"
         "</head>\n"
         "<body>\n"
@@ -715,6 +733,21 @@ def build_html(
         + "  <h2>Conversation History</h2>\n"
         + conv_history_html
         + chart_script
+        + "<script>\n"
+          "function toggleExpand(btn) {\n"
+          "  var preview = btn.previousElementSibling.previousElementSibling;\n"
+          "  var full = btn.previousElementSibling;\n"
+          "  if (full.style.display === 'none') {\n"
+          "    preview.style.display = 'none';\n"
+          "    full.style.display = '';\n"
+          "    btn.textContent = '…less';\n"
+          "  } else {\n"
+          "    preview.style.display = '';\n"
+          "    full.style.display = 'none';\n"
+          "    btn.textContent = '…more';\n"
+          "  }\n"
+          "}\n"
+          "</script>\n"
         + "</body>\n"
         "</html>\n"
     )

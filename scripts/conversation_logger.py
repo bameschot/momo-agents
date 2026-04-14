@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_CONTENT_TRUNCATE = 4000
+_CONTENT_TRUNCATE = 40000
 
 
 # ------------------------------------------------------------------
