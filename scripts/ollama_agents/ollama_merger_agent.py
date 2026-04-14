@@ -188,10 +188,6 @@ async def run(
             system_prompt=system_prompt,
             conv_log_dir=conv_log_dir,
             context=story_id,
-            continuation_prompt=(
-                "Continue with the next step. "
-                "When all git operations are done, write the outcome to the outcome file."
-            ),
         )
 
         # ── Python: finalise based on LLM outcome ─────────────────────────

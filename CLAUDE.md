@@ -180,10 +180,9 @@ python scripts/ollama_agents/ollama_merger_agent.py
 
 ## Ollama Agent Robustness
 
-The Ollama backend uses two complementary mechanisms in `ollama_utilities.py` to handle models that do not always emit structured function calls:
+The Ollama backend uses the following mechanism in `ollama_utilities.py` to handle models that do not always emit structured function calls:
 
 - **Text-tool-call fallback** (`_try_extract_tool_calls_from_text`, `_handle_text_tool_calls`): When a model response contains no structured `tool_calls`, the response content is scanned for JSON objects (including code-fence-wrapped ones) that match known tool names. Matched calls are executed normally and appended to the message history.
-- **Continuation prompts** (`continuation_prompt`, `max_continuations`): When `run_agent_loop` receives a text-only turn (after the fallback finds nothing), it re-prompts the model with a continuation message up to `max_continuations` times before returning. All task-oriented Ollama agents pass a `continuation_prompt`.
 
 Ollama role files (`roles/ollama-*.md`) contain explicit per-tool documentation and call examples because local models do not reliably infer calling conventions from schema alone. When adding a new Ollama agent, create a dedicated `ollama-<role>.md` alongside the shared `<role>.md`.
 
