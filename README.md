@@ -254,8 +254,9 @@ After a full reset, re-running `./start-team.sh --workspace <path>` goes through
                                         │ (in story order)
                                         ▼
                                  Merger Agent
-                          (git branch → copy → commit
-                           → merge into main → mark done)
+                          (git branch from base commit →
+                           copy → commit → 3-way merge
+                           into main → mark done)
                                         │ (on failure)
                                         ▼
                                *.failed.md stories
@@ -274,9 +275,9 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `CLAUDE.md` at the workspace root; all other agents gate on this file | `<workspace>/design/` | `<workspace>/` |
 | **Business Analyst** | Waits for `CLAUDE.md`, then decomposes the design into story files | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
 | **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
-| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; **copies the workspace** into an isolated temp dir before starting; works entirely in isolation; on success zips the temp workspace into `merge-queue/`; on failure copies failure reasons back and marks the story `.failed.md` | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
-| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; same isolated-workspace flow as Junior Coding Agent | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
-| **Merger Agent** | Polls `merge-queue/` in ascending story-number order; for each zip: unzips to a staging dir, asks the LLM to create a git branch, copy the staged files, commit, and merge back to `main`; then marks the story `.done.md` and deletes the staging dir | `.sentinels/merge-queue/STORY-NNN.zip` | `<workspace>/` (git commits), `<workspace>/stories/*.done.md` |
+| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; **copies the workspace** into an isolated temp dir before starting (recording the git HEAD as `.merge-base-commit` so the Merger can later perform a correct 3-way merge); works entirely in isolation; on success zips the temp workspace into `merge-queue/` and **leaves the story in `.working.md`** — only the Merger Agent may advance it to `.done.md`; on failure copies failure reasons back and marks the story `.failed.md` | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
+| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; same isolated-workspace flow as Junior Coding Agent — leaves story in `.working.md` on success for the Merger Agent to finalise | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
+| **Merger Agent** | Polls `merge-queue/` in ascending story-number order; for each zip: unzips to a staging dir, asks the LLM to create a git branch **from the base commit recorded at workspace-copy time**, copy the staged files, commit, and merge back to `main` via a 3-way merge (so changes from previously merged stories are never overwritten); then marks the story `.done.md` and deletes the staging dir | `.sentinels/merge-queue/STORY-NNN.zip` | `<workspace>/` (git commits), `<workspace>/stories/*.done.md` |
 | **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md`; **skips stories already in `merge-queue/`** — those are awaiting the Merger Agent and must not be reset | `<workspace>/stories/`, `.sentinels/merge-queue/` | `<workspace>/stories/` |
 | **Story Resolver** | Interactive (Claude only); polls for `*.failed.md` stories; when found, opens a conversation with you to diagnose the failure, propose fixes, and reset the story to `*.ready.md` | `<workspace>/stories/*.failed.md`, `<workspace>/` (read-only for context) | `<workspace>/stories/*.failed.md` (edits then renames to `*.ready.md`) |
 
@@ -562,9 +563,11 @@ STORY-NNN.<complexity>.<state>.md
 | Segment | Values | Set by |
 |---|---|---|
 | `complexity` | `easy`, `medium`, `hard` | Business Analyst (when writing the story) |
-| `state` | *(none)* → `ready` → `working` → `done` \| `failed` | Story Orchestrator, Coding Agents |
+| `state` | *(none)* → `ready` → `working` → `done` \| `failed` | Story Orchestrator (`ready`); Coding Agents (`working`, `failed`); Merger Agent (`done` only) |
 
 A bare `STORY-NNN.md` (no complexity or state suffix) is newly written by the BA and not yet evaluated. The Story Orchestrator renames it to `STORY-NNN.<complexity>.ready.md` once all dependency stories are in `done` state.
+
+> **State ownership rule**: only the Merger Agent may transition a story to `.done.md`. A Coding Agent that completes a story successfully leaves it in `.working.md` and places its zipped workspace in `merge-queue/`. The story advances to `.done.md` only after the Merger Agent has successfully committed and merged it into the main branch.
 
 ---
 

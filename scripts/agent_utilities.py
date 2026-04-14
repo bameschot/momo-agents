@@ -3,6 +3,7 @@ import fnmatch
 import json
 import os
 import shutil
+import subprocess
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -68,11 +69,15 @@ def claim_story(stories_dir: Path, patterns: list[str]) -> Path | None:
 
 
 def finalise_story(story_path: Path, outcome_file: Path, run_log: Path | None, agent_name: str) -> None:
-    """Rename the story file based on the outcome sentinel written by the LLM session.
+    """Rename the story file after a coding-agent session that did NOT produce a merge-ready zip.
 
-    Reads the outcome sentinel (expected content: 'done' or 'failed').
-    Renames .working.md accordingly and deletes the sentinel.
-    If the sentinel is absent or unrecognised, resets to .ready.md so another agent can retry.
+    Only handles 'failed' and absent/unrecognised outcomes — never 'done'.
+    Marking a story as .done.md is exclusively the responsibility of the Merger Agent
+    via mark_story_done_after_merge, which runs after a successful git merge.
+
+    Reads the outcome sentinel (expected content: 'failed').
+    Renames .working.md to .failed.md on failure, or resets to .ready.md otherwise
+    so another agent can retry.
 
     If the .working.md file is missing (e.g. removed during the agent session), the
     destination file is created directly from the outcome so state is never lost.
@@ -83,8 +88,14 @@ def finalise_story(story_path: Path, outcome_file: Path, run_log: Path | None, a
     stem = story_path.name.replace(".working.md", "")
 
     if outcome == "done":
-        dest = story_path.with_name(stem + ".done.md")
-    elif outcome == "failed":
+        # Successful stories stay in .working.md — the Merger Agent is the only
+        # actor that may advance them to .done.md (via mark_story_done_after_merge).
+        print(f"[{agent_name}] WARNING: 'done' outcome passed to finalise_story — leaving {story_path.name} in .working state for the Merger Agent.")
+        if outcome_file.exists():
+            outcome_file.unlink()
+        return
+
+    if outcome == "failed":
         dest = story_path.with_name(stem + ".failed.md")
     else:
         dest = story_path.with_name(stem + ".ready.md")
@@ -95,12 +106,10 @@ def finalise_story(story_path: Path, outcome_file: Path, run_log: Path | None, a
         print(f"[{agent_name}] WARNING: {story_path.name} missing after session — creating {dest.name} directly.")
         dest.touch()
 
-    if outcome == "done":
-        append_run_log(run_log, agent_name, f"story done: {dest.name}")
-    elif outcome == "failed":
+    if outcome == "failed":
         append_run_log(run_log, agent_name, f"story failed: {dest.name}")
     else:
-        print(f"[{agent_name}] No outcome written — reset to {dest.name}.")
+        print(f"[{agent_name}] No valid outcome written — reset to {dest.name}.")
         append_run_log(run_log, agent_name, f"story reset to ready: {dest.name}")
 
     if outcome_file.exists():
@@ -142,6 +151,11 @@ def copy_workspace_for_story(workspace_dir: Path, sentinels_dir: Path, story_id:
 
     Returns the path to the new temporary workspace directory.
     An existing temp directory for the same story_id is removed first.
+
+    Also writes a .merge-base-commit file into the temp dir containing the
+    git HEAD at copy time. The merger uses this to create the story branch from
+    the exact base commit, enabling a correct 3-way merge that does not revert
+    changes made by previously merged stories.
     """
     temp_dir = sentinels_dir / story_id
     if temp_dir.exists():
@@ -151,6 +165,17 @@ def copy_workspace_for_story(workspace_dir: Path, sentinels_dir: Path, story_id:
         return [n for n in names if n == ".sentinels"]
 
     shutil.copytree(str(workspace_dir), str(temp_dir), ignore=_ignore_sentinels)
+
+    # Record the HEAD commit so the merger can branch from this exact point.
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(workspace_dir),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        (temp_dir / ".merge-base-commit").write_text(result.stdout.strip())
+
     return temp_dir
 
 
