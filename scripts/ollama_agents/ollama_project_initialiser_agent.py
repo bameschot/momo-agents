@@ -51,10 +51,13 @@ def _build_task(design_path: Path, workspace_dir: Path) -> str:
         "appropriate for the technology stack described in the design.\n"
         "2. Scaffold the initial project structure inside the workspace directory: "
         "directory layout, configuration files, empty entry points, and dependency "
-        "manifests with required packages listed.\n"
+        "manifests with required packages listed. "
+        "Always ensure `.sentinels/` is listed in `.gitignore`.\n"
+        "3. After all files are written, perform an initial commit: "
+        "use the `bash` tool to run `git add -A` then `git commit -m \"chore: initial project scaffold\"`.\n"
         "Do not implement any story logic — only the skeleton that lets Coding Agents "
         "start implementing immediately.\n\n"
-        "After scaffolding is complete, stop immediately.\n"
+        "After the initial commit is complete, stop immediately.\n"
     )
 
 

@@ -42,14 +42,19 @@ The design document path is provided in the task prompt. Read it before doing an
 
 4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
    - If the workspace is not already a git repository, initialise one — use the `bash` tool with shell command: `git init`
-   - Include or amend an existing `.gitignore` file appropriate for the tech stack. the file always includes .sentinels
+   - Include or amend an existing `.gitignore` file appropriate for the tech stack. **The `.gitignore` must always include `.sentinels/` — this directory is used for runtime coordination and must never be committed.** Add it even if the workspace already has a `.gitignore`.
    - Directory structure as described or implied by the design
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
 
-5. Do **not** implement any business logic from the stories.
-6. Do **not** write files outside the workspace root.
+5. **Perform an initial commit** once all scaffold files are in place:
+   - Use the `bash` tool with shell command `git add -A` to stage every scaffolded file.
+   - Use the `bash` tool with shell command `git commit -m "chore: initial project scaffold"` to record the baseline.
+   - This commit is the clean baseline that all Coding Agent branches will diverge from.
+
+6. Do **not** implement any business logic from the stories.
+7. Do **not** write files outside the workspace root.
 
 ## Tools
 
@@ -99,7 +104,9 @@ Execute these steps in order using tools — do not describe what you plan to do
 4. Use the `bash` tool with shell command `git rev-parse --is-inside-work-tree` to check if the workspace is already a git repository. If it is not, use the `bash` tool with shell command `git init`.
 5. `write_file` to create `CLAUDE.md` at the workspace root.
 6. `write_file` (and `bash` for directories that cannot be implied by file paths) to scaffold all required project files.
-7. If a `.gitignore` exists, use `read_file` then `edit_file` or `write_file` to amend it; otherwise create it with `write_file`.
+7. If a `.gitignore` exists, use `read_file` then `edit_file` or `write_file` to amend it; otherwise create it with `write_file`. **Always ensure `.sentinels/` is present in `.gitignore`.**
+8. Use the `bash` tool with shell command `git add -A` to stage all scaffolded files.
+9. Use the `bash` tool with shell command `git commit -m "chore: initial project scaffold"` to record the baseline commit.
 
 ## Efficiency
 

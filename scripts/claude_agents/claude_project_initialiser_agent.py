@@ -71,7 +71,10 @@ async def run(design_path: Path, workspace_dir: Path, model: str, run_log: Path 
         "appropriate for the technology stack described in the design.\n"
         "2. Scaffold the initial project structure inside the workspace directory: "
         "directory layout, configuration files, empty entry points, and dependency "
-        "manifests with required packages listed.\n"
+        "manifests with required packages listed. "
+        "Always ensure `.sentinels/` is listed in `.gitignore`.\n"
+        "3. After all files are written, perform an initial commit: "
+        "run `git add -A` then `git commit -m \"chore: initial project scaffold\"`.\n"
         "Do not implement any story logic — only the skeleton that lets Coding Agents "
         "start implementing immediately.\n\n"
     )
