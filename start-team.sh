@@ -637,7 +637,6 @@ echo ""
 while true; do
     if [ "$AGENT_TYPE_JUNIOR" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_junior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
@@ -646,7 +645,6 @@ while true; do
             --agent-name "ollama-junior-coding-agent-${AGENT_ID}"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_junior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
@@ -721,7 +719,6 @@ echo ""
 while true; do
     if [ "$AGENT_TYPE_SENIOR" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_senior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
@@ -730,7 +727,6 @@ while true; do
             --agent-name "ollama-senior-coding-agent-${AGENT_ID}"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_senior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
@@ -834,7 +830,6 @@ echo ""
 
 if [ "$AGENT_TYPE_RESOLVER" = "ollama" ]; then
     "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_story_resolver_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_RESOLVER}" \
         --ollama-host "${OLLAMA_HOST}" \
@@ -843,7 +838,6 @@ if [ "$AGENT_TYPE_RESOLVER" = "ollama" ]; then
         --agent-name "ollama-story-resolver"
 else
     "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_resolver_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_RESOLVER}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
@@ -964,19 +958,26 @@ echo ""
 echo "Monitoring pipeline (press Ctrl+C to shut down the team)..."
 echo ""
 
-# Count story files in a given state. Pass "unprocessed" for bare STORY-NNN.md
-# files (no complexity/state suffix yet); or a state suffix like "ready"/"done".
+# Count story files in a given state.
+# "unprocessed" → bare STORY-NNN.md files in STORIES_DIR (not yet evaluated).
+# "done"        → STORY-NNN.done.md files in STORIES_DIR (committed by Merger).
+# "ready" / "working" / "failed" → files in the orchestrator dir (.sentinels/story-orchestrator/).
 _count_stories() {
     local state="$1"
     local count=0 f base
+    local orchestrator_dir="${SENTINEL_DIR}/story-orchestrator"
     if [[ "$state" == "unprocessed" ]]; then
         for f in "$STORIES_DIR"/STORY-*.md; do
             [[ -f "$f" ]] || continue
             base="$(basename "$f")"
             [[ "$base" =~ ^STORY-[0-9]+\.md$ ]] && (( count++ )) || true
         done
-    else
+    elif [[ "$state" == "done" ]]; then
         for f in "$STORIES_DIR"/STORY-*."${state}".md; do
+            [[ -f "$f" ]] && (( count++ )) || true
+        done
+    else
+        for f in "$orchestrator_dir"/STORY-*."${state}".md; do
             [[ -f "$f" ]] && (( count++ )) || true
         done
     fi

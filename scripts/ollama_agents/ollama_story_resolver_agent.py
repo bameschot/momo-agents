@@ -35,11 +35,6 @@ _FAILURE_REASONS_HEADING = "## Failure Reasons"
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Ollama Story Resolver Agent (failed story triage)")
     parser.add_argument(
-        "--stories-dir",
-        default="",
-        help="Directory containing story files (default: <workspace-dir>/stories)",
-    )
-    parser.add_argument(
         "--workspace-dir",
         default="workspace",
         help="Path to the workspace directory (default: workspace/ relative to project root)",
@@ -172,7 +167,6 @@ async def _run_resolver_session(
 
 
 async def run(
-    stories_dir: Path,
     workspace_dir: Path,
     model: str,
     ollama_host: str,
@@ -180,13 +174,14 @@ async def run(
     agent_name: str,
     conv_log_dir: Path | None,
 ) -> None:
+    orchestrator_dir = workspace_dir / ".sentinels" / "story-orchestrator"
     print(f"[{agent_name}] Story Resolver ready — scanning for failed stories every {POLL_INTERVAL}s.")
     print(f"[{agent_name}] Connected to Ollama at {ollama_host}, model={model}")
     print("When a failed story is found you will be prompted to resolve it interactively.")
     print()
 
     while True:
-        story_path = _find_failed_story(stories_dir)
+        story_path = _find_failed_story(orchestrator_dir)
 
         if story_path is None:
             print(f"[{agent_name}] No failed stories — polling every {POLL_INTERVAL}s...", flush=True)
@@ -207,12 +202,10 @@ async def run(
 if __name__ == "__main__":
     args = _parse_args()
     workspace_dir = resolve_path(args.workspace_dir)
-    stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
     anyio.run(
         run,
-        stories_dir,
         workspace_dir,
         args.model,
         args.ollama_host,

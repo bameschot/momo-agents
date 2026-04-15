@@ -203,10 +203,10 @@ Each role's model default is derived from its own configured backend, so you onl
 Prints a live snapshot of how many stories are in each state:
 
 ```
-  unprocessed    2   STORY-001.md  STORY-004.md
-  ready          1   STORY-002.easy.ready.md
-  working        1   STORY-003.medium.working.md
-  done           3   STORY-005.easy.done.md  ...
+  unprocessed    2   STORY-001.md  STORY-004.md          (workspace/stories/)
+  ready          1   STORY-002.easy.ready.md              (.sentinels/story-orchestrator/)
+  working        1   STORY-003.medium.working.md          (.sentinels/story-orchestrator/)
+  done           3   STORY-005.done.md  ...               (workspace/stories/, committed)
   failed         0
 ```
 
@@ -299,17 +299,19 @@ After a full reset, re-running `./start-team.sh --workspace <path>` goes through
 
 The pipeline has one hard sequencing constraint: the **Project Initialiser** runs first and writes `CLAUDE.md` at the workspace root. The **Business Analyst** and all **Coding Agents** poll for this file and will not start work until it exists. Everything else is coordinated via atomic filesystem operations — no agent explicitly waits for another.
 
+**Story state locations** — live runtime state (`.ready.md`, `.working.md`, `.failed.md`) is tracked in `.sentinels/story-orchestrator/`, which is never touched by git. Source stories (`STORY-NNN.md`) and committed done markers (`STORY-NNN.done.md`) live in `workspace/stories/`. This separation means git merges by the Merger Agent never conflict with story state files.
+
 | Agent | Role | Reads from | Writes to |
 |---|---|---|---|
 | **Designer** | Multi-turn interactive Q&A with user; writes design on `write` command | User input (terminal) | `<workspace>/design/` |
 | **Project Initialiser** | Reads the design, determines the correct tech-stack scaffolding, and writes `CLAUDE.md` at the workspace root; all other agents gate on this file | `<workspace>/design/` | `<workspace>/` |
 | **Business Analyst** | Waits for `CLAUDE.md`, then decomposes the design into story files | `<workspace>/design/*.new.md`, `<workspace>/CLAUDE.md` | `<workspace>/stories/STORY-NNN.md` |
-| **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, renames to `STORY-NNN.[complexity].ready.md` when deps are met | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `<workspace>/stories/` |
-| **Junior Coding Agent** (×N) | Claims one `easy` story at a time; **copies the workspace** into an isolated temp dir before starting (recording the git HEAD as `.merge-base-commit` so the Merger can later perform a correct 3-way merge); works entirely in isolation; on success zips the temp workspace into `merge-queue/` (**always excluding `stories/`, `design/`, `.git/`, and `.gitignore`-matched paths**) and **leaves the story in `.working.md`** — only the Merger Agent may advance it to `.done.md`; on failure copies failure reasons back and marks the story `.failed.md` | `<workspace>/stories/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
-| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time; same isolated-workspace flow as Junior Coding Agent — leaves story in `.working.md` on success for the Merger Agent to finalise | `<workspace>/stories/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `<workspace>/stories/*.failed.md` (failure) |
-| **Merger Agent** | Polls `merge-queue/` in ascending story-number order; for each zip: unzips to a staging dir, asks the LLM to create a git branch **from the base commit recorded at workspace-copy time**, copy the staged files (**never `stories/` or `design/`** — skip unconditionally even if present), commit, and merge back to `main` via a 3-way merge (so changes from previously merged stories are never overwritten); then marks the story `.done.md` and deletes the staging dir | `.sentinels/merge-queue/STORY-NNN.zip` | `<workspace>/` (git commits), `<workspace>/stories/*.done.md` |
-| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md`; **skips stories already in `merge-queue/`** — those are awaiting the Merger Agent and must not be reset | `<workspace>/stories/`, `.sentinels/merge-queue/` | `<workspace>/stories/` |
-| **Story Resolver** | Interactive (Claude only); polls for `*.failed.md` stories; when found, opens a conversation with you to diagnose the failure, propose fixes, and reset the story to `*.ready.md` | `<workspace>/stories/*.failed.md`, `<workspace>/` (read-only for context) | `<workspace>/stories/*.failed.md` (edits then renames to `*.ready.md`) |
+| **Story Orchestrator** | Plain Python utility (no LLM); watches `<workspace>/stories/` for bare `STORY-NNN.md` files, parses complexity and deps, **copies** to `.sentinels/story-orchestrator/STORY-NNN.[complexity].ready.md` when deps are met; skips stories already present in the orchestrator dir | `<workspace>/stories/STORY-NNN.md`, `<workspace>/stories/*.done.md` | `.sentinels/story-orchestrator/` |
+| **Junior Coding Agent** (×N) | Claims one `easy` story at a time from the orchestrator dir; **copies the workspace** into an isolated temp dir (recording git HEAD as `.merge-base-commit` for a correct 3-way merge); also copies the story file into the temp workspace so the LLM can read it; works entirely in isolation; on success zips the temp workspace into `merge-queue/` (**always excluding `stories/`, `design/`, `.git/`, and `.gitignore`-matched paths**) — story stays `.working.md` in the orchestrator dir until the Merger promotes it; on failure copies failure reasons back and marks the story `.failed.md` in the orchestrator dir | `.sentinels/story-orchestrator/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `.sentinels/story-orchestrator/*.failed.md` (failure) |
+| **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time from the orchestrator dir; same isolated-workspace flow as Junior Coding Agent | `.sentinels/story-orchestrator/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `.sentinels/story-orchestrator/*.failed.md` (failure) |
+| **Merger Agent** | Polls `merge-queue/` in ascending story-number order; for each zip: unzips to a staging dir, asks the LLM to create a git branch **from the base commit recorded at workspace-copy time**, copy the staged files (**never `stories/` or `design/`** — skip unconditionally even if present), commit, and merge back to `main` via a 3-way merge; then renames `workspace/stories/STORY-NNN.md` → `STORY-NNN.done.md`, **commits that rename to git** (for restart resilience), removes the orchestrator dir entry, and deletes the staging dir | `.sentinels/merge-queue/STORY-NNN.zip` | `<workspace>/` (git commits), `<workspace>/stories/*.done.md` (committed) |
+| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md`; **skips stories already in `merge-queue/`** — those are awaiting the Merger Agent and must not be reset | `.sentinels/story-orchestrator/`, `.sentinels/merge-queue/` | `.sentinels/story-orchestrator/` |
+| **Story Resolver** | Interactive; polls the orchestrator dir for `*.failed.md` stories; when found, opens a conversation to diagnose the failure, propose fixes, and reset the story to `*.ready.md` in the orchestrator dir | `.sentinels/story-orchestrator/*.failed.md`, `<workspace>/` (read-only for context) | `.sentinels/story-orchestrator/*.failed.md` (edits then renames to `*.ready.md`) |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
 
@@ -325,11 +327,11 @@ When a coding agent cannot complete a story it appends a `## Failure Reasons` se
 - Root cause: the `Bar` dependency was not yet implemented; story may have an unresolved dependency
 ```
 
-This section is written directly to the `.working.md` file (the only permitted in-session edit to a story file). It survives the rename to `.failed.md` so it is readable by any subsequent agent or developer inspecting the failure without needing to dig through logs.
+This section is written to the story file in the isolated temp workspace. After the session the failure reasons are copied back to the `.working.md` entry in `.sentinels/story-orchestrator/`, which is then renamed to `.failed.md`. The section is readable by any subsequent agent or developer inspecting the failure without needing to dig through logs.
 
 ### Story Resolver Agent
 
-The **Story Resolver** (`scripts/claude_agents/claude_story_resolver_agent.py`) runs alongside the team and polls for `.failed.md` stories. When one is found it opens an interactive Claude session directly in your terminal:
+The **Story Resolver** (`scripts/claude_agents/claude_story_resolver_agent.py`) runs alongside the team and polls `.sentinels/story-orchestrator/` for `.failed.md` stories. When one is found it opens an interactive Claude session directly in your terminal:
 
 1. The agent reads the story (including `## Failure Reasons`) and presents the failure clearly.
 2. You discuss the root cause — the agent can read workspace source files, tests, and `CLAUDE.md` for context.

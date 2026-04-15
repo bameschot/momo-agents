@@ -265,18 +265,55 @@ def unzip_workspace_for_merge(zip_path: Path, sentinels_dir: Path) -> Path:
 
 
 def mark_story_done_after_merge(
-    stories_dir: Path, story_id: str, run_log: Path | None, agent_name: str
+    stories_dir: Path,
+    story_id: str,
+    run_log: Path | None,
+    agent_name: str,
+    orchestrator_dir: Path | None = None,
 ) -> None:
-    """Rename the story's .working.md file to .done.md after a successful merge.
+    """Rename STORY-NNN.md to STORY-NNN.done.md after a successful merge, then commit.
 
-    If no .working.md is found for story_id, logs a warning and returns.
+    The bare source story file (STORY-NNN.md) in stories_dir is renamed to
+    STORY-NNN.done.md and the change is committed to git so the done state
+    persists across team restarts.
+
+    If orchestrator_dir is provided, any files for this story are removed from
+    the orchestrator dir so it is no longer visible to coding agents.
+
+    If no STORY-NNN.md is found, logs a warning and returns.
     """
-    working_files = list(stories_dir.glob(f"{story_id}.*.working.md"))
-    if not working_files:
-        print(f"[{agent_name}] WARNING: no .working.md for {story_id} — cannot mark done.")
+    story_md = stories_dir / f"{story_id}.md"
+    if not story_md.exists():
+        print(f"[{agent_name}] WARNING: {story_id}.md not found in {stories_dir} — cannot mark done.")
         return
-    story_path = working_files[0]
-    dest = story_path.with_name(story_path.name.replace(".working.md", ".done.md"))
-    story_path.rename(dest)
+    dest = stories_dir / f"{story_id}.done.md"
+    story_md.rename(dest)
     append_run_log(run_log, agent_name, f"story merged and done: {dest.name}")
     print(f"[{agent_name}] Marked {dest.name}")
+
+    # Commit the done-state rename to git so it survives restarts.
+    workspace_dir = stories_dir.parent
+    try:
+        subprocess.run(
+            ["git", "add", str(stories_dir)],
+            cwd=str(workspace_dir),
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", f"chore: mark {story_id} done"],
+            cwd=str(workspace_dir),
+            check=True,
+            capture_output=True,
+        )
+        print(f"[{agent_name}] Committed done state for {story_id}.")
+    except subprocess.CalledProcessError as exc:
+        print(f"[{agent_name}] WARNING: could not commit done state for {story_id}: {exc}")
+
+    # Clean up the orchestrator dir entry so the story is no longer visible to agents.
+    if orchestrator_dir is not None and orchestrator_dir.exists():
+        for f in orchestrator_dir.glob(f"{story_id}.*"):
+            try:
+                f.unlink()
+            except OSError:
+                pass

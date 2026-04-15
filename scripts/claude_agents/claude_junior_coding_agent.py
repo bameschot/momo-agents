@@ -39,11 +39,6 @@ DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Junior Coding Agent (easy stories)")
     parser.add_argument(
-        "--stories-dir",
-        default="",
-        help="Directory containing story files (default: <workspace-dir>/stories)",
-    )
-    parser.add_argument(
         "--workspace-dir",
         default="workspace",
         help="Path to the workspace directory (default: workspace/ relative to project root)",
@@ -104,7 +99,6 @@ def _build_task(story_path: Path, workspace_dir: Path, outcome_file: Path) -> st
 
 
 async def run(
-    stories_dir: Path,
     workspace_dir: Path,
     model: str,
     run_log: Path | None,
@@ -113,6 +107,7 @@ async def run(
     effort: str = "medium",
 ) -> None:
     sentinels_dir = workspace_dir / ".sentinels"
+    orchestrator_dir = sentinels_dir / "story-orchestrator"
     merge_queue_dir = sentinels_dir / "merge-queue"
     pipeline_complete = sentinels_dir / "pipeline_complete"
 
@@ -132,7 +127,7 @@ async def run(
             print(f"[{agent_name}] Pipeline complete — exiting.")
             return
 
-        story_path = claim_story(stories_dir, ["STORY-*.easy.ready.md"])
+        story_path = claim_story(orchestrator_dir, ["STORY-*.easy.ready.md"])
         if story_path is None:
             print(f"[{agent_name}] No easy.ready stories available — polling every {POLL_INTERVAL}s...")
             await anyio.sleep(POLL_INTERVAL)
@@ -144,7 +139,10 @@ async def run(
         # ── Isolate: copy workspace into a temp directory ──────────────────
         temp_workspace = copy_workspace_for_story(workspace_dir, sentinels_dir, story_id)
         temp_story_path = temp_workspace / "stories" / story_path.name
-        temp_outcome_file = temp_workspace / f"{story_id}.outcome"
+        # The orchestrator dir is excluded from the workspace copy; place the
+        # story file explicitly so the LLM can read it at the expected path.
+        shutil.copy2(str(story_path), str(temp_story_path))
+        temp_outcome_file = sentinels_dir / f"{story_id}.outcome"
 
         print(f"[{agent_name}] Starting session in isolated workspace {temp_workspace}...")
 
@@ -166,8 +164,9 @@ async def run(
             zip_workspace_for_merge(temp_workspace, story_id, merge_queue_dir)
             append_run_log(run_log, agent_name, f"story queued for merge: {story_id}")
             print(f"[{agent_name}] {story_id} done — queued for merge.")
+            temp_outcome_file.unlink(missing_ok=True)
         else:
-            # For failed / no-outcome: copy updated story file back to main workspace
+            # For failed / no-outcome: copy updated story file back to the orchestrator dir
             # so failure reasons written by the LLM are preserved, then finalise.
             if temp_story_path.exists():
                 shutil.copy2(str(temp_story_path), str(story_path))
@@ -180,7 +179,6 @@ async def run(
 if __name__ == "__main__":
     args = _parse_args()
     workspace_dir = resolve_path(args.workspace_dir)
-    stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)
+    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

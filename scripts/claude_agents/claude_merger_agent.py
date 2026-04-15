@@ -135,6 +135,7 @@ async def run(
     effort: str = "medium",
 ) -> None:
     sentinels_dir = workspace_dir / ".sentinels"
+    orchestrator_dir = sentinels_dir / "story-orchestrator"
     merge_queue_dir = sentinels_dir / "merge-queue"
     stories_dir = workspace_dir / "stories"
     pipeline_complete = sentinels_dir / "pipeline_complete"
@@ -179,7 +180,7 @@ async def run(
         # ── Python: finalise based on LLM outcome ─────────────────────────
         outcome = outcome_file.read_text().strip() if outcome_file.exists() else ""
         if outcome.startswith("done"):
-            mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name)
+            mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name, orchestrator_dir)
             zip_path.unlink(missing_ok=True)
             print(f"[{agent_name}] {story_id} merged successfully.")
         else:

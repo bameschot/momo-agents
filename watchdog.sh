@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # Resets stories stuck in .working.md state for more than 10 minutes.
+# Scans .sentinels/story-orchestrator/ where live story state is tracked.
 # Skips stories that are already queued in .sentinels/merge-queue/ — those are
 # awaiting the Merger Agent and should NOT be reset to .ready.
 # Run in the background alongside Coding Agents.
 
 STALE_SECONDS=600  # 10 minutes
 
-# STORIES_DIR and SENTINEL_DIR are exported by run_watchdog.sh (via config.sh).
-# Fall back to defaults relative to this script when run standalone.
-STORIES_DIR="${STORIES_DIR:-$(dirname "$0")/workspace/stories}"
+# SENTINEL_DIR is exported by run_watchdog.sh (via config.sh).
+# Fall back to a default relative to this script when run standalone.
 SENTINEL_DIR="${SENTINEL_DIR:-$(dirname "$0")/workspace/.sentinels}"
+ORCHESTRATOR_DIR="${SENTINEL_DIR}/story-orchestrator"
 MERGE_QUEUE_DIR="${SENTINEL_DIR}/merge-queue"
 
 echo "[watchdog] started — checking every 60s, stale threshold ${STALE_SECONDS}s"
+echo "[watchdog] scanning ${ORCHESTRATOR_DIR}"
 
 while true; do
     sleep 60
 
     now=$(date +%s)
 
-    for working_file in "$STORIES_DIR"/STORY-*.working.md; do
+    for working_file in "$ORCHESTRATOR_DIR"/STORY-*.working.md; do
         [ -f "$working_file" ] || continue
 
         # Extract STORY-NNN from the filename.
