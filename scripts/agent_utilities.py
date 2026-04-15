@@ -62,6 +62,7 @@ def claim_story(stories_dir: Path, patterns: list[str]) -> Path | None:
         working = candidate.with_name(candidate.name.replace(".ready.md", ".working.md"))
         try:
             candidate.rename(working)
+            working.touch()  # Reset mtime to now; the file may have aged as .ready.md
             return working
         except OSError:
             continue

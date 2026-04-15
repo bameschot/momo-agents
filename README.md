@@ -107,7 +107,6 @@ Valid values: `low`, `medium`, `high`, `max`. Effort controls how much thinking 
 | `🏗️ Project Initialiser` | Workspace scaffolder | Runs once; skips if workspace already populated |
 | `📋 Business Analyst` | Design watcher | Polls `<workspace>/design/` every 5 s; waits for `<workspace>/CLAUDE.md` |
 | `🎯 Story Orchestrator` | Readiness manager | Continuously marks stories ready as deps complete |
-| `🐕 Watchdog` | Stale story reset | Resets stories idle > 10 min back to `.ready.md` |
 | `🟢 Junior Coding Agent N` | Easy story implementation | Works in an isolated workspace copy; queues result to `merge-queue/` on success |
 | `🔵 Senior Coding Agent N` | Medium/hard story implementation | Works in an isolated workspace copy; queues result to `merge-queue/` on success |
 | `🔀 Merger Agent` | Git branch + merge for completed stories | Polls `merge-queue/`; merges story zips into the workspace git repo in story order |
@@ -215,7 +214,7 @@ Prints a live snapshot of how many stories are in each state:
 Press **Ctrl+C** in the `start-team.sh` terminal. This:
 
 1. Writes `<workspace>/.sentinels/pipeline_complete` — all agent windows exit cleanly.
-2. Kills the watchdog process and closes all opened agent terminal windows.
+2. Closes all opened agent terminal windows.
 3. Prints a final per-agent token-usage summary and `status.sh` snapshot.
 4. Exports the git commit log of the workspace for the run (commits since the team started) to `<workspace>/.sentinels/git_log.jsonl` using `git_log_exporter.py`.
 5. Generates a self-contained HTML run report and writes it to `<workspace>/run-report_YYYY-MM-DD_HH-MM-SS.html`.
@@ -312,7 +311,6 @@ The pipeline has one hard sequencing constraint: the **Project Initialiser** run
 | **Junior Coding Agent** (×N) | Claims one `easy` story at a time from the orchestrator dir; **copies the workspace** into an isolated temp dir; also copies the story file into the temp workspace so the LLM can read it; works entirely in isolation — the system prompt instructs the agent to use the workspace path supplied in the task prompt rather than any hardcoded directory, and the Ollama `ToolExecutor` enforces this at the tool level; on success zips the temp workspace into `merge-queue/` (**always excluding `stories/`, `design/`, `.git/`, and `.gitignore`-matched paths**) — story stays `.working.md` in the orchestrator dir until the Merger promotes it; on failure copies failure reasons back and marks the story `.failed.md` in the orchestrator dir | `.sentinels/story-orchestrator/*.easy.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `.sentinels/story-orchestrator/*.failed.md` (failure) |
 | **Senior Coding Agent** (×N) | Claims one `medium`/`hard` story at a time from the orchestrator dir; same isolated-workspace flow as Junior Coding Agent | `.sentinels/story-orchestrator/*.medium/hard.ready.md`, `<workspace>/CLAUDE.md` | `.sentinels/merge-queue/STORY-NNN.zip` (success) or `.sentinels/story-orchestrator/*.failed.md` (failure) |
 | **Merger Agent** | Polls `merge-queue/` in ascending story-number order; for each zip: unzips to a staging dir, asks the LLM to create a git branch **from the latest `main`**, copy the staged files (**never `stories/` or `design/`** — skip unconditionally even if present), commit, and merge back to `main`; then renames `workspace/stories/STORY-NNN.md` → `STORY-NNN.done.md`, **commits that rename to git** (for restart resilience), removes the orchestrator dir entry, and deletes the staging dir | `.sentinels/merge-queue/STORY-NNN.zip` | `<workspace>/` (git commits), `<workspace>/stories/*.done.md` (committed) |
-| **Watchdog** | Resets stale `.working.md` files whose agent has died or stalled (idle > 10 min) back to `.ready.md`; **skips stories already in `merge-queue/`** — those are awaiting the Merger Agent and must not be reset | `.sentinels/story-orchestrator/`, `.sentinels/merge-queue/` | `.sentinels/story-orchestrator/` |
 | **Story Resolver** | Interactive; polls the orchestrator dir for `*.failed.md` stories; when found, opens a conversation to diagnose the failure, propose fixes, and reset the story to `*.ready.md` in the orchestrator dir | `.sentinels/story-orchestrator/*.failed.md`, `<workspace>/` (read-only for context) | `.sentinels/story-orchestrator/*.failed.md` (edits then renames to `*.ready.md`) |
 
 Each LLM agent reads its system prompt from the corresponding file in `roles/` at startup. `story_orchestrator.py` makes no LLM calls.
@@ -580,8 +578,7 @@ momo-agents/
 │       └── ollama-merger-agent.md
 ├── start-team.sh              ← launches all agents simultaneously
 ├── reset-team.sh              ← wipes all artefacts; resets to clean state
-├── status.sh                  ← live story-state summary
-└── watchdog.sh                ← resets stale .working.md files; skips merge-queued stories
+└── status.sh                  ← live story-state summary
 ```
 
 ---
@@ -782,18 +779,6 @@ The LLM session **never renames, writes, or deletes story files**. Story file st
 
 ---
 
-### Watchdog
-
-Runs continuously alongside the Coding Agents. Every 60 seconds it scans `workspace/stories/` for `.working.md` files older than **10 minutes** and resets them to `.ready.md`:
-
-```
-STORY-NNN.[complexity].working.md  →  STORY-NNN.[complexity].ready.md
-```
-
-The complexity segment is preserved so the story can be immediately re-claimed without going through the orchestrator again.
-
----
-
 ## Stories
 
 ### File format
@@ -870,7 +855,6 @@ All coordination is via atomic filesystem operations — no database, no message
 | Story file state transition | Python reads `<workspace>/.sentinels/STORY-NNN.outcome` after each LLM session and renames the `.working.md` file accordingly — never done inside the LLM session |
 | Complexity routing | Junior agents glob `*.easy.ready.md`; Senior agents glob `*.medium.ready.md` + `*.hard.ready.md` |
 | Pipeline shutdown | `workspace/.sentinels/pipeline_complete` sentinel written by `start-team.sh` on Ctrl+C |
-| Stale agent recovery | Watchdog resets `.[c].working.md` files idle > 10 minutes → `.[c].ready.md` |
 
 ---
 

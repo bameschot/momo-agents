@@ -788,21 +788,6 @@ echo ""
 echo "[Story Orchestrator exited]"
 WRAPPER
 
-# ── Watchdog ──────────────────────────────────────────────────────────────────
-# Resets stale *.working.md files (idle > 10 min) back to *.ready.md.
-cat > "$SENTINEL_DIR/run_watchdog.sh" << 'WRAPPER'
-#!/usr/bin/env bash
-printf '\033]0;Watchdog\007'
-source "$(dirname "$0")/config.sh"
-
-echo "╔══════════════════════════════════╗"
-echo "║            Watchdog              ║"
-echo "╚══════════════════════════════════╝"
-export SENTINEL_DIR
-export STORIES_DIR
-exec bash "${SCRIPT_DIR}/watchdog.sh"
-WRAPPER
-
 # ── Story Resolver Agent ──────────────────────────────────────────────────────
 # Interactive agent — prompts the user when failed stories are found.
 # Always Claude (interactive session); polls when no failed stories exist.
@@ -914,22 +899,20 @@ chmod +x \
     "$SENTINEL_DIR/run_orchestrator.sh" \
     "$SENTINEL_DIR/junior_coding_agent_body.sh" \
     "$SENTINEL_DIR/senior_coding_agent_body.sh" \
-    "$SENTINEL_DIR/run_watchdog.sh" \
     "$SENTINEL_DIR/run_resolver.sh" \
     "$SENTINEL_DIR/run_merger.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Launch all windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
-TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 7 ))
-echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 7 fixed agents)..."
+TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 6 ))
+echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 6 fixed agents)..."
 echo ""
 
 open_window "🎨 Designer Agent"        "$SENTINEL_DIR/run_designer.sh"
 open_window "📋 Business Analyst"      "$SENTINEL_DIR/run_ba.sh"
 open_window "🏗️  Project Initialiser"  "$SENTINEL_DIR/run_pi.sh"
 open_window "🎯 Story Orchestrator"    "$SENTINEL_DIR/run_orchestrator.sh"
-open_window "🐕 Watchdog"              "$SENTINEL_DIR/run_watchdog.sh"
 open_window "🔧 Story Resolver"        "$SENTINEL_DIR/run_resolver.sh"
 open_window "🔀 Merger Agent"          "$SENTINEL_DIR/run_merger.sh"
 
@@ -1035,7 +1018,6 @@ _teardown() {
     echo ""
     echo "Shutting down team..."
     touch "$SENTINEL_DIR/pipeline_complete"
-    pkill -f "watchdog.sh" 2>/dev/null || true
     sleep 2
     echo ""
     echo "╔══════════════════════════════════════════════════╗"

@@ -73,8 +73,7 @@ momo-agents/
 ├── start-team.sh           # Launches all agents simultaneously in named terminal windows
 ├── reset-team.sh           # Wipes all artefacts; resets to clean state
 ├── reset-stories.sh        # Resets story files only (keeps generated code)
-├── status.sh               # Live story-state summary
-└── watchdog.sh             # Resets stale .working.md files after 10 min; skips merge-queued stories
+└── status.sh               # Live story-state summary
 ```
 
 ## Technology Stack
@@ -205,8 +204,6 @@ Story state is split across two locations to prevent git merge conflicts:
 4. On failure: failure reasons are copied back to the orchestrator file; it is renamed `.failed.md` (or `.ready.md` on no-outcome). The Story Resolver later resets it to `.ready.md`.
 5. **Merger Agent**: on successful merge renames `workspace/stories/STORY-NNN.md` → `STORY-NNN.done.md`, commits to git, then removes the orchestrator dir entry.
 
-The Watchdog resets stale `.working.md` files in the **orchestrator dir** (skipping stories in the merge-queue).
-
 ## Isolated Workspace Pipeline
 
 Coding agents (Junior and Senior) no longer write directly to the shared workspace. The flow per story is:
@@ -233,8 +230,6 @@ Key utility functions live in `scripts/agent_utilities.py`:
 - `get_next_merge_story(merge_queue_dir)` — returns the lowest-numbered zip or `None`
 - `unzip_workspace_for_merge(zip_path, sentinels_dir)` — extracts to staging dir
 - `mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name, orchestrator_dir)` — renames `STORY-NNN.md` → `.done.md`, commits to git, removes orchestrator entry
-
-The **Watchdog** scans `.sentinels/story-orchestrator/` for stale `.working.md` files and skips any that have a corresponding `merge-queue/STORY-NNN.zip`.
 
 ## AI Agent Guidelines
 
