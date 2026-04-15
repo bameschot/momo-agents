@@ -83,7 +83,21 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 | Junior Coding Agent | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
 | Senior Coding Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
 | Story Resolver | `claude-sonnet-4-6` | `qwen3.5:4b` |
-| Merger Agent | `claude-sonnet-4-6` | `qwen3.5:4b` |
+| Merger Agent | `claude-haiku-4-5-20251001` | `qwen3.5:4b` |
+
+**Claude effort levels** (only applied when a role's agent type is `claude`):
+
+| Flag | Role | Default |
+|---|---|---|
+| `--designer-claude-effort E` | Designer | `medium` |
+| `--ba-claude-effort E` | Business Analyst | `medium` |
+| `--pi-claude-effort E` | Project Initialiser | `medium` |
+| `--junior-claude-effort E` | Junior Coding Agents | `medium` |
+| `--senior-claude-effort E` | Senior Coding Agents | `medium` |
+| `--resolver-claude-effort E` | Story Resolver Agent | `medium` |
+| `--merger-claude-effort E` | Merger Agent | `medium` |
+
+Valid values: `low`, `medium`, `high`, `max`. Effort controls how much thinking Claude does per turn — higher effort trades speed and cost for quality. Ollama roles ignore these flags.
 
 **Agent windows opened:**
 
@@ -129,6 +143,22 @@ Opens every agent simultaneously in its own named terminal window and monitors t
 
 # Use a different model for design only (Claude)
 ./start-team.sh --workspace /path/to/my-project --model-designer claude-opus-4-6
+
+# Raise effort for coding agents to maximise code quality
+./start-team.sh --workspace /path/to/my-project \
+  --junior-claude-effort high \
+  --senior-claude-effort high
+
+# Lower effort on mechanical roles to reduce cost, keep high effort where it matters
+./start-team.sh --workspace /path/to/my-project \
+  --ba-claude-effort low \
+  --pi-claude-effort low \
+  --merger-claude-effort low \
+  --junior-claude-effort high \
+  --senior-claude-effort high
+
+# Max effort on senior agent only (complex stories)
+./start-team.sh --workspace /path/to/my-project --senior-claude-effort max
 ```
 
 ### Hybrid mode — mixing Claude and Ollama per role

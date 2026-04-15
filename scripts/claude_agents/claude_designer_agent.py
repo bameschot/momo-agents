@@ -49,6 +49,12 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
     )
+    parser.add_argument(
+        "--effort",
+        default="medium",
+        choices=["low", "medium", "high", "max"],
+        help="Claude effort level (default: medium)",
+    )
     return parser.parse_args()
 
 
@@ -90,7 +96,7 @@ async def _stream_response(
     return stop_reason, usage
 
 
-async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
+async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None, effort: str = "medium") -> None:
     design_dir = workspace_dir / "design"
     design_dir.mkdir(parents=True, exist_ok=True)
 
@@ -101,6 +107,7 @@ async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name:
         permission_mode="acceptEdits",
         max_turns=50,
         model=model,
+        effort=effort,
     )
 
     async with ClaudeSDKClient(options=options) as client:
@@ -143,4 +150,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

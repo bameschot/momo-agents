@@ -11,7 +11,7 @@ import anyio
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path
-from conversation_logger import log_claude_message
+from conversation_logger import log_claude_message, print_claude_message
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -48,10 +48,16 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
     )
+    parser.add_argument(
+        "--effort",
+        default="medium",
+        choices=["low", "medium", "high", "max"],
+        help="Claude effort level (default: medium)",
+    )
     return parser.parse_args()
 
 
-async def run(design_path: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
+async def run(design_path: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None, effort: str = "medium") -> None:
     if not design_path.exists():
         print(f"Error: design file not found: {design_path}", file=sys.stderr)
         sys.exit(1)
@@ -77,9 +83,11 @@ async def run(design_path: Path, workspace_dir: Path, model: str, run_log: Path 
         permission_mode="acceptEdits",
         max_turns=200,
         model=model,
+        effort=effort,
     )
 
     async for message in query(prompt=task, options=options):
+        print_claude_message(agent_name, message)
         log_claude_message(conv_log_dir, agent_name, message, "project-init")
 
     append_run_log(run_log, agent_name, f"project initiated from: {design_path.name}")
@@ -91,4 +99,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, design_path, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, design_path, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

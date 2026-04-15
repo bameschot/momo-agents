@@ -19,6 +19,7 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     ResultMessage,
     TextBlock,
+    ThinkingBlock,
 )
 
 from agent_utilities import append_run_log, load_role, resolve_path
@@ -60,6 +61,12 @@ def _parse_args() -> argparse.Namespace:
         "--conv-log-dir",
         default="",
         help="Directory for per-agent conversation JSONL logs (optional)",
+    )
+    parser.add_argument(
+        "--effort",
+        default="medium",
+        choices=["low", "medium", "high", "max"],
+        help="Claude effort level (default: medium)",
     )
     return parser.parse_args()
 
@@ -124,7 +131,9 @@ async def _stream_response(
     async for message in client.receive_response():
         if isinstance(message, AssistantMessage):
             for block in message.content:
-                if isinstance(block, TextBlock):
+                if isinstance(block, ThinkingBlock) and block.thinking:
+                    print(f"[{agent_name}][thinking] {block.thinking}", flush=True)
+                elif isinstance(block, TextBlock):
                     print(block.text, end="", flush=True)
         elif isinstance(message, ResultMessage):
             stop_reason = message.stop_reason
@@ -157,6 +166,7 @@ async def _run_resolver_session(
         permission_mode="acceptEdits",
         max_turns=100,
         model=model,
+        effort=effort,
     )
 
     task = _build_task(story_path, workspace_dir, sentinel_file)
@@ -225,6 +235,7 @@ async def run(
     run_log: Path | None,
     agent_name: str,
     conv_log_dir: Path | None,
+    effort: str = "medium",
 ) -> None:
     print(f"[{agent_name}] Story Resolver ready — scanning for failed stories every {POLL_INTERVAL}s.")
     print("When a failed story is found you will be prompted to resolve it interactively.")
@@ -254,4 +265,4 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

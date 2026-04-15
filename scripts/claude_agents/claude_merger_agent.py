@@ -30,11 +30,11 @@ from agent_utilities import (
     unzip_workspace_for_merge,
     wait_for_workspace,
 )
-from conversation_logger import log_claude_message
+from conversation_logger import log_claude_message, print_claude_message
 
 POLL_INTERVAL = 10  # seconds between polls when merge-queue is empty
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
 def _parse_args() -> argparse.Namespace:
@@ -63,6 +63,12 @@ def _parse_args() -> argparse.Namespace:
         "--conv-log-dir",
         default="",
         help="Directory for per-agent conversation JSONL logs (optional)",
+    )
+    parser.add_argument(
+        "--effort",
+        default="medium",
+        choices=["low", "medium", "high", "max"],
+        help="Claude effort level (default: medium)",
     )
     return parser.parse_args()
 
@@ -126,6 +132,7 @@ async def run(
     run_log: Path | None,
     agent_name: str,
     conv_log_dir: Path | None,
+    effort: str = "medium",
 ) -> None:
     sentinels_dir = workspace_dir / ".sentinels"
     merge_queue_dir = sentinels_dir / "merge-queue"
@@ -141,6 +148,7 @@ async def run(
         permission_mode="acceptEdits",
         max_turns=100,
         model=model,
+        effort=effort,
     )
 
     while True:
@@ -165,6 +173,7 @@ async def run(
         # ── LLM: git branch, copy, commit, merge ──────────────────────────
         task = _build_task(story_id, extract_dir, workspace_dir, outcome_file)
         async for message in query(prompt=task, options=options):
+            print_claude_message(agent_name, message)
             log_claude_message(conv_log_dir, agent_name, message, story_id)
 
         # ── Python: finalise based on LLM outcome ─────────────────────────
@@ -189,4 +198,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

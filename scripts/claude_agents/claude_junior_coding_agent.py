@@ -29,7 +29,7 @@ from agent_utilities import (
     wait_for_workspace,
     zip_workspace_for_merge,
 )
-from conversation_logger import log_claude_message
+from conversation_logger import log_claude_message, print_claude_message
 
 POLL_INTERVAL = 10  # seconds between polls when no eligible story is available
 
@@ -68,6 +68,12 @@ def _parse_args() -> argparse.Namespace:
         default="",
         help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
     )
+    parser.add_argument(
+        "--effort",
+        default="medium",
+        choices=["low", "medium", "high", "max"],
+        help="Claude effort level (default: medium)",
+    )
     return parser.parse_args()
 
 
@@ -104,6 +110,7 @@ async def run(
     run_log: Path | None,
     agent_name: str,
     conv_log_dir: Path | None,
+    effort: str = "medium",
 ) -> None:
     sentinels_dir = workspace_dir / ".sentinels"
     merge_queue_dir = sentinels_dir / "merge-queue"
@@ -117,6 +124,7 @@ async def run(
         permission_mode="acceptEdits",
         max_turns=300,
         model=model,
+        effort=effort,
     )
 
     while True:
@@ -147,6 +155,7 @@ async def run(
         task = _build_task(temp_story_path, temp_workspace, temp_outcome_file)
 
         async for message in query(prompt=task, options=options):
+            print_claude_message(agent_name, message)
             log_claude_message(conv_log_dir, agent_name, message, story_id)
 
         # ── Post-session: dispatch based on outcome ────────────────────────
@@ -174,4 +183,4 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

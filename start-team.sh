@@ -55,6 +55,15 @@ MODEL_SENIOR=""
 MODEL_RESOLVER=""
 MODEL_MERGER=""
 
+# Claude effort levels per role — only applied when agent type is claude.
+CLAUDE_EFFORT_DESIGNER="medium"
+CLAUDE_EFFORT_BA="medium"
+CLAUDE_EFFORT_PI="medium"
+CLAUDE_EFFORT_JUNIOR="medium"
+CLAUDE_EFFORT_SENIOR="medium"
+CLAUDE_EFFORT_RESOLVER="medium"
+CLAUDE_EFFORT_MERGER="medium"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # ─────────────────────────────────────────────────────────────────────────────
@@ -99,6 +108,20 @@ for ((i = 0; i < ${#args[@]}; i++)); do
         --model-merger)             MODEL_MERGER="${args[$((i + 1))]:-}" ;;
         --merger-agent-type=*)      AGENT_TYPE_MERGER="${args[$i]#*=}" ;;
         --merger-agent-type)        AGENT_TYPE_MERGER="${args[$((i + 1))]:-}" ;;
+        --designer-claude-effort=*) CLAUDE_EFFORT_DESIGNER="${args[$i]#*=}" ;;
+        --designer-claude-effort)   CLAUDE_EFFORT_DESIGNER="${args[$((i + 1))]:-medium}" ;;
+        --ba-claude-effort=*)       CLAUDE_EFFORT_BA="${args[$i]#*=}" ;;
+        --ba-claude-effort)         CLAUDE_EFFORT_BA="${args[$((i + 1))]:-medium}" ;;
+        --pi-claude-effort=*)       CLAUDE_EFFORT_PI="${args[$i]#*=}" ;;
+        --pi-claude-effort)         CLAUDE_EFFORT_PI="${args[$((i + 1))]:-medium}" ;;
+        --junior-claude-effort=*)   CLAUDE_EFFORT_JUNIOR="${args[$i]#*=}" ;;
+        --junior-claude-effort)     CLAUDE_EFFORT_JUNIOR="${args[$((i + 1))]:-medium}" ;;
+        --senior-claude-effort=*)   CLAUDE_EFFORT_SENIOR="${args[$i]#*=}" ;;
+        --senior-claude-effort)     CLAUDE_EFFORT_SENIOR="${args[$((i + 1))]:-medium}" ;;
+        --resolver-claude-effort=*) CLAUDE_EFFORT_RESOLVER="${args[$i]#*=}" ;;
+        --resolver-claude-effort)   CLAUDE_EFFORT_RESOLVER="${args[$((i + 1))]:-medium}" ;;
+        --merger-claude-effort=*)   CLAUDE_EFFORT_MERGER="${args[$i]#*=}" ;;
+        --merger-claude-effort)     CLAUDE_EFFORT_MERGER="${args[$((i + 1))]:-medium}" ;;
     esac
 done
 
@@ -137,7 +160,7 @@ _default_model() {
     local agent_type="$1" role="$2"
     if [ "$agent_type" = "claude" ]; then
         case "$role" in
-            junior|pi) echo "claude-haiku-4-5-20251001" ;;
+            junior|pi|merger) echo "claude-haiku-4-5-20251001" ;;
             *)         echo "claude-sonnet-4-6" ;;
         esac
     else
@@ -182,11 +205,21 @@ if [ -z "$WORKSPACE_DIR" ]; then
     echo "  --model-junior M            Model for Junior Coding Agents"
     echo "  --model-senior M            Model for Senior Coding Agents"
     echo "  --model-resolver M          Model for Story Resolver Agent (default: claude-sonnet-4-6)"
-    echo "  --model-merger M            Model for Merger Agent (default: claude-sonnet-4-6)"
+    echo "  --model-merger M            Model for Merger Agent (default: claude-haiku-4-5-20251001)"
     echo ""
     echo "  claude defaults:  designer/ba/senior/resolver/merger=claude-sonnet-4-6"
     echo "                    junior/pi=claude-haiku-4-5-20251001"
     echo "  ollama defaults:  all roles=qwen3.5:4b"
+    echo ""
+    echo "  Claude effort levels (only applied when agent type is claude):"
+    echo "  --designer-claude-effort E  Effort for Designer (default: medium)"
+    echo "  --ba-claude-effort E        Effort for Business Analyst (default: medium)"
+    echo "  --pi-claude-effort E        Effort for Project Initialiser (default: medium)"
+    echo "  --junior-claude-effort E    Effort for Junior Coding Agents (default: medium)"
+    echo "  --senior-claude-effort E    Effort for Senior Coding Agents (default: medium)"
+    echo "  --resolver-claude-effort E  Effort for Story Resolver Agent (default: medium)"
+    echo "  --merger-claude-effort E    Effort for Merger Agent (default: medium)"
+    echo "  Valid values: low, medium, high, max"
     exit 1
 fi
 
@@ -364,6 +397,13 @@ MODEL_JUNIOR='$MODEL_JUNIOR'
 MODEL_SENIOR='$MODEL_SENIOR'
 MODEL_RESOLVER='$MODEL_RESOLVER'
 MODEL_MERGER='$MODEL_MERGER'
+CLAUDE_EFFORT_DESIGNER='$CLAUDE_EFFORT_DESIGNER'
+CLAUDE_EFFORT_BA='$CLAUDE_EFFORT_BA'
+CLAUDE_EFFORT_PI='$CLAUDE_EFFORT_PI'
+CLAUDE_EFFORT_JUNIOR='$CLAUDE_EFFORT_JUNIOR'
+CLAUDE_EFFORT_SENIOR='$CLAUDE_EFFORT_SENIOR'
+CLAUDE_EFFORT_RESOLVER='$CLAUDE_EFFORT_RESOLVER'
+CLAUDE_EFFORT_MERGER='$CLAUDE_EFFORT_MERGER'
 RUN_LOG='$SENTINEL_DIR/run-log.jsonl'
 CONV_LOG_DIR='$SENTINEL_DIR/agent_conversation_logs'
 CONFIG
@@ -442,7 +482,8 @@ else
         --workspace-dir "${WORKSPACE_DIR}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "designer"
+        --agent-name "designer" \
+        --effort "${CLAUDE_EFFORT_DESIGNER}"
 fi
 echo ""
 echo "[Designer Agent complete]"
@@ -485,7 +526,8 @@ else
         --model "${MODEL_BA}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "business-analyst"
+        --agent-name "business-analyst" \
+        --effort "${CLAUDE_EFFORT_BA}"
 fi
 WRAPPER
 
@@ -553,7 +595,8 @@ else
         --model "${MODEL_PI}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "project-initialiser"
+        --agent-name "project-initialiser" \
+        --effort "${CLAUDE_EFFORT_PI}"
 fi
 echo ""
 echo "[Project Initialiser Agent complete]"
@@ -608,7 +651,8 @@ while true; do
             --model "${MODEL_JUNIOR}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
-            --agent-name "junior-coding-agent-${AGENT_ID}"
+            --agent-name "junior-coding-agent-${AGENT_ID}" \
+            --effort "${CLAUDE_EFFORT_JUNIOR}"
     fi
     EXIT_CODE=$?
 
@@ -691,7 +735,8 @@ while true; do
             --model "${MODEL_SENIOR}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
-            --agent-name "senior-coding-agent-${AGENT_ID}"
+            --agent-name "senior-coding-agent-${AGENT_ID}" \
+            --effort "${CLAUDE_EFFORT_SENIOR}"
     fi
     EXIT_CODE=$?
 
@@ -803,7 +848,8 @@ else
         --model "${MODEL_RESOLVER}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "story-resolver"
+        --agent-name "story-resolver" \
+        --effort "${CLAUDE_EFFORT_RESOLVER}"
 fi
 
 echo ""
@@ -845,7 +891,8 @@ while true; do
             --model "${MODEL_MERGER}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
-            --agent-name "merger-agent"
+            --agent-name "merger-agent" \
+            --effort "${CLAUDE_EFFORT_MERGER}"
     fi
     EXIT_CODE=$?
 
