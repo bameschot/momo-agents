@@ -10,7 +10,14 @@ import argparse
 import anyio
 from ollama import Message
 
-from agent_utilities import append_run_log, load_role, resolve_path
+from agent_utilities import (
+    append_run_log,
+    is_design_processed,
+    load_role,
+    mark_design_processed,
+    resolve_path,
+    unprocessed_designs,
+)
 from ollama_utilities import (
     DEFAULT_MODEL,
     DESIGNER_TOOLS,
@@ -36,10 +43,19 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _initial_prompt(design_dir: Path) -> str:
+def _initial_prompt(design_dir: Path, sentinels_design_dir: Path) -> str:
+    pending = unprocessed_designs(design_dir, sentinels_design_dir)
+    pending_note = (
+        f"\nNote: The following designs are present as .new.md but have not yet been "
+        f"marked as processed: {', '.join(f.name for f in pending)}. "
+        "Inform the user if they ask about pending work.\n"
+        if pending
+        else ""
+    )
     return (
         f"Design output directory: {design_dir}\n\n"
-        "Begin the design session. Greet the user and ask what they want to build. "
+        + pending_note
+        + "Begin the design session. Greet the user and ask what they want to build. "
         "Ask clarifying questions freely until you have a complete, unambiguous picture "
         "of the requirements.\n\n"
         "File naming rules:\n"
@@ -65,12 +81,16 @@ async def run(
     design_dir = workspace_dir / "design"
     design_dir.mkdir(parents=True, exist_ok=True)
 
+    sentinels_design_dir = workspace_dir / ".sentinels" / "design"
+    sentinels_design_dir.mkdir(parents=True, exist_ok=True)
+
     executor = ToolExecutor(workspace_dir)
     client = make_client(ollama_host)
     print(f"[{agent_name}] Connected to Ollama at {ollama_host}, model={model}", flush=True)
 
-    before = set(design_dir.glob("*.new.md"))
-    messages: list[Message] = [Message(role="user", content=_initial_prompt(design_dir))]
+    # Only track .new.md files that have not yet been processed (no sentinel).
+    before = {f for f in design_dir.glob("*.new.md") if not is_design_processed(sentinels_design_dir, f)}
+    messages: list[Message] = [Message(role="user", content=_initial_prompt(design_dir, sentinels_design_dir))]
 
     await run_chat_loop(
         messages=messages,
@@ -85,9 +105,10 @@ async def run(
         context="design",
     )
 
-    after = set(design_dir.glob("*.new.md"))
+    after = {f for f in design_dir.glob("*.new.md") if not is_design_processed(sentinels_design_dir, f)}
     for new_file in sorted(after - before, key=lambda p: p.name):
         append_run_log(run_log, agent_name, f"design written: {new_file.name}")
+        mark_design_processed(sentinels_design_dir, new_file)
         print(
             f"\n[Design saved: {new_file.name}]\n"
             "[The Business Analyst will pick it up automatically.]",

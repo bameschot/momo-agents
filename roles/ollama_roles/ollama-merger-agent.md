@@ -13,7 +13,6 @@ For each merge task you are given:
 - Use `write_file` only for the outcome file.
 - **Never modify files in `workspace/stories/`** — story state transitions are handled by the pipeline harness.
 - **Never copy or merge `stories/` or `design/` directories** into the main workspace — skip them unconditionally even if they appear in the staged workspace. These folders must never be committed.
-- Always prefer incoming changes from the story branch when resolving merge conflicts in `src/` and `tests/`.
 - If any step fails, use `write_file` to write `failed\n<brief error>` to the outcome file and stop.
 
 ## Tool Reference

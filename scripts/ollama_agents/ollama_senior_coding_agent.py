@@ -133,7 +133,7 @@ async def run(
 
         print(f"[{agent_name}] Starting session in isolated workspace {temp_workspace}...", flush=True)
 
-        executor = ToolExecutor(temp_workspace)
+        executor = ToolExecutor(temp_workspace, allowed_absolute_paths=[temp_outcome_file])
         task = _build_task(temp_story_path, temp_workspace, temp_outcome_file)
 
         messages: list[Message] = [Message(role="user", content=task)]

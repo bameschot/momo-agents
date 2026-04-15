@@ -138,6 +138,41 @@ async def wait_for_workspace(workspace_dir: Path, agent_name: str, poll_interval
 _ZIP_ALWAYS_EXCLUDE: frozenset[str] = frozenset({".git", "stories", "design"})
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Design sentinel helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def design_feature_name(design_file: Path) -> str:
+    """Return the bare feature name from a .new.md design file.
+
+    E.g. 'my-feature.new.md' → 'my-feature'
+    """
+    return design_file.name.removesuffix(".new.md")
+
+
+def is_design_processed(sentinels_design_dir: Path, design_file: Path) -> bool:
+    """Return True if a processed sentinel exists for this design file."""
+    return (sentinels_design_dir / f"{design_feature_name(design_file)}.processed.md").exists()
+
+
+def mark_design_processed(sentinels_design_dir: Path, design_file: Path) -> None:
+    """Write a copy of the design to the sentinels dir, marking it as processed.
+
+    Creates sentinels_design_dir if it does not exist.
+    """
+    sentinels_design_dir.mkdir(parents=True, exist_ok=True)
+    sentinel = sentinels_design_dir / f"{design_feature_name(design_file)}.processed.md"
+    sentinel.write_text(design_file.read_text())
+
+
+def unprocessed_designs(design_dir: Path, sentinels_design_dir: Path) -> list[Path]:
+    """Return .new.md files in design_dir that have no processed sentinel."""
+    return [
+        f for f in sorted(design_dir.glob("*.new.md"))
+        if not is_design_processed(sentinels_design_dir, f)
+    ]
+
+
 def get_story_id(story_path: Path) -> str:
     """Return the STORY-NNN identifier from a story filename.
 
@@ -151,11 +186,6 @@ def copy_workspace_for_story(workspace_dir: Path, sentinels_dir: Path, story_id:
 
     Returns the path to the new temporary workspace directory.
     An existing temp directory for the same story_id is removed first.
-
-    Also writes a .merge-base-commit file into the temp dir containing the
-    git HEAD at copy time. The merger uses this to create the story branch from
-    the exact base commit, enabling a correct 3-way merge that does not revert
-    changes made by previously merged stories.
     """
     temp_dir = sentinels_dir / story_id
     if temp_dir.exists():
@@ -165,16 +195,6 @@ def copy_workspace_for_story(workspace_dir: Path, sentinels_dir: Path, story_id:
         return [n for n in names if n == ".sentinels"]
 
     shutil.copytree(str(workspace_dir), str(temp_dir), ignore=_ignore_sentinels)
-
-    # Record the HEAD commit so the merger can branch from this exact point.
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=str(workspace_dir),
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        (temp_dir / ".merge-base-commit").write_text(result.stdout.strip())
 
     return temp_dir
 

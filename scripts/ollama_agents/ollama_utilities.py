@@ -248,29 +248,52 @@ class ToolExecutor:
     """Executes tool calls requested by the model.
 
     All relative paths are resolved against *cwd* (the working directory
-    passed at construction time).
+    passed at construction time).  Absolute paths that escape *cwd* are
+    rejected unless they appear in *allowed_absolute_paths* (e.g. the
+    outcome sentinel file, which lives outside the temp workspace).
     """
 
-    def __init__(self, cwd: Path) -> None:
-        self._cwd = cwd
+    def __init__(self, cwd: Path, allowed_absolute_paths: list[Path] | None = None) -> None:
+        self._cwd = cwd.resolve()
+        self._allowed: set[Path] = {p.resolve() for p in (allowed_absolute_paths or [])}
 
     def _resolve(self, path: str) -> Path:
         p = Path(path)
-        return p if p.is_absolute() else self._cwd / p
+        return (self._cwd / p).resolve() if not p.is_absolute() else p.resolve()
+
+    def _validate(self, resolved: Path) -> str | None:
+        """Return an error string if *resolved* escapes the workspace, else None."""
+        try:
+            resolved.relative_to(self._cwd)
+            return None
+        except ValueError:
+            if resolved in self._allowed:
+                return None
+            return (
+                f"ERROR: path '{resolved}' is outside the allowed workspace '{self._cwd}'. "
+                "Only modify files inside the workspace directory specified in your task prompt."
+            )
 
     # --- individual tools ---------------------------------------------------
 
     def read_file(self, path: str) -> str:
+        target = self._resolve(path)
+        err = self._validate(target)
+        if err:
+            return err
         try:
-            return self._resolve(path).read_text()
+            return target.read_text()
         except FileNotFoundError:
             return f"ERROR: file not found: {path}"
         except Exception as exc:
             return f"ERROR: {exc}"
 
     def write_file(self, path: str, content: str) -> str:
+        target = self._resolve(path)
+        err = self._validate(target)
+        if err:
+            return err
         try:
-            target = self._resolve(path)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content)
             return f"OK: wrote {len(content)} chars to {path}"
@@ -278,8 +301,11 @@ class ToolExecutor:
             return f"ERROR: {exc}"
 
     def edit_file(self, path: str, old_string: str, new_string: str) -> str:
+        target = self._resolve(path)
+        err = self._validate(target)
+        if err:
+            return err
         try:
-            target = self._resolve(path)
             original = target.read_text()
             if old_string not in original:
                 return f"ERROR: old_string not found in {path}"
@@ -313,11 +339,17 @@ class ToolExecutor:
 
     def glob(self, pattern: str, directory: str = "") -> str:
         base = self._resolve(directory) if directory else self._cwd
+        err = self._validate(base)
+        if err:
+            return err
         matches = sorted(glob_module.glob(str(base / pattern), recursive=True))
         return "\n".join(matches) if matches else "(no matches)"
 
     def grep(self, pattern: str, path: str = "", glob: str = "") -> str:
         search_path = self._resolve(path) if path else self._cwd
+        err = self._validate(search_path)
+        if err:
+            return err
         include = ["--include", glob] if glob else []
         cmd = ["grep", "-rn", "-E", *include, pattern, str(search_path)]
         try:
