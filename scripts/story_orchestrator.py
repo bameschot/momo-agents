@@ -1,9 +1,19 @@
 """Story Orchestrator — watches stories/ and marks stories ready when all dependencies are done.
 
-Filename convention managed by this utility:
-  STORY-NNN.md                        newly written by BA, not yet evaluated
-  STORY-NNN.[easy|medium|hard].ready.md   deps met — ready to be claimed by a coding agent
+State files managed by this utility:
+  workspace/stories/STORY-NNN.md                       newly written by BA, not yet evaluated
+  workspace/stories/STORY-NNN.done.md                  merged and committed by the Merger Agent
+  .sentinels/story-orchestrator/STORY-NNN.[easy|medium|hard].ready.md
+                                                        deps met — copied here for coding agents
+  .sentinels/story-orchestrator/STORY-NNN.[easy|medium|hard].working.md
+                                                        claimed by a coding agent
+  .sentinels/story-orchestrator/STORY-NNN.[easy|medium|hard].failed.md
+                                                        coding agent reported failure
+
+Story state is tracked in the orchestrator dir (.sentinels/story-orchestrator/) rather than
+in workspace/stories/ so that git merge operations never touch live state files.
 """
+import shutil
 import sys
 from pathlib import Path
 
@@ -67,11 +77,22 @@ def _unprocessed_stories(stories_dir: Path) -> list[Path]:
     )
 
 
-def _process_once(stories_dir: Path) -> int:
-    """Evaluate all unprocessed stories and mark eligible ones as ready. Returns count marked."""
+def _process_once(stories_dir: Path, orchestrator_dir: Path) -> int:
+    """Evaluate all unprocessed stories and copy eligible ones to the orchestrator dir.
+
+    A story is skipped if any file for it already exists in the orchestrator dir
+    (meaning it has been dispatched regardless of its current state there).
+    Returns the count of newly dispatched stories.
+    """
     done_ids = {p.name.split(".")[0].upper() for p in stories_dir.glob("STORY-*.done.md")}
     marked = 0
     for story_path in _unprocessed_stories(stories_dir):
+        story_id = re.match(r"^(STORY-\d+)\.md$", story_path.name).group(1)  # type: ignore[union-attr]
+
+        # Skip if already dispatched to the orchestrator dir (any state).
+        if any(orchestrator_dir.glob(f"{story_id}.*")):
+            continue
+
         fields = _parse_fields(story_path)
         complexity = _complexity(fields)
 
@@ -91,22 +112,26 @@ def _process_once(stories_dir: Path) -> int:
             )
             continue
 
-        story_id = re.match(r"^(STORY-\d+)\.md$", story_path.name).group(1)  # type: ignore[union-attr]
-        ready_path = stories_dir / f"{story_id}.{complexity}.ready.md"
+        ready_path = orchestrator_dir / f"{story_id}.{complexity}.ready.md"
         try:
-            story_path.rename(ready_path)
-            print(f"  [Orchestrator] {story_path.name} → {ready_path.name}")
+            shutil.copy2(str(story_path), str(ready_path))
+            print(f"  [Orchestrator] {story_path.name} → {ready_path.name} (orchestrator dir)")
             marked += 1
         except OSError as exc:
-            print(f"  [Orchestrator] Could not rename {story_path.name}: {exc}")
+            print(f"  [Orchestrator] Could not copy {story_path.name}: {exc}")
 
     return marked
 
 
 def run(stories_dir: Path, poll_interval: int) -> None:
-    pipeline_complete = stories_dir.parent / ".sentinels" / "pipeline_complete"
+    sentinels_dir = stories_dir.parent / ".sentinels"
+    orchestrator_dir = sentinels_dir / "story-orchestrator"
+    pipeline_complete = sentinels_dir / "pipeline_complete"
+
+    orchestrator_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[Story Orchestrator] Watching {stories_dir}")
+    print(f"[Story Orchestrator] Orchestrator dir: {orchestrator_dir}")
     print(f"[Story Orchestrator] Poll interval: {poll_interval}s")
     print()
 
@@ -115,7 +140,7 @@ def run(stories_dir: Path, poll_interval: int) -> None:
             print("[Story Orchestrator] pipeline_complete sentinel detected — exiting.")
             break
 
-        _process_once(stories_dir)
+        _process_once(stories_dir, orchestrator_dir)
         time.sleep(poll_interval)
 
 

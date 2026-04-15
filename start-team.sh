@@ -55,6 +55,15 @@ MODEL_SENIOR=""
 MODEL_RESOLVER=""
 MODEL_MERGER=""
 
+# Claude effort levels per role — only applied when agent type is claude.
+CLAUDE_EFFORT_DESIGNER="medium"
+CLAUDE_EFFORT_BA="medium"
+CLAUDE_EFFORT_PI="medium"
+CLAUDE_EFFORT_JUNIOR="medium"
+CLAUDE_EFFORT_SENIOR="medium"
+CLAUDE_EFFORT_RESOLVER="medium"
+CLAUDE_EFFORT_MERGER="medium"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Argument parsing
 # ─────────────────────────────────────────────────────────────────────────────
@@ -99,6 +108,20 @@ for ((i = 0; i < ${#args[@]}; i++)); do
         --model-merger)             MODEL_MERGER="${args[$((i + 1))]:-}" ;;
         --merger-agent-type=*)      AGENT_TYPE_MERGER="${args[$i]#*=}" ;;
         --merger-agent-type)        AGENT_TYPE_MERGER="${args[$((i + 1))]:-}" ;;
+        --designer-claude-effort=*) CLAUDE_EFFORT_DESIGNER="${args[$i]#*=}" ;;
+        --designer-claude-effort)   CLAUDE_EFFORT_DESIGNER="${args[$((i + 1))]:-medium}" ;;
+        --ba-claude-effort=*)       CLAUDE_EFFORT_BA="${args[$i]#*=}" ;;
+        --ba-claude-effort)         CLAUDE_EFFORT_BA="${args[$((i + 1))]:-medium}" ;;
+        --pi-claude-effort=*)       CLAUDE_EFFORT_PI="${args[$i]#*=}" ;;
+        --pi-claude-effort)         CLAUDE_EFFORT_PI="${args[$((i + 1))]:-medium}" ;;
+        --junior-claude-effort=*)   CLAUDE_EFFORT_JUNIOR="${args[$i]#*=}" ;;
+        --junior-claude-effort)     CLAUDE_EFFORT_JUNIOR="${args[$((i + 1))]:-medium}" ;;
+        --senior-claude-effort=*)   CLAUDE_EFFORT_SENIOR="${args[$i]#*=}" ;;
+        --senior-claude-effort)     CLAUDE_EFFORT_SENIOR="${args[$((i + 1))]:-medium}" ;;
+        --resolver-claude-effort=*) CLAUDE_EFFORT_RESOLVER="${args[$i]#*=}" ;;
+        --resolver-claude-effort)   CLAUDE_EFFORT_RESOLVER="${args[$((i + 1))]:-medium}" ;;
+        --merger-claude-effort=*)   CLAUDE_EFFORT_MERGER="${args[$i]#*=}" ;;
+        --merger-claude-effort)     CLAUDE_EFFORT_MERGER="${args[$((i + 1))]:-medium}" ;;
     esac
 done
 
@@ -137,7 +160,7 @@ _default_model() {
     local agent_type="$1" role="$2"
     if [ "$agent_type" = "claude" ]; then
         case "$role" in
-            junior|pi) echo "claude-haiku-4-5-20251001" ;;
+            junior|pi|merger) echo "claude-haiku-4-5-20251001" ;;
             *)         echo "claude-sonnet-4-6" ;;
         esac
     else
@@ -182,11 +205,21 @@ if [ -z "$WORKSPACE_DIR" ]; then
     echo "  --model-junior M            Model for Junior Coding Agents"
     echo "  --model-senior M            Model for Senior Coding Agents"
     echo "  --model-resolver M          Model for Story Resolver Agent (default: claude-sonnet-4-6)"
-    echo "  --model-merger M            Model for Merger Agent (default: claude-sonnet-4-6)"
+    echo "  --model-merger M            Model for Merger Agent (default: claude-haiku-4-5-20251001)"
     echo ""
     echo "  claude defaults:  designer/ba/senior/resolver/merger=claude-sonnet-4-6"
     echo "                    junior/pi=claude-haiku-4-5-20251001"
     echo "  ollama defaults:  all roles=qwen3.5:4b"
+    echo ""
+    echo "  Claude effort levels (only applied when agent type is claude):"
+    echo "  --designer-claude-effort E  Effort for Designer (default: medium)"
+    echo "  --ba-claude-effort E        Effort for Business Analyst (default: medium)"
+    echo "  --pi-claude-effort E        Effort for Project Initialiser (default: medium)"
+    echo "  --junior-claude-effort E    Effort for Junior Coding Agents (default: medium)"
+    echo "  --senior-claude-effort E    Effort for Senior Coding Agents (default: medium)"
+    echo "  --resolver-claude-effort E  Effort for Story Resolver Agent (default: medium)"
+    echo "  --merger-claude-effort E    Effort for Merger Agent (default: medium)"
+    echo "  Valid values: low, medium, high, max"
     exit 1
 fi
 
@@ -364,6 +397,13 @@ MODEL_JUNIOR='$MODEL_JUNIOR'
 MODEL_SENIOR='$MODEL_SENIOR'
 MODEL_RESOLVER='$MODEL_RESOLVER'
 MODEL_MERGER='$MODEL_MERGER'
+CLAUDE_EFFORT_DESIGNER='$CLAUDE_EFFORT_DESIGNER'
+CLAUDE_EFFORT_BA='$CLAUDE_EFFORT_BA'
+CLAUDE_EFFORT_PI='$CLAUDE_EFFORT_PI'
+CLAUDE_EFFORT_JUNIOR='$CLAUDE_EFFORT_JUNIOR'
+CLAUDE_EFFORT_SENIOR='$CLAUDE_EFFORT_SENIOR'
+CLAUDE_EFFORT_RESOLVER='$CLAUDE_EFFORT_RESOLVER'
+CLAUDE_EFFORT_MERGER='$CLAUDE_EFFORT_MERGER'
 RUN_LOG='$SENTINEL_DIR/run-log.jsonl'
 CONV_LOG_DIR='$SENTINEL_DIR/agent_conversation_logs'
 CONFIG
@@ -442,7 +482,8 @@ else
         --workspace-dir "${WORKSPACE_DIR}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "designer"
+        --agent-name "designer" \
+        --effort "${CLAUDE_EFFORT_DESIGNER}"
 fi
 echo ""
 echo "[Designer Agent complete]"
@@ -485,7 +526,8 @@ else
         --model "${MODEL_BA}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "business-analyst"
+        --agent-name "business-analyst" \
+        --effort "${CLAUDE_EFFORT_BA}"
 fi
 WRAPPER
 
@@ -553,7 +595,8 @@ else
         --model "${MODEL_PI}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "project-initialiser"
+        --agent-name "project-initialiser" \
+        --effort "${CLAUDE_EFFORT_PI}"
 fi
 echo ""
 echo "[Project Initialiser Agent complete]"
@@ -594,7 +637,6 @@ echo ""
 while true; do
     if [ "$AGENT_TYPE_JUNIOR" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_junior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
@@ -603,12 +645,12 @@ while true; do
             --agent-name "ollama-junior-coding-agent-${AGENT_ID}"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_junior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_JUNIOR}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
-            --agent-name "junior-coding-agent-${AGENT_ID}"
+            --agent-name "junior-coding-agent-${AGENT_ID}" \
+            --effort "${CLAUDE_EFFORT_JUNIOR}"
     fi
     EXIT_CODE=$?
 
@@ -677,7 +719,6 @@ echo ""
 while true; do
     if [ "$AGENT_TYPE_SENIOR" = "ollama" ]; then
         "${PYTHON}" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_senior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --ollama-host "${OLLAMA_HOST}" \
@@ -686,12 +727,12 @@ while true; do
             --agent-name "ollama-senior-coding-agent-${AGENT_ID}"
     else
         "${PYTHON}" "${SCRIPT_DIR}/scripts/claude_agents/claude_senior_coding_agent.py" \
-            --stories-dir "${STORIES_DIR}" \
             --workspace-dir "${WORKSPACE_DIR}" \
             --model "${MODEL_SENIOR}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
-            --agent-name "senior-coding-agent-${AGENT_ID}"
+            --agent-name "senior-coding-agent-${AGENT_ID}" \
+            --effort "${CLAUDE_EFFORT_SENIOR}"
     fi
     EXIT_CODE=$?
 
@@ -747,21 +788,6 @@ echo ""
 echo "[Story Orchestrator exited]"
 WRAPPER
 
-# ── Watchdog ──────────────────────────────────────────────────────────────────
-# Resets stale *.working.md files (idle > 10 min) back to *.ready.md.
-cat > "$SENTINEL_DIR/run_watchdog.sh" << 'WRAPPER'
-#!/usr/bin/env bash
-printf '\033]0;Watchdog\007'
-source "$(dirname "$0")/config.sh"
-
-echo "╔══════════════════════════════════╗"
-echo "║            Watchdog              ║"
-echo "╚══════════════════════════════════╝"
-export SENTINEL_DIR
-export STORIES_DIR
-exec bash "${SCRIPT_DIR}/watchdog.sh"
-WRAPPER
-
 # ── Story Resolver Agent ──────────────────────────────────────────────────────
 # Interactive agent — prompts the user when failed stories are found.
 # Always Claude (interactive session); polls when no failed stories exist.
@@ -789,7 +815,6 @@ echo ""
 
 if [ "$AGENT_TYPE_RESOLVER" = "ollama" ]; then
     "$PYTHON" "${SCRIPT_DIR}/scripts/ollama_agents/ollama_story_resolver_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_RESOLVER}" \
         --ollama-host "${OLLAMA_HOST}" \
@@ -798,12 +823,12 @@ if [ "$AGENT_TYPE_RESOLVER" = "ollama" ]; then
         --agent-name "ollama-story-resolver"
 else
     "$PYTHON" "${SCRIPT_DIR}/scripts/claude_agents/claude_story_resolver_agent.py" \
-        --stories-dir "${STORIES_DIR}" \
         --workspace-dir "${WORKSPACE_DIR}" \
         --model "${MODEL_RESOLVER}" \
         --conv-log-dir "${CONV_LOG_DIR}" \
         --run-log "${RUN_LOG}" \
-        --agent-name "story-resolver"
+        --agent-name "story-resolver" \
+        --effort "${CLAUDE_EFFORT_RESOLVER}"
 fi
 
 echo ""
@@ -845,7 +870,8 @@ while true; do
             --model "${MODEL_MERGER}" \
             --conv-log-dir "${CONV_LOG_DIR}" \
             --run-log "${RUN_LOG}" \
-            --agent-name "merger-agent"
+            --agent-name "merger-agent" \
+            --effort "${CLAUDE_EFFORT_MERGER}"
     fi
     EXIT_CODE=$?
 
@@ -873,22 +899,20 @@ chmod +x \
     "$SENTINEL_DIR/run_orchestrator.sh" \
     "$SENTINEL_DIR/junior_coding_agent_body.sh" \
     "$SENTINEL_DIR/senior_coding_agent_body.sh" \
-    "$SENTINEL_DIR/run_watchdog.sh" \
     "$SENTINEL_DIR/run_resolver.sh" \
     "$SENTINEL_DIR/run_merger.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Launch all windows simultaneously
 # ─────────────────────────────────────────────────────────────────────────────
-TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 7 ))
-echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 7 fixed agents)..."
+TOTAL=$(( N_JUNIOR_AGENTS + N_SENIOR_AGENTS + 6 ))
+echo "Opening $TOTAL windows simultaneously ($N_JUNIOR_AGENTS junior + $N_SENIOR_AGENTS senior + 6 fixed agents)..."
 echo ""
 
 open_window "🎨 Designer Agent"        "$SENTINEL_DIR/run_designer.sh"
 open_window "📋 Business Analyst"      "$SENTINEL_DIR/run_ba.sh"
 open_window "🏗️  Project Initialiser"  "$SENTINEL_DIR/run_pi.sh"
 open_window "🎯 Story Orchestrator"    "$SENTINEL_DIR/run_orchestrator.sh"
-open_window "🐕 Watchdog"              "$SENTINEL_DIR/run_watchdog.sh"
 open_window "🔧 Story Resolver"        "$SENTINEL_DIR/run_resolver.sh"
 open_window "🔀 Merger Agent"          "$SENTINEL_DIR/run_merger.sh"
 
@@ -917,19 +941,26 @@ echo ""
 echo "Monitoring pipeline (press Ctrl+C to shut down the team)..."
 echo ""
 
-# Count story files in a given state. Pass "unprocessed" for bare STORY-NNN.md
-# files (no complexity/state suffix yet); or a state suffix like "ready"/"done".
+# Count story files in a given state.
+# "unprocessed" → bare STORY-NNN.md files in STORIES_DIR (not yet evaluated).
+# "done"        → STORY-NNN.done.md files in STORIES_DIR (committed by Merger).
+# "ready" / "working" / "failed" → files in the orchestrator dir (.sentinels/story-orchestrator/).
 _count_stories() {
     local state="$1"
     local count=0 f base
+    local orchestrator_dir="${SENTINEL_DIR}/story-orchestrator"
     if [[ "$state" == "unprocessed" ]]; then
         for f in "$STORIES_DIR"/STORY-*.md; do
             [[ -f "$f" ]] || continue
             base="$(basename "$f")"
             [[ "$base" =~ ^STORY-[0-9]+\.md$ ]] && (( count++ )) || true
         done
-    else
+    elif [[ "$state" == "done" ]]; then
         for f in "$STORIES_DIR"/STORY-*."${state}".md; do
+            [[ -f "$f" ]] && (( count++ )) || true
+        done
+    else
+        for f in "$orchestrator_dir"/STORY-*."${state}".md; do
             [[ -f "$f" ]] && (( count++ )) || true
         done
     fi
@@ -987,7 +1018,6 @@ _teardown() {
     echo ""
     echo "Shutting down team..."
     touch "$SENTINEL_DIR/pipeline_complete"
-    pkill -f "watchdog.sh" 2>/dev/null || true
     sleep 2
     echo ""
     echo "╔══════════════════════════════════════════════════╗"

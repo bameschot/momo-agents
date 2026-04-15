@@ -16,7 +16,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
 import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
@@ -30,39 +29,17 @@ from agent_utilities import (
     unzip_workspace_for_merge,
     wait_for_workspace,
 )
-from conversation_logger import log_claude_message
+from claude_utilities import POLL_INTERVAL, build_common_arg_parser
+from conversation_logger import log_claude_message, print_claude_message
 
-POLL_INTERVAL = 10  # seconds between polls when merge-queue is empty
-
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Merger Agent — merges story zips into main branch")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--run-log",
-        default="",
-        help="Path to run-log.jsonl file for pipeline event logging (optional)",
-    )
-    parser.add_argument(
-        "--agent-name",
-        default="merger-agent",
-        help="Name used to identify this agent in logs (default: merger-agent)",
-    )
-    parser.add_argument(
-        "--conv-log-dir",
-        default="",
-        help="Directory for per-agent conversation JSONL logs (optional)",
+def _parse_args():
+    parser = build_common_arg_parser(
+        description="Merger Agent — merges story zips into main branch",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="merger-agent",
     )
     return parser.parse_args()
 
@@ -84,11 +61,10 @@ def _build_task(
         f"   cd {workspace_dir} && git log --oneline -1\n"
         f"   If there are NO commits, create an initial commit first:\n"
         f"   git add -A && git commit -m 'chore: initial workspace scaffold'\n\n"
-        f"2. Create a new branch named '{branch_name}':\n"
+        f"2. Create a story branch from the latest main:\n"
         f"   cd {workspace_dir} && git checkout -b {branch_name}\n\n"
         f"3. Copy all files from the staged workspace into the main workspace\n"
-        f"   (use cp -r or rsync; exclude nothing — the staged dir has already\n"
-        f"   had .git, stories, and design stripped):\n"
+        f"   (use cp -r; the staged dir has already had .git, stories, and design stripped):\n"
         f"   cp -r {extract_dir}/. {workspace_dir}/\n\n"
         f"4. Stage all changes:\n"
         f"   cd {workspace_dir} && git add -A\n\n"
@@ -99,9 +75,7 @@ def _build_task(
         f"6. Switch back to the main branch:\n"
         f"   cd {workspace_dir} && git checkout main || git checkout master\n\n"
         f"7. Merge the story branch:\n"
-        f"   cd {workspace_dir} && git merge {branch_name} --no-ff -m 'merge: {story_id}'\n"
-        f"   If merge conflicts occur, resolve them by keeping the incoming changes\n"
-        f"   from '{branch_name}' for all src/ and tests/ paths.\n\n"
+        f"   cd {workspace_dir} && git merge {branch_name} --no-ff -m 'merge: {story_id}'\n\n"
         f"8. Write 'done' to {outcome_file} if all steps succeeded.\n"
         f"   Write 'failed' to {outcome_file} if any step failed (include a brief\n"
         f"   error summary as the second line).\n\n"
@@ -116,8 +90,10 @@ async def run(
     run_log: Path | None,
     agent_name: str,
     conv_log_dir: Path | None,
+    effort: str = "medium",
 ) -> None:
     sentinels_dir = workspace_dir / ".sentinels"
+    orchestrator_dir = sentinels_dir / "story-orchestrator"
     merge_queue_dir = sentinels_dir / "merge-queue"
     stories_dir = workspace_dir / "stories"
     pipeline_complete = sentinels_dir / "pipeline_complete"
@@ -131,6 +107,7 @@ async def run(
         permission_mode="acceptEdits",
         max_turns=100,
         model=model,
+        effort=effort,
     )
 
     while True:
@@ -155,12 +132,13 @@ async def run(
         # ── LLM: git branch, copy, commit, merge ──────────────────────────
         task = _build_task(story_id, extract_dir, workspace_dir, outcome_file)
         async for message in query(prompt=task, options=options):
+            print_claude_message(agent_name, message)
             log_claude_message(conv_log_dir, agent_name, message, story_id)
 
         # ── Python: finalise based on LLM outcome ─────────────────────────
         outcome = outcome_file.read_text().strip() if outcome_file.exists() else ""
         if outcome.startswith("done"):
-            mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name)
+            mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name, orchestrator_dir)
             zip_path.unlink(missing_ok=True)
             print(f"[{agent_name}] {story_id} merged successfully.")
         else:
@@ -179,4 +157,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

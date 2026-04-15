@@ -42,14 +42,19 @@ The design document path is provided in the task prompt. Read it before doing an
 
 4. **Scaffold the initial project structure** according to the stack's idiomatic layout:
    - If the workspace is not already a git repository, initialise one with `git init`
-   - Include or amend an existing `.gitignore` file appropriate for the tech stack. the file always includes .sentinels
+   - Include or amend an existing `.gitignore` file appropriate for the tech stack. **The `.gitignore` must always include `.sentinels/` — this directory is used for runtime coordination and must never be committed.** Add it even if the workspace already has a `.gitignore`.
    - Directory structure as described or implied by the design
    - Configuration and manifest files appropriate for the stack
    - Empty entry points, module stubs, or package skeletons
    - Dependency manifests listing only the packages identified in the design
 
-5. Do **not** implement any business logic from the stories.
-6. Do **not** write files outside the workspace root.
+5. **Perform an initial commit** once all scaffold files are in place:
+   - Run `git add -A` to stage every scaffolded file.
+   - Run `git commit -m "chore: initial project scaffold"` to record the baseline.
+   - This commit is the clean baseline that all Coding Agent branches will diverge from.
+
+6. Do **not** implement any business logic from the stories.
+7. Do **not** write files outside the workspace root.
 
 ## Efficiency
 
@@ -58,4 +63,4 @@ The design document path is provided in the task prompt. Read it before doing an
 
 ## Done condition
 
-Exit cleanly once the workspace root is scaffolded and `CLAUDE.md` is written. The orchestrator will then spawn Coding Agents.
+Exit cleanly once the workspace root is scaffolded, `CLAUDE.md` is written, and the initial commit has been made. The orchestrator will then spawn Coding Agents.

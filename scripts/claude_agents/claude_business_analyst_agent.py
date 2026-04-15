@@ -5,22 +5,25 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
 import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path, wait_for_workspace
-from conversation_logger import log_claude_message
+from claude_utilities import POLL_INTERVAL, build_common_arg_parser
+from conversation_logger import log_claude_message, print_claude_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
-POLL_INTERVAL = 10  # seconds between polls while waiting for workspace/CLAUDE.md
 DESIGN_POLL_INTERVAL = 10  # seconds between polls while watching for new designs
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Business Analyst Agent")
+def _parse_args():
+    parser = build_common_arg_parser(
+        description="Business Analyst Agent",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="business-analyst",
+    )
     parser.add_argument(
         "--design-dir",
         default="",
@@ -30,31 +33,6 @@ def _parse_args() -> argparse.Namespace:
         "--stories-dir",
         default="",
         help="Directory where story files are written (default: <workspace-dir>/stories)",
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--run-log",
-        default="",
-        help="Path to run-log.json file for pipeline event logging (optional)",
-    )
-    parser.add_argument(
-        "--agent-name",
-        default="business-analyst",
-        help="Name used to identify this agent in logs (default: business-analyst)",
-    )
-    parser.add_argument(
-        "--conv-log-dir",
-        default="",
-        help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
     )
     return parser.parse_args()
 
@@ -69,7 +47,7 @@ def _design_stem(design_path: Path) -> str:
     return name
 
 
-async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
+async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None, effort: str = "medium") -> None:
     if not design_path.exists():
         print(f"[{agent_name}] Design file no longer exists (already processed?): {design_path}", flush=True)
         return
@@ -98,11 +76,13 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         permission_mode="acceptEdits",
         max_turns=200,
         model=model,
+        effort=effort,
     )
 
     before = set(stories_dir.glob("STORY-*.md"))
 
     async for message in query(prompt=task, options=options):
+        print_claude_message(agent_name, message)
         log_claude_message(conv_log_dir, agent_name, message, "business-analysis")
 
     after = set(stories_dir.glob("STORY-*.md"))
@@ -116,7 +96,7 @@ async def run(design_path: Path, stories_dir: Path, workspace_dir: Path, model: 
         append_run_log(run_log, agent_name, f"design processed: {processed_path.name}")
 
 
-async def watch_and_run(design_dir: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
+async def watch_and_run(design_dir: Path, stories_dir: Path, workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None, effort: str = "medium") -> None:
     await wait_for_workspace(workspace_dir, agent_name, POLL_INTERVAL)
     print(f"[{agent_name}] Watching {design_dir}/ for *.new.md files...", flush=True)
 
@@ -124,7 +104,7 @@ async def watch_and_run(design_dir: Path, stories_dir: Path, workspace_dir: Path
         for design_path in sorted(design_dir.glob("*.new.md")):
             feature = _design_stem(design_path)
             print(f"[{agent_name}] New design: {feature} — decomposing into stories...", flush=True)
-            await run(design_path, stories_dir, workspace_dir, model, run_log, agent_name, conv_log_dir)
+            await run(design_path, stories_dir, workspace_dir, model, run_log, agent_name, conv_log_dir, effort)
             print(f"[{agent_name}] {feature} → done. Resuming watch...", flush=True)
 
         await anyio.sleep(DESIGN_POLL_INTERVAL)
@@ -137,4 +117,4 @@ if __name__ == "__main__":
     stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(watch_and_run, design_dir, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(watch_and_run, design_dir, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

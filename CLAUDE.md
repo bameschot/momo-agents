@@ -62,18 +62,18 @@ momo-agents/
 ├── workspace/              # All generated artefacts
 │   ├── CLAUDE.md           # Build/test/lint instructions; start gate for all agents
 │   ├── design/             # Designer Agent outputs (<feature>.new.md / <feature>.processed.md)
-│   ├── stories/            # Story files (complexity + state encoded in filename)
+│   ├── stories/            # Source story files — only bare STORY-NNN.md and STORY-NNN.done.md live here
 │   ├── .sentinels/         # Runtime coordination files (created by start-team.sh)
-│   │   ├── STORY-NNN/      #   Isolated temp workspace for a coding agent (deleted after use)
-│   │   ├── merge-queue/    #   Zipped temp workspaces awaiting the Merger Agent
-│   │   └── merge-STORY-NNN/ #  Staging dir used by Merger to unzip before git operations
+│   │   ├── story-orchestrator/  #   Live story state: .ready.md / .working.md / .failed.md
+│   │   ├── STORY-NNN/           #   Isolated temp workspace for a coding agent (deleted after use)
+│   │   ├── merge-queue/         #   Zipped temp workspaces awaiting the Merger Agent
+│   │   └── merge-STORY-NNN/     #   Staging dir used by Merger to unzip before git operations
 │   ├── src/
 │   └── tests/
 ├── start-team.sh           # Launches all agents simultaneously in named terminal windows
 ├── reset-team.sh           # Wipes all artefacts; resets to clean state
 ├── reset-stories.sh        # Resets story files only (keeps generated code)
-├── status.sh               # Live story-state summary
-└── watchdog.sh             # Resets stale .working.md files after 10 min; skips merge-queued stories
+└── status.sh               # Live story-state summary
 ```
 
 ## Technology Stack
@@ -180,41 +180,56 @@ python scripts/ollama_agents/ollama_merger_agent.py
 
 ## Ollama Agent Robustness
 
-The Ollama backend uses two complementary mechanisms in `ollama_utilities.py` to handle models that do not always emit structured function calls:
+The Ollama backend uses the following mechanism in `ollama_utilities.py` to handle models that do not always emit structured function calls:
 
 - **Text-tool-call fallback** (`_try_extract_tool_calls_from_text`, `_handle_text_tool_calls`): When a model response contains no structured `tool_calls`, the response content is scanned for JSON objects (including code-fence-wrapped ones) that match known tool names. Matched calls are executed normally and appended to the message history.
-- **Continuation prompts** (`continuation_prompt`, `max_continuations`): When `run_agent_loop` receives a text-only turn (after the fallback finds nothing), it re-prompts the model with a continuation message up to `max_continuations` times before returning. All task-oriented Ollama agents pass a `continuation_prompt`.
 
 Ollama role files (`roles/ollama-*.md`) contain explicit per-tool documentation and call examples because local models do not reliably infer calling conventions from schema alone. When adding a new Ollama agent, create a dedicated `ollama-<role>.md` alongside the shared `<role>.md`.
 
 The Ollama Merger Agent uses a minimal `MERGER_TOOLS` set (`bash` + `write_file`) defined inline in `ollama_merger_agent.py` rather than the shared `CODING_TOOLS`, since it only needs to run git commands and write the outcome file.
+
+## Story State Tracking
+
+Story state is split across two locations to prevent git merge conflicts:
+
+| Location | Files | Purpose |
+|----------|-------|---------|
+| `workspace/stories/` | `STORY-NNN.md`, `STORY-NNN.done.md` | Source story content; `done` committed to git for restart resilience |
+| `.sentinels/story-orchestrator/` | `STORY-NNN.[complexity].ready.md`, `.working.md`, `.failed.md` | Live runtime state; never touched by git |
+
+**Flow:**
+1. Story Orchestrator evaluates `workspace/stories/STORY-NNN.md` files. When deps are met it **copies** the file to `.sentinels/story-orchestrator/STORY-NNN.[complexity].ready.md`. The source `.md` stays untouched.
+2. Coding agents scan the orchestrator dir and atomically rename `.ready.md` → `.working.md` to claim a story.
+3. On success: zip goes to `merge-queue/`; orchestrator entry stays `.working.md` until the Merger promotes it.
+4. On failure: failure reasons are copied back to the orchestrator file; it is renamed `.failed.md` (or `.ready.md` on no-outcome). The Story Resolver later resets it to `.ready.md`.
+5. **Merger Agent**: on successful merge renames `workspace/stories/STORY-NNN.md` → `STORY-NNN.done.md`, commits to git, then removes the orchestrator dir entry.
 
 ## Isolated Workspace Pipeline
 
 Coding agents (Junior and Senior) no longer write directly to the shared workspace. The flow per story is:
 
 1. **Python** (`copy_workspace_for_story`): copy the full workspace (excluding `.sentinels/`) into `.sentinels/STORY-NNN/`. The copy includes `stories/` and `design/` so the LLM can read context.
-2. **LLM session**: the agent runs entirely inside the temp workspace. `cwd`, story path, and outcome file all point there.
-3. **Post-session (Python)**:
-   - `outcome == "done"` → `zip_workspace_for_merge` zips the temp workspace (excluding `.git/`, `stories/`, `design/`, and `.gitignore` patterns) into `.sentinels/merge-queue/STORY-NNN.zip`. The main workspace story stays in `.working.md`.
-   - `outcome == "failed"` / no outcome → failure reasons are copied back to the main story file; `finalise_story` renames to `.failed.md` / `.ready.md` as before.
-4. **Python**: temp workspace is deleted.
+2. **Python**: explicitly copy the claimed story file from the orchestrator dir into `temp_workspace/stories/` so the LLM can read it at the expected path.
+3. **LLM session**: the agent runs entirely inside the temp workspace. `cwd`, story path, and outcome file all point there.
+4. **Post-session (Python)**:
+   - `outcome == "done"` → `zip_workspace_for_merge` zips the temp workspace (excluding `.git/`, `stories/`, `design/`, and `.gitignore` patterns) into `.sentinels/merge-queue/STORY-NNN.zip`. The orchestrator entry stays `.working.md`.
+   - `outcome == "failed"` / no outcome → failure reasons are copied back to the orchestrator story file; `finalise_story` renames to `.failed.md` / `.ready.md`.
+5. **Python**: temp workspace is deleted.
 
 The **Merger Agent** then processes `merge-queue/` in ascending story-number order:
 1. **Python** (`unzip_workspace_for_merge`): unzip to `.sentinels/merge-STORY-NNN/`.
 2. **LLM**: create a git branch named `story-NNN`, `cp -r` staged files into the workspace, `git add -A`, commit, merge to `main`.
-3. **Python** (`mark_story_done_after_merge`): rename `.working.md` → `.done.md` in `workspace/stories/`.
+3. **Python** (`mark_story_done_after_merge`): rename `workspace/stories/STORY-NNN.md` → `STORY-NNN.done.md`, commit to git, remove orchestrator dir entry.
 4. **Python**: delete staging dir and zip.
 
 Key utility functions live in `scripts/agent_utilities.py`:
 - `get_story_id(story_path)` — extracts `STORY-NNN` from any story filename
+- `claim_story(orchestrator_dir, patterns)` — atomically renames `.ready.md` → `.working.md` in the orchestrator dir
 - `copy_workspace_for_story(workspace_dir, sentinels_dir, story_id)` — performs the copy
 - `zip_workspace_for_merge(temp_workspace, story_id, merge_queue_dir)` — creates the zip
 - `get_next_merge_story(merge_queue_dir)` — returns the lowest-numbered zip or `None`
 - `unzip_workspace_for_merge(zip_path, sentinels_dir)` — extracts to staging dir
-- `mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name)` — renames to `.done.md`
-
-The **Watchdog** skips `.working.md` files that have a corresponding `merge-queue/STORY-NNN.zip` — those are queued for the Merger and must not be reset to `.ready.md`.
+- `mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name, orchestrator_dir)` — renames `STORY-NNN.md` → `.done.md`, commits to git, removes orchestrator entry
 
 ## AI Agent Guidelines
 

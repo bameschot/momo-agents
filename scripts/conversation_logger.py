@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-_CONTENT_TRUNCATE = 4000
+_CONTENT_TRUNCATE = 40000
 
 
 # ------------------------------------------------------------------
@@ -45,6 +45,35 @@ def log_claude_message(log_dir: Path | None, agent_name: str, message: Any, cont
     entry = _build_claude_entry(agent_name, message, context)
     if entry is not None:
         _write(log_dir / f"{agent_name}_log.jsonl", entry)
+
+
+def print_claude_message(agent_name: str, message: Any, *, include_thinking: bool = True) -> None:
+    """Print a Claude SDK message to the console.
+
+    Prints ThinkingBlock content (when *include_thinking* is True) and TextBlock content
+    from AssistantMessages, and a brief summary for ResultMessages.
+    """
+    try:
+        from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ThinkingBlock  # noqa: PLC0415
+    except ImportError:
+        return
+
+    if isinstance(message, AssistantMessage):
+        for block in message.content:
+            if include_thinking and isinstance(block, ThinkingBlock) and block.thinking:
+                print(f"[{agent_name}][thinking] {block.thinking}", flush=True)
+            elif isinstance(block, TextBlock) and block.text:
+                print(f"[{agent_name}] {block.text}", flush=True)
+    elif isinstance(message, ResultMessage):
+        usage = message.usage or {}
+        cost = f"${message.total_cost_usd:.4f}" if message.total_cost_usd is not None else "n/a"
+        print(
+            f"[{agent_name}][result] stop={message.stop_reason} "
+            f"turns={message.num_turns} "
+            f"in={usage.get('input_tokens', 0)} out={usage.get('output_tokens', 0)} "
+            f"cost={cost}",
+            flush=True,
+        )
 
 
 def log_ollama_response(log_dir: Path | None, agent_name: str, response: Any, context: str) -> None:

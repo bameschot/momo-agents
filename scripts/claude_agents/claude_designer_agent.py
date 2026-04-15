@@ -5,7 +5,6 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
 import anyio
 
 from claude_agent_sdk import (
@@ -16,46 +15,43 @@ from claude_agent_sdk import (
     TextBlock,
 )
 
-from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path
+from agent_utilities import (
+    PROJECT_ROOT,
+    append_run_log,
+    is_design_processed,
+    load_role,
+    mark_design_processed,
+    resolve_path,
+    unprocessed_designs,
+)
+from claude_utilities import build_common_arg_parser
 from conversation_logger import log_claude_message
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Designer Agent")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--run-log",
-        default="",
-        help="Path to run-log.json file for pipeline event logging (optional)",
-    )
-    parser.add_argument(
-        "--agent-name",
-        default="designer",
-        help="Name used to identify this agent in logs (default: designer)",
-    )
-    parser.add_argument(
-        "--conv-log-dir",
-        default="",
-        help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
+def _parse_args():
+    parser = build_common_arg_parser(
+        description="Designer Agent",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="designer",
     )
     return parser.parse_args()
 
 
-def _initial_prompt(design_dir: Path) -> str:
+def _initial_prompt(design_dir: Path, sentinels_design_dir: Path) -> str:
+    pending = unprocessed_designs(design_dir, sentinels_design_dir)
+    pending_note = (
+        f"\nNote: The following designs are present as .new.md but have not yet been "
+        f"marked as processed: {', '.join(f.name for f in pending)}. "
+        "Inform the user if they ask about pending work.\n"
+        if pending
+        else ""
+    )
     return (
         f"Design output directory: {design_dir}\n\n"
-        "Begin the design session. Greet the user and ask what they want to build. "
+        + pending_note
+        + "Begin the design session. Greet the user and ask what they want to build. "
         "Ask clarifying questions freely until you have a complete, unambiguous picture "
         "of the requirements.\n\n"
         "File naming rules:\n"
@@ -90,9 +86,12 @@ async def _stream_response(
     return stop_reason, usage
 
 
-async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None) -> None:
+async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name: str, conv_log_dir: Path | None, effort: str = "medium") -> None:
     design_dir = workspace_dir / "design"
     design_dir.mkdir(parents=True, exist_ok=True)
+
+    sentinels_design_dir = workspace_dir / ".sentinels" / "design"
+    sentinels_design_dir.mkdir(parents=True, exist_ok=True)
 
     options = ClaudeAgentOptions(
         cwd=str(PROJECT_ROOT),
@@ -101,11 +100,12 @@ async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name:
         permission_mode="acceptEdits",
         max_turns=50,
         model=model,
+        effort=effort,
     )
 
     async with ClaudeSDKClient(options=options) as client:
         # Initial greeting turn
-        await client.query(_initial_prompt(design_dir))
+        await client.query(_initial_prompt(design_dir, sentinels_design_dir))
         await _stream_response(client, conv_log_dir, agent_name, "design")
         print()  # newline after agent response
 
@@ -124,16 +124,19 @@ async def run(workspace_dir: Path, model: str, run_log: Path | None, agent_name:
                 print("[Designer session ended]")
                 break
 
-            before = set(design_dir.glob("*.new.md"))
+            # Only treat .new.md files without a sentinel as "before" baseline —
+            # already-processed designs that reappeared (e.g. from a git merge) are ignored.
+            before = {f for f in design_dir.glob("*.new.md") if not is_design_processed(sentinels_design_dir, f)}
             await client.query(user_input)
             stop_reason, _ = await _stream_response(client, conv_log_dir, agent_name, "design")
             print()
 
             # If agent wrote the design doc and finished naturally, offer to exit
             if stop_reason == "end_turn" and user_input.lower() == "write":
-                after = set(design_dir.glob("*.new.md"))
+                after = {f for f in design_dir.glob("*.new.md") if not is_design_processed(sentinels_design_dir, f)}
                 for new_file in sorted(after - before):
                     append_run_log(run_log, agent_name, f"design written: {new_file.name}")
+                    mark_design_processed(sentinels_design_dir, new_file)
                 print("\n[Design saved as .new.md — the Business Analyst will pick it up automatically.]")
                 print("[Type 'exit' to close or continue refining (type 'write' again to re-queue).]")
 
@@ -143,4 +146,4 @@ if __name__ == "__main__":
     workspace_dir = resolve_path(args.workspace_dir)
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)

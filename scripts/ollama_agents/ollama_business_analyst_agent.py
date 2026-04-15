@@ -5,8 +5,6 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
-
 import anyio
 from ollama import Message
 
@@ -15,7 +13,7 @@ from ollama_utilities import (
     BA_TOOLS,
     DEFAULT_MODEL,
     ToolExecutor,
-    add_ollama_args,
+    build_ollama_arg_parser,
     make_client,
     run_agent_loop,
 )
@@ -24,8 +22,12 @@ POLL_INTERVAL = 10  # seconds between polls while waiting for workspace/CLAUDE.m
 DESIGN_POLL_INTERVAL = 10  # seconds between polls while watching for new designs
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ollama Business Analyst Agent")
+def _parse_args():
+    parser = build_ollama_arg_parser(
+        description="Ollama Business Analyst Agent",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="ollama-business-analyst",
+    )
     parser.add_argument(
         "--design-dir",
         default="",
@@ -35,16 +37,6 @@ def _parse_args() -> argparse.Namespace:
         "--stories-dir",
         default="",
         help="Directory where story files are written (default: <workspace-dir>/stories)",
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    add_ollama_args(
-        parser,
-        default_model=DEFAULT_MODEL,
-        default_agent_name="ollama-business-analyst",
     )
     return parser.parse_args()
 

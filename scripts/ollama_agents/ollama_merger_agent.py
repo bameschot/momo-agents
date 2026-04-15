@@ -16,8 +16,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
-
 import anyio
 from ollama import Message
 
@@ -33,7 +31,7 @@ from agent_utilities import (
 from ollama_utilities import (
     DEFAULT_MODEL,
     ToolExecutor,
-    add_ollama_args,
+    build_ollama_arg_parser,
     make_client,
     run_agent_loop,
 )
@@ -74,15 +72,9 @@ MERGER_TOOLS = [
 ]
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ollama Merger Agent — merges story zips into main branch")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    add_ollama_args(
-        parser,
+def _parse_args():
+    parser = build_ollama_arg_parser(
+        description="Ollama Merger Agent — merges story zips into main branch",
         default_model=DEFAULT_MODEL,
         default_agent_name="ollama-merger-agent",
     )
@@ -106,9 +98,10 @@ def _build_task(
         f"   Use `bash` with: cd {workspace_dir} && git log --oneline -1\n"
         f"   If there are NO commits, create an initial commit first:\n"
         f"   Use `bash` with: cd {workspace_dir} && git add -A && git commit -m 'chore: initial workspace scaffold'\n\n"
-        f"2. Create a new branch named '{branch_name}':\n"
+        f"2. Create a story branch from the latest main:\n"
         f"   Use `bash` with: cd {workspace_dir} && git checkout -b {branch_name}\n\n"
-        f"3. Copy all files from the staged workspace into the main workspace:\n"
+        f"3. Copy all files from the staged workspace into the main workspace\n"
+        f"   (the staged dir has already had .git, stories, and design stripped):\n"
         f"   Use `bash` with: cp -r {extract_dir}/. {workspace_dir}/\n\n"
         f"4. Stage all changes:\n"
         f"   Use `bash` with: cd {workspace_dir} && git add -A\n\n"
@@ -119,9 +112,7 @@ def _build_task(
         f"6. Switch back to the main branch:\n"
         f"   Use `bash` with: cd {workspace_dir} && git checkout main || git checkout master\n\n"
         f"7. Merge the story branch:\n"
-        f"   Use `bash` with: cd {workspace_dir} && git merge {branch_name} --no-ff -m 'merge: {story_id}'\n"
-        f"   If conflicts occur, resolve them preferring incoming changes from '{branch_name}' "
-        f"for all src/ and tests/ paths.\n\n"
+        f"   Use `bash` with: cd {workspace_dir} && git merge {branch_name} --no-ff -m 'merge: {story_id}'\n\n"
         f"8. Write the result using `write_file`:\n"
         f"   - Success: write 'done' to {outcome_file}\n"
         f"   - Failure: write 'failed\\n<brief error>' to {outcome_file}\n\n"
@@ -139,6 +130,7 @@ async def run(
     conv_log_dir: Path | None,
 ) -> None:
     sentinels_dir = workspace_dir / ".sentinels"
+    orchestrator_dir = sentinels_dir / "story-orchestrator"
     merge_queue_dir = sentinels_dir / "merge-queue"
     stories_dir = workspace_dir / "stories"
     pipeline_complete = sentinels_dir / "pipeline_complete"
@@ -183,16 +175,12 @@ async def run(
             system_prompt=system_prompt,
             conv_log_dir=conv_log_dir,
             context=story_id,
-            continuation_prompt=(
-                "Continue with the next step. "
-                "When all git operations are done, write the outcome to the outcome file."
-            ),
         )
 
         # ── Python: finalise based on LLM outcome ─────────────────────────
         outcome = outcome_file.read_text().strip() if outcome_file.exists() else ""
         if outcome.startswith("done"):
-            mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name)
+            mark_story_done_after_merge(stories_dir, story_id, run_log, agent_name, orchestrator_dir)
             zip_path.unlink(missing_ok=True)
             print(f"[{agent_name}] {story_id} merged successfully.")
         else:

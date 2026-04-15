@@ -10,7 +10,6 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
 import anyio
 
 from claude_agent_sdk import (
@@ -19,47 +18,23 @@ from claude_agent_sdk import (
     ClaudeSDKClient,
     ResultMessage,
     TextBlock,
+    ThinkingBlock,
 )
 
 from agent_utilities import append_run_log, load_role, resolve_path
+from claude_utilities import build_common_arg_parser
 from conversation_logger import log_claude_message
 
-POLL_INTERVAL = 15  # seconds between scans when no failed stories exist
+POLL_INTERVAL = 15  # seconds between scans when no failed stories exist (intentionally longer than default)
 DEFAULT_MODEL = "claude-sonnet-4-6"
 _FAILURE_REASONS_HEADING = "## Failure Reasons"
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Story Resolver Agent (failed story triage)")
-    parser.add_argument(
-        "--stories-dir",
-        default="",
-        help="Directory containing story files (default: <workspace-dir>/stories)",
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--run-log",
-        default="",
-        help="Path to run-log.jsonl file for pipeline event logging (optional)",
-    )
-    parser.add_argument(
-        "--agent-name",
-        default="story-resolver",
-        help="Name used to identify this agent in logs (default: story-resolver)",
-    )
-    parser.add_argument(
-        "--conv-log-dir",
-        default="",
-        help="Directory for per-agent conversation JSONL logs (optional)",
+def _parse_args():
+    parser = build_common_arg_parser(
+        description="Story Resolver Agent (failed story triage)",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="story-resolver",
     )
     return parser.parse_args()
 
@@ -124,7 +99,9 @@ async def _stream_response(
     async for message in client.receive_response():
         if isinstance(message, AssistantMessage):
             for block in message.content:
-                if isinstance(block, TextBlock):
+                if isinstance(block, ThinkingBlock) and block.thinking:
+                    print(f"[{agent_name}][thinking] {block.thinking}", flush=True)
+                elif isinstance(block, TextBlock):
                     print(block.text, end="", flush=True)
         elif isinstance(message, ResultMessage):
             stop_reason = message.stop_reason
@@ -157,6 +134,7 @@ async def _run_resolver_session(
         permission_mode="acceptEdits",
         max_turns=100,
         model=model,
+        effort=effort,
     )
 
     task = _build_task(story_path, workspace_dir, sentinel_file)
@@ -219,19 +197,20 @@ async def _run_resolver_session(
 
 
 async def run(
-    stories_dir: Path,
     workspace_dir: Path,
     model: str,
     run_log: Path | None,
     agent_name: str,
     conv_log_dir: Path | None,
+    effort: str = "medium",
 ) -> None:
+    orchestrator_dir = workspace_dir / ".sentinels" / "story-orchestrator"
     print(f"[{agent_name}] Story Resolver ready — scanning for failed stories every {POLL_INTERVAL}s.")
     print("When a failed story is found you will be prompted to resolve it interactively.")
     print()
 
     while True:
-        story_path = _find_failed_story(stories_dir)
+        story_path = _find_failed_story(orchestrator_dir)
 
         if story_path is None:
             print(f"[{agent_name}] No failed stories — polling every {POLL_INTERVAL}s...", flush=True)
@@ -251,7 +230,6 @@ async def run(
 if __name__ == "__main__":
     args = _parse_args()
     workspace_dir = resolve_path(args.workspace_dir)
-    stories_dir = resolve_path(args.stories_dir) if args.stories_dir else workspace_dir / "stories"
     run_log = Path(args.run_log) if args.run_log else None
     conv_log_dir = Path(args.conv_log_dir) if args.conv_log_dir else None
-    anyio.run(run, stories_dir, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir)
+    anyio.run(run, workspace_dir, args.model, run_log, args.agent_name, conv_log_dir, args.effort)
