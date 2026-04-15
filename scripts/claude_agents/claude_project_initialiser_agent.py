@@ -5,54 +5,27 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
 import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
 from agent_utilities import PROJECT_ROOT, append_run_log, load_role, resolve_path
+from claude_utilities import build_common_arg_parser
 from conversation_logger import log_claude_message, print_claude_message
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Project Initialiser Agent")
+def _parse_args():
+    parser = build_common_arg_parser(
+        description="Project Initialiser Agent",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="project-initialiser",
+    )
     parser.add_argument(
         "--design",
         required=True,
         help="Path to the design document (e.g. design/my-feature.md)",
-    )
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--run-log",
-        default="",
-        help="Path to run-log.json file for pipeline event logging (optional)",
-    )
-    parser.add_argument(
-        "--agent-name",
-        default="project-initialiser",
-        help="Name used to identify this agent in logs (default: project-initialiser)",
-    )
-    parser.add_argument(
-        "--conv-log-dir",
-        default="",
-        help="Directory for per-agent conversation JSONL logs; file named <agent-name>_log.jsonl (optional)",
-    )
-    parser.add_argument(
-        "--effort",
-        default="medium",
-        choices=["low", "medium", "high", "max"],
-        help="Claude effort level (default: medium)",
     )
     return parser.parse_args()
 

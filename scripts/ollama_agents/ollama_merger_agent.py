@@ -16,8 +16,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
-
 import anyio
 from ollama import Message
 
@@ -33,7 +31,7 @@ from agent_utilities import (
 from ollama_utilities import (
     DEFAULT_MODEL,
     ToolExecutor,
-    add_ollama_args,
+    build_ollama_arg_parser,
     make_client,
     run_agent_loop,
 )
@@ -74,15 +72,9 @@ MERGER_TOOLS = [
 ]
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ollama Merger Agent — merges story zips into main branch")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    add_ollama_args(
-        parser,
+def _parse_args():
+    parser = build_ollama_arg_parser(
+        description="Ollama Merger Agent — merges story zips into main branch",
         default_model=DEFAULT_MODEL,
         default_agent_name="ollama-merger-agent",
     )

@@ -5,8 +5,6 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
-
 import anyio
 from ollama import Message
 
@@ -22,21 +20,15 @@ from ollama_utilities import (
     DEFAULT_MODEL,
     DESIGNER_TOOLS,
     ToolExecutor,
-    add_ollama_args,
+    build_ollama_arg_parser,
     make_client,
     run_chat_loop,
 )
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ollama Designer Agent")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    add_ollama_args(
-        parser,
+def _parse_args():
+    parser = build_ollama_arg_parser(
+        description="Ollama Designer Agent",
         default_model=DEFAULT_MODEL,
         default_agent_name="ollama-designer",
     )

@@ -16,7 +16,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
 import anyio
 
 from claude_agent_sdk import ClaudeAgentOptions, query
@@ -30,45 +29,17 @@ from agent_utilities import (
     unzip_workspace_for_merge,
     wait_for_workspace,
 )
+from claude_utilities import POLL_INTERVAL, build_common_arg_parser
 from conversation_logger import log_claude_message, print_claude_message
-
-POLL_INTERVAL = 10  # seconds between polls when merge-queue is empty
 
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Merger Agent — merges story zips into main branch")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help=f"Claude model to use (default: {DEFAULT_MODEL})",
-    )
-    parser.add_argument(
-        "--run-log",
-        default="",
-        help="Path to run-log.jsonl file for pipeline event logging (optional)",
-    )
-    parser.add_argument(
-        "--agent-name",
-        default="merger-agent",
-        help="Name used to identify this agent in logs (default: merger-agent)",
-    )
-    parser.add_argument(
-        "--conv-log-dir",
-        default="",
-        help="Directory for per-agent conversation JSONL logs (optional)",
-    )
-    parser.add_argument(
-        "--effort",
-        default="medium",
-        choices=["low", "medium", "high", "max"],
-        help="Claude effort level (default: medium)",
+def _parse_args():
+    parser = build_common_arg_parser(
+        description="Merger Agent — merges story zips into main branch",
+        default_model=DEFAULT_MODEL,
+        default_agent_name="merger-agent",
     )
     return parser.parse_args()
 

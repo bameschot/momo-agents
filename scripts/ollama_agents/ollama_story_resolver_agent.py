@@ -10,8 +10,6 @@ from pathlib import Path
 # Allow imports from the shared scripts/ directory.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import argparse
-
 import anyio
 from ollama import Message
 
@@ -23,24 +21,18 @@ from ollama_utilities import (
     ToolExecutor,
     UserExitRequest,
     UserSkipRequest,
-    add_ollama_args,
+    build_ollama_arg_parser,
     make_client,
     run_agent_loop,
 )
 
-POLL_INTERVAL = 15  # seconds between scans when no failed stories exist
+POLL_INTERVAL = 15  # seconds between scans when no failed stories exist (intentionally longer than default)
 _FAILURE_REASONS_HEADING = "## Failure Reasons"
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ollama Story Resolver Agent (failed story triage)")
-    parser.add_argument(
-        "--workspace-dir",
-        default="workspace",
-        help="Path to the workspace directory (default: workspace/ relative to project root)",
-    )
-    add_ollama_args(
-        parser,
+def _parse_args():
+    parser = build_ollama_arg_parser(
+        description="Ollama Story Resolver Agent (failed story triage)",
         default_model=DEFAULT_MODEL,
         default_agent_name="ollama-story-resolver",
     )
