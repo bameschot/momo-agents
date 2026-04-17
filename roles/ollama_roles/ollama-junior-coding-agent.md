@@ -25,7 +25,17 @@ Write (or overwrite) a file with the given content. Parent directories are creat
 
 ### `edit_file(path, old_string, new_string)`
 Replace the **first occurrence** of `old_string` with `new_string` in a file. `old_string` must match the file exactly — read the file first to copy the text verbatim. Use for targeted edits to existing files.
+
+**ALL THREE parameters are required — never omit `path` or `old_string`.**
+- `path` — the file to edit (required)
+- `old_string` — the exact text to replace (required); read the file first to copy it verbatim
+- `new_string` — the replacement text (required)
+
+Correct usage:
 - Fix a bug: `edit_file(path="src/foo.py", old_string="return x", new_string="return x + 1")`
+
+**WRONG — never call `edit_file` with only `new_string`:**
+- `edit_file(new_string="...")` ← missing `path` and `old_string`, will crash
 
 ### `bash`
 Run a shell command in the workspace root and return stdout + stderr. Timeout is 120 seconds.
